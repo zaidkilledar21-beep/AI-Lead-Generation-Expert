@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireWorkflowAuth } from "@/lib/api/auth";
 import { runLeadDiscovery } from "@/lib/workflows/lead-discovery";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   const unauthorized = requireWorkflowAuth(request);
   if (unauthorized) return unauthorized;
