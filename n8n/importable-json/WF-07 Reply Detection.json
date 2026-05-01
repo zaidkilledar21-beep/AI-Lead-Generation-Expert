@@ -1,0 +1,67 @@
+{
+  "name": "WF-07 Reply Detection",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "5de902a1-b522-5388-a927-3f177e304614",
+      "name": "Gmail Reply Trigger"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return { json: { from_email: $json.from, to_email: $json.to, reply_body: $json.textPlain ?? $json.textHtml, provider_message_id: $json.id, provider_thread_id: $json.threadId } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        0
+      ],
+      "id": "2137e1bb-50ff-5b49-902b-f3b1b8b2d13a",
+      "name": "Normalize Reply"
+    },
+    {
+      "parameters": {
+        "content": "After Normalize Reply, add Supabase matching nodes, insert reply_events, DeepSeek classification, pause outreach_queue, update leads, and notify founders.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -260
+      ],
+      "id": "cdab464a-0bcc-585e-b7bd-3ce609913ce7",
+      "name": "WF-07 Notes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Reply Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "185df6c5-0878-5884-abc9-9d063baa48df",
+  "id": "3da08cdb-b983-526d-96c3-82010cba471b",
+  "tags": []
+}

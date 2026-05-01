@@ -1,0 +1,78 @@
+{
+  "name": "WF-04 Routing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "limit": 50,
+        "filterType": "string",
+        "filterString": "status=eq.scored"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        0
+      ],
+      "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
+      "name": "Supabase Source Query"
+    },
+    {
+      "parameters": {
+        "content": "Native routing is still needed until a backend route is added. Load latest lead_scores and automation_hypotheses, then upsert manual_review_queue or outreach_queue.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -260
+      ],
+      "id": "e8315846-a2d5-55b7-b91c-28330ff7a110",
+      "name": "WF-04 Routing Notes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Supabase Source Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "2563233c-caf7-5e21-8a04-ab8e77503b5f",
+  "id": "47291e7a-4dda-50aa-9b68-8e4ccce473a9",
+  "tags": []
+}

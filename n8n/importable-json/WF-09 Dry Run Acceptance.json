@@ -1,0 +1,41 @@
+{
+  "name": "WF-09 Dry Run Acceptance",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "6d04fa49-7359-52ee-9ed9-34f16a8e9a11",
+      "name": "Manual Dry Run Checklist"
+    },
+    {
+      "parameters": {
+        "content": "Use the Dry Run Acceptance sheet. Keep global_outreach.paused=true. Validate WF-10 discovery, quotas, dedupe, crawl, intake, enrichment, scoring, routing, drafting, internal sending, and reply detection before unpausing.",
+        "height": 300,
+        "width": 680
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        -120
+      ],
+      "id": "c87d2356-1fc5-5db2-a012-2f9af794a9e8",
+      "name": "WF-09 Checklist"
+    }
+  ],
+  "pinData": {},
+  "connections": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "bd28c066-5504-5f82-a7ba-10a163b6173b",
+  "id": "bec8d16b-c441-5f78-a665-b3c0bf156e4d",
+  "tags": []
+}

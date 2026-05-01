@@ -1,0 +1,78 @@
+{
+  "name": "WF-05 Draft Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "outreach_queue",
+        "limit": 50,
+        "filterType": "string",
+        "filterString": "status=eq.queued"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        0
+      ],
+      "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
+      "name": "Supabase Source Query"
+    },
+    {
+      "parameters": {
+        "content": "Native draft generation is still needed. Load context, call DeepSeek, validate, then insert email_drafts or send_blocks.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -260
+      ],
+      "id": "d4052f77-b043-57fc-9a20-fbd7b83f5908",
+      "name": "WF-05 Draft Generation Notes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Supabase Source Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "587d664f-a44b-5dd4-bd3e-2e6c9d7e2a18",
+  "id": "64550672-f6e3-5efa-aff5-98dc8872c148",
+  "tags": []
+}

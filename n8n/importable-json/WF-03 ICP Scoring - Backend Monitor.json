@@ -1,0 +1,78 @@
+{
+  "name": "WF-03 ICP Scoring - Backend Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "e9aeeaec-07ff-5068-ac80-d67277ae3082",
+      "name": "Monitor Backlog"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "limit": 25,
+        "filterType": "string",
+        "filterString": "status=eq.enriched"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        0
+      ],
+      "id": "f9d3e8a9-2d2c-5e0f-b532-7ca4a4710cff",
+      "name": "Select Backlog Rows"
+    },
+    {
+      "parameters": {
+        "content": "Generated leads are scored inside WF-10 backend. This workflow only monitors enriched backlog unless you later add a dedicated scoring endpoint.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -260
+      ],
+      "id": "5306b9f1-2ab0-5995-8342-69d130b37d32",
+      "name": "WF-03 Notes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Monitor Backlog": {
+      "main": [
+        [
+          {
+            "node": "Select Backlog Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "a2d75892-fc55-564c-a05f-770229dd1dc1",
+  "id": "e4194332-fc00-5cb8-9bc8-579cf5aaabd7",
+  "tags": []
+}

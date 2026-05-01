@@ -1,0 +1,78 @@
+{
+  "name": "WF-02 Enrichment - Backend Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "e9aeeaec-07ff-5068-ac80-d67277ae3082",
+      "name": "Monitor Backlog"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "limit": 25,
+        "filterType": "string",
+        "filterString": "status=eq.new&website=not.is.null"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        0
+      ],
+      "id": "f9d3e8a9-2d2c-5e0f-b532-7ca4a4710cff",
+      "name": "Select Backlog Rows"
+    },
+    {
+      "parameters": {
+        "content": "Generated leads are enriched inside WF-10 backend. This workflow only monitors unenriched backlog unless you later add a dedicated enrichment endpoint.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -260
+      ],
+      "id": "705756d6-0c90-5b59-ab04-4d2d16d3cc31",
+      "name": "WF-02 Notes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Monitor Backlog": {
+      "main": [
+        [
+          {
+            "node": "Select Backlog Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "99cb5931-25ad-52bd-8bec-c149f5d74243",
+  "id": "78b6d4c0-8d1e-5fdb-8a98-6c1a77cd5847",
+  "tags": []
+}

@@ -1,0 +1,169 @@
+{
+  "name": "WF-10 Lead Discovery - Backend Runner",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "50c8be14-b800-557a-a967-9b06971e888d",
+      "name": "Start Daily Discovery"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return { json: { dry_run: false } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        0
+      ],
+      "id": "b268589a-cb9b-5c31-b63f-675565e11d93",
+      "name": "Build Discovery Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.APP_BASE_URL}}/api/workflows/discovery/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{$env.N8N_WORKFLOW_API_KEY}}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        80,
+        0
+      ],
+      "id": "a07eb0ae-d288-556e-a4c6-cf7ff67c935f",
+      "name": "POST Discovery Backend"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "506543e4-6386-58d3-8b7b-c7a1374a515e",
+              "leftValue": "={{ ['failed','quota_exhausted'].includes($json.status) || (($json.errors || []).length > 0) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        320,
+        0
+      ],
+      "id": "26c98d21-f1eb-5ac6-86c4-f64eafa74886",
+      "name": "Needs Attention?"
+    },
+    {
+      "parameters": {
+        "content": "This workflow intentionally calls the backend endpoint. Do not add native Google Places, dedupe, crawl, enrichment, or scoring helper nodes unless you decide to abandon the backend-heavy path.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -260
+      ],
+      "id": "8cefc07f-7c8f-555a-b588-21572ea408fd",
+      "name": "WF-10 Backend Heavy Notes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start Daily Discovery": {
+      "main": [
+        [
+          {
+            "node": "Build Discovery Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Discovery Request": {
+      "main": [
+        [
+          {
+            "node": "POST Discovery Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Discovery Backend": {
+      "main": [
+        [
+          {
+            "node": "Needs Attention?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "55243bd9-679b-5271-a42c-c1f09bc29440",
+  "id": "f303b7a4-52bb-51e7-b510-b6a0c5328116",
+  "tags": []
+}

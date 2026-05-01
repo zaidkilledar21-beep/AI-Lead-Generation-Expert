@@ -1,0 +1,960 @@
+[
+  {
+    "name": "WF-10 Lead Discovery - Backend Runner",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 9
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "50c8be14-b800-557a-a967-9b06971e888d",
+        "name": "Start Daily Discovery"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "return { json: { dry_run: false } };"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -160,
+          0
+        ],
+        "id": "b268589a-cb9b-5c31-b63f-675565e11d93",
+        "name": "Build Discovery Request"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{$env.APP_BASE_URL}}/api/workflows/discovery/run",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-n8n-api-key",
+                "value": "={{$env.N8N_WORKFLOW_API_KEY}}"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify($json)}}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          80,
+          0
+        ],
+        "id": "a07eb0ae-d288-556e-a4c6-cf7ff67c935f",
+        "name": "POST Discovery Backend"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "506543e4-6386-58d3-8b7b-c7a1374a515e",
+                "leftValue": "={{ ['failed','quota_exhausted'].includes($json.status) || (($json.errors || []).length > 0) }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          320,
+          0
+        ],
+        "id": "26c98d21-f1eb-5ac6-86c4-f64eafa74886",
+        "name": "Needs Attention?"
+      },
+      {
+        "parameters": {
+          "content": "This workflow intentionally calls the backend endpoint. Do not add native Google Places, dedupe, crawl, enrichment, or scoring helper nodes unless you decide to abandon the backend-heavy path.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "8cefc07f-7c8f-555a-b588-21572ea408fd",
+        "name": "WF-10 Backend Heavy Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Start Daily Discovery": {
+        "main": [
+          [
+            {
+              "node": "Build Discovery Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Discovery Request": {
+        "main": [
+          [
+            {
+              "node": "POST Discovery Backend",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "POST Discovery Backend": {
+        "main": [
+          [
+            {
+              "node": "Needs Attention?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "55243bd9-679b-5271-a42c-c1f09bc29440",
+    "id": "f303b7a4-52bb-51e7-b510-b6a0c5328116",
+    "tags": []
+  },
+  {
+    "name": "WF-01 Lead Intake - Backend Proxy",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "lead-intake",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "33ebea83-616a-5b56-a572-7fee14635e9c",
+        "name": "Lead Intake Webhook"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{$env.APP_BASE_URL}}/api/workflows/lead-intake",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-n8n-api-key",
+                "value": "={{$env.N8N_WORKFLOW_API_KEY}}"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify($json.body ?? $json)}}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          -120,
+          0
+        ],
+        "id": "464f979a-499e-5ae0-b050-77fb0488e386",
+        "name": "POST Lead Intake Backend"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          160,
+          0
+        ],
+        "id": "5a4f6da9-dfa6-57c0-951d-3b0d8a6903b0",
+        "name": "Respond With Intake Result"
+      },
+      {
+        "parameters": {
+          "content": "Optional. WF-10 backend already performs intake internally for generated leads. Use this only for controlled external/manual imports.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "2af5781c-d02d-5fe3-9e1c-582bbcfde437",
+        "name": "WF-01 Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Lead Intake Webhook": {
+        "main": [
+          [
+            {
+              "node": "POST Lead Intake Backend",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "POST Lead Intake Backend": {
+        "main": [
+          [
+            {
+              "node": "Respond With Intake Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "9550beab-f322-58ab-bd1a-f5326f63c529",
+    "id": "fde6b0a7-925e-56c0-be32-2abef0057da8",
+    "tags": []
+  },
+  {
+    "name": "WF-00 Error Logger",
+    "nodes": [
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "e23cfd6f-5f55-547a-97ab-5fa84013d29b",
+        "name": "Error Trigger"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const e = $json;\nreturn { json: { workflow_name: e.workflow?.name ?? 'unknown', event_type: 'error', status: 'failed', error_message: e.error?.message ?? e.message ?? 'Workflow failed', payload: { execution_url: e.execution?.url, node: e.node?.name } } };"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -160,
+          0
+        ],
+        "id": "87254e31-8a87-565e-a8f3-e41ef7d93f91",
+        "name": "Redact Error Payload"
+      },
+      {
+        "parameters": {
+          "operation": "create",
+          "tableId": "workflow_events"
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          80,
+          0
+        ],
+        "id": "62f22058-1729-5211-af7a-1f0d1194545a",
+        "name": "Insert workflow_events"
+      },
+      {
+        "parameters": {
+          "content": "Configure the Supabase node fields manually from the Redact Error Payload output: workflow_name, event_type, status, error_message, payload.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "76eae779-3e31-5962-9269-84b726dde1f5",
+        "name": "WF-00 Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "Redact Error Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Redact Error Payload": {
+        "main": [
+          [
+            {
+              "node": "Insert workflow_events",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "8576a4de-9e49-53f0-85f1-5b9c4e828201",
+    "id": "2d7cd1df-7196-572a-98c6-7036a85f835a",
+    "tags": []
+  },
+  {
+    "name": "WF-02 Enrichment - Backend Monitor",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 10
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "e9aeeaec-07ff-5068-ac80-d67277ae3082",
+        "name": "Monitor Backlog"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "leads",
+          "limit": 25,
+          "filterType": "string",
+          "filterString": "status=eq.new&website=not.is.null"
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -120,
+          0
+        ],
+        "id": "f9d3e8a9-2d2c-5e0f-b532-7ca4a4710cff",
+        "name": "Select Backlog Rows"
+      },
+      {
+        "parameters": {
+          "content": "Generated leads are enriched inside WF-10 backend. This workflow only monitors unenriched backlog unless you later add a dedicated enrichment endpoint.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "705756d6-0c90-5b59-ab04-4d2d16d3cc31",
+        "name": "WF-02 Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Monitor Backlog": {
+        "main": [
+          [
+            {
+              "node": "Select Backlog Rows",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "99cb5931-25ad-52bd-8bec-c149f5d74243",
+    "id": "78b6d4c0-8d1e-5fdb-8a98-6c1a77cd5847",
+    "tags": []
+  },
+  {
+    "name": "WF-03 ICP Scoring - Backend Monitor",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 10
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "e9aeeaec-07ff-5068-ac80-d67277ae3082",
+        "name": "Monitor Backlog"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "leads",
+          "limit": 25,
+          "filterType": "string",
+          "filterString": "status=eq.enriched"
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -120,
+          0
+        ],
+        "id": "f9d3e8a9-2d2c-5e0f-b532-7ca4a4710cff",
+        "name": "Select Backlog Rows"
+      },
+      {
+        "parameters": {
+          "content": "Generated leads are scored inside WF-10 backend. This workflow only monitors enriched backlog unless you later add a dedicated scoring endpoint.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "5306b9f1-2ab0-5995-8342-69d130b37d32",
+        "name": "WF-03 Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Monitor Backlog": {
+        "main": [
+          [
+            {
+              "node": "Select Backlog Rows",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "a2d75892-fc55-564c-a05f-770229dd1dc1",
+    "id": "e4194332-fc00-5cb8-9bc8-579cf5aaabd7",
+    "tags": []
+  },
+  {
+    "name": "WF-04 Routing",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 9
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "leads",
+          "limit": 50,
+          "filterType": "string",
+          "filterString": "status=eq.scored"
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -120,
+          0
+        ],
+        "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
+        "name": "Supabase Source Query"
+      },
+      {
+        "parameters": {
+          "content": "Native routing is still needed until a backend route is added. Load latest lead_scores and automation_hypotheses, then upsert manual_review_queue or outreach_queue.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "e8315846-a2d5-55b7-b91c-28330ff7a110",
+        "name": "WF-04 Routing Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Supabase Source Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "2563233c-caf7-5e21-8a04-ab8e77503b5f",
+    "id": "47291e7a-4dda-50aa-9b68-8e4ccce473a9",
+    "tags": []
+  },
+  {
+    "name": "WF-05 Draft Generation",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 9
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "outreach_queue",
+          "limit": 50,
+          "filterType": "string",
+          "filterString": "status=eq.queued"
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -120,
+          0
+        ],
+        "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
+        "name": "Supabase Source Query"
+      },
+      {
+        "parameters": {
+          "content": "Native draft generation is still needed. Load context, call DeepSeek, validate, then insert email_drafts or send_blocks.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "d4052f77-b043-57fc-9a20-fbd7b83f5908",
+        "name": "WF-05 Draft Generation Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Supabase Source Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "587d664f-a44b-5dd4-bd3e-2e6c9d7e2a18",
+    "id": "64550672-f6e3-5efa-aff5-98dc8872c148",
+    "tags": []
+  },
+  {
+    "name": "WF-06 Sending Scheduler",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 9
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "outreach_queue",
+          "limit": 50,
+          "filterType": "string",
+          "filterString": "status=eq.queued"
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -120,
+          0
+        ],
+        "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
+        "name": "Supabase Source Query"
+      },
+      {
+        "parameters": {
+          "content": "Native sending is still needed. Check global pause, inbox capacity, approved draft, then Gmail send and update state.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "acaaa329-f5a8-59fb-afe7-886807ac7b9e",
+        "name": "WF-06 Sending Scheduler Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Supabase Source Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "bd8bb659-233d-528a-8667-0283cdb74871",
+    "id": "759224f1-b800-5f9c-8181-fa6f08bfe248",
+    "tags": []
+  },
+  {
+    "name": "WF-08 Weekly Report",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 9
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "tableId": "leads",
+          "limit": 50,
+          "filterType": "string",
+          "filterString": ""
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          -120,
+          0
+        ],
+        "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
+        "name": "Supabase Source Query"
+      },
+      {
+        "parameters": {
+          "content": "Native reporting is still needed. Add multiple Supabase metric nodes and a notification node.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "6adaa448-957c-5586-a4ee-821d913c4773",
+        "name": "WF-08 Weekly Report Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Supabase Source Query",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "e62f6647-3df2-5b85-aef9-641b586e67a9",
+    "id": "0d326830-3571-50fb-9631-1c6849f7d914",
+    "tags": []
+  },
+  {
+    "name": "WF-07 Reply Detection",
+    "nodes": [
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.gmailTrigger",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "5de902a1-b522-5388-a927-3f177e304614",
+        "name": "Gmail Reply Trigger"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "return { json: { from_email: $json.from, to_email: $json.to, reply_body: $json.textPlain ?? $json.textHtml, provider_message_id: $json.id, provider_thread_id: $json.threadId } };"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -120,
+          0
+        ],
+        "id": "2137e1bb-50ff-5b49-902b-f3b1b8b2d13a",
+        "name": "Normalize Reply"
+      },
+      {
+        "parameters": {
+          "content": "After Normalize Reply, add Supabase matching nodes, insert reply_events, DeepSeek classification, pause outreach_queue, update leads, and notify founders.",
+          "height": 220,
+          "width": 420
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          -260
+        ],
+        "id": "cdab464a-0bcc-585e-b7bd-3ce609913ce7",
+        "name": "WF-07 Notes"
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Gmail Reply Trigger": {
+        "main": [
+          [
+            {
+              "node": "Normalize Reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "185df6c5-0878-5884-abc9-9d063baa48df",
+    "id": "3da08cdb-b983-526d-96c3-82010cba471b",
+    "tags": []
+  },
+  {
+    "name": "WF-09 Dry Run Acceptance",
+    "nodes": [
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          0
+        ],
+        "id": "6d04fa49-7359-52ee-9ed9-34f16a8e9a11",
+        "name": "Manual Dry Run Checklist"
+      },
+      {
+        "parameters": {
+          "content": "Use the Dry Run Acceptance sheet. Keep global_outreach.paused=true. Validate WF-10 discovery, quotas, dedupe, crawl, intake, enrichment, scoring, routing, drafting, internal sending, and reply detection before unpausing.",
+          "height": 300,
+          "width": 680
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -120,
+          -120
+        ],
+        "id": "c87d2356-1fc5-5db2-a012-2f9af794a9e8",
+        "name": "WF-09 Checklist"
+      }
+    ],
+    "pinData": {},
+    "connections": {},
+    "active": false,
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "versionId": "bd28c066-5504-5f82-a7ba-10a163b6173b",
+    "id": "bec8d16b-c441-5f78-a665-b3c0bf156e4d",
+    "tags": []
+  }
+]

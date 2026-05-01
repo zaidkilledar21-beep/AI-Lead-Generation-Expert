@@ -1,0 +1,92 @@
+{
+  "name": "WF-00 Error Logger",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "e23cfd6f-5f55-547a-97ab-5fa84013d29b",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const e = $json;\nreturn { json: { workflow_name: e.workflow?.name ?? 'unknown', event_type: 'error', status: 'failed', error_message: e.error?.message ?? e.message ?? 'Workflow failed', payload: { execution_url: e.execution?.url, node: e.node?.name } } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        0
+      ],
+      "id": "87254e31-8a87-565e-a8f3-e41ef7d93f91",
+      "name": "Redact Error Payload"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "workflow_events"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        80,
+        0
+      ],
+      "id": "62f22058-1729-5211-af7a-1f0d1194545a",
+      "name": "Insert workflow_events"
+    },
+    {
+      "parameters": {
+        "content": "Configure the Supabase node fields manually from the Redact Error Payload output: workflow_name, event_type, status, error_message, payload.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -260
+      ],
+      "id": "76eae779-3e31-5962-9269-84b726dde1f5",
+      "name": "WF-00 Notes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Redact Error Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redact Error Payload": {
+      "main": [
+        [
+          {
+            "node": "Insert workflow_events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "8576a4de-9e49-53f0-85f1-5b9c4e828201",
+  "id": "2d7cd1df-7196-572a-98c6-7036a85f835a",
+  "tags": []
+}

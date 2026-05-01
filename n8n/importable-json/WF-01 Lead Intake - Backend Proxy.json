@@ -1,0 +1,121 @@
+{
+  "name": "WF-01 Lead Intake - Backend Proxy",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "lead-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "33ebea83-616a-5b56-a572-7fee14635e9c",
+      "name": "Lead Intake Webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.APP_BASE_URL}}/api/workflows/lead-intake",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{$env.N8N_WORKFLOW_API_KEY}}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.body ?? $json)}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -120,
+        0
+      ],
+      "id": "464f979a-499e-5ae0-b050-77fb0488e386",
+      "name": "POST Lead Intake Backend"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        0
+      ],
+      "id": "5a4f6da9-dfa6-57c0-951d-3b0d8a6903b0",
+      "name": "Respond With Intake Result"
+    },
+    {
+      "parameters": {
+        "content": "Optional. WF-10 backend already performs intake internally for generated leads. Use this only for controlled external/manual imports.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -260
+      ],
+      "id": "2af5781c-d02d-5fe3-9e1c-582bbcfde437",
+      "name": "WF-01 Notes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Lead Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "POST Lead Intake Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Lead Intake Backend": {
+      "main": [
+        [
+          {
+            "node": "Respond With Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "9550beab-f322-58ab-bd1a-f5326f63c529",
+  "id": "fde6b0a7-925e-56c0-be32-2abef0057da8",
+  "tags": []
+}
