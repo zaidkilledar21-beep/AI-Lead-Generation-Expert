@@ -1,147 +1,53 @@
-import { getCampaignDashboard } from "@/lib/dashboard/queries";
-import { CreateCampaignForm } from "./create-campaign-form";
-import { EditCampaignForm } from "./edit-campaign-form";
-import { updateCampaignStatus } from "./actions";
+import { PageHeader } from "@/components/crm/page-header";
+import { Badge } from "@/components/ui/badge";
+import { LinkButton } from "@/components/ui/button";
+import { getCampaignRows } from "@/lib/crm/queries";
 
 export default async function CampaignsPage() {
-  const dashboard = await getCampaignDashboard();
+  const campaigns = await getCampaignRows();
 
   return (
     <>
-      <section className="section">
-        <h1>Campaigns</h1>
-        <p className="muted">Google Places-only discovery campaigns with hard daily usage caps.</p>
-      </section>
-
-      <section className="section">
-        <h2>Create Campaign</h2>
-        <CreateCampaignForm />
-      </section>
-
-      <section className="section">
-        <h2>Active Configuration</h2>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Niche</th>
-              <th>Region</th>
-              <th>Caps</th>
-              <th>Crawl</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dashboard.campaigns.map((campaign) => (
-              <tr key={campaign.id}>
-                <td>{campaign.name}</td>
-                <td>{campaign.niche}</td>
-                <td>{campaign.region}</td>
-                <td>
-                  {campaign.maxLeadsPerDay} leads / {campaign.maxCandidatesPerDay} candidates /{" "}
-                  {campaign.maxDetailsCallsPerDay} details
-                </td>
-                <td>{campaign.crawlWebsite ? "websiteUri only" : "off"}</td>
-                <td>
-                  <span className="badge">{campaign.status}</span>
-                </td>
-                <td>
-                  <div className="button-row">
-                    {campaign.status !== "active" ? (
-                      <form action={updateCampaignStatus.bind(null, campaign.id, "active")}>
-                        <button className="button secondary" type="submit">Activate</button>
-                      </form>
-                    ) : (
-                      <form action={updateCampaignStatus.bind(null, campaign.id, "paused")}>
-                        <button className="button secondary" type="submit">Pause</button>
-                      </form>
-                    )}
-                    <form action={updateCampaignStatus.bind(null, campaign.id, "archived")}>
-                      <button className="button danger-button" type="submit">Archive</button>
-                    </form>
-                  </div>
-                  <details className="inline-details">
-                    <summary>Edit filters</summary>
-                    <EditCampaignForm campaign={campaign} />
-                  </details>
-                </td>
+      <PageHeader
+        title="Campaigns"
+        description="Control lead discovery, qualification criteria, run cadence, and campaign-level performance."
+        actions={<LinkButton href="/campaigns/new">New campaign</LinkButton>}
+      />
+      <section className="panel">
+        <div className="panel-header">
+          <h2>Campaign manager</h2>
+          <span className="muted">{campaigns.length} campaigns</span>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Niche</th>
+                <th>Region</th>
+                <th>Leads</th>
+                <th>Replies</th>
+                <th>Frequency</th>
+                <th>Last run</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="section">
-        <h2>Candidate Manual Review</h2>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Campaign</th>
-              <th>Business</th>
-              <th>Niche</th>
-              <th>Location</th>
-              <th>Phone</th>
-              <th>Reason</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dashboard.manualCandidates.map((candidate) => (
-              <tr key={candidate.id}>
-                <td>{candidate.campaignName}</td>
-                <td>{candidate.businessName}</td>
-                <td>{candidate.niche ?? "-"}</td>
-                <td>{candidate.location}</td>
-                <td>{candidate.phone ?? "-"}</td>
-                <td>{candidate.reason}</td>
-                <td>
-                  {candidate.googleMapsUrl ? (
-                    <a href={candidate.googleMapsUrl} rel="noreferrer" target="_blank">
-                      Google Maps
-                    </a>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="section">
-        <h2>Discovery Runs</h2>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Campaign</th>
-              <th>Status</th>
-              <th>Checked</th>
-              <th>Details</th>
-              <th>Total Places</th>
-              <th>Promoted</th>
-              <th>Manual Review</th>
-              <th>Duplicates</th>
-              <th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dashboard.recentRuns.map((run) => (
-              <tr key={run.id}>
-                <td>{run.campaignName}</td>
-                <td>{run.status}</td>
-                <td>{run.candidatesChecked}</td>
-                <td>{run.detailsCalls}</td>
-                <td>{run.totalPlacesCalls}</td>
-                <td>{run.promoted}</td>
-                <td>{run.manualReview}</td>
-                <td>{run.duplicatesSkipped}</td>
-                <td>{run.errorMessage ?? "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {campaigns.map((campaign) => (
+                <tr key={campaign.id}>
+                  <td><a href={`/campaigns/${campaign.id}`}><strong>{campaign.name}</strong></a></td>
+                  <td><Badge tone={campaign.status === "active" ? "success" : campaign.status === "paused" ? "warning" : "muted"}>{campaign.status}</Badge></td>
+                  <td>{campaign.primaryNiche ?? campaign.niche}</td>
+                  <td>{campaign.targetCountries.join(", ") || campaign.region}</td>
+                  <td className="mono">{campaign.leads}</td>
+                  <td className="mono">{campaign.replies}</td>
+                  <td>{campaign.runFrequency ?? "daily"}</td>
+                  <td className="mono">{campaign.lastRunAt ? new Date(campaign.lastRunAt).toLocaleDateString() : "--"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </>
   );

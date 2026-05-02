@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export function requireWorkflowAuth(request: NextRequest) {
-  const expected = process.env.N8N_API_KEY;
+  const expected = process.env.N8N_API_KEY ?? process.env.N8N_WORKFLOW_API_KEY;
 
   if (!expected) {
     return NextResponse.json({ error: "N8N_API_KEY is not configured" }, { status: 500 });

@@ -43,7 +43,7 @@
           "parameters": [
             {
               "name": "x-n8n-api-key",
-              "value": "={{$env.N8N_WORKFLOW_API_KEY}}"
+              "value": "={{$env.N8N_API_KEY || $env.N8N_WORKFLOW_API_KEY}}"
             },
             {
               "name": "content-type",

@@ -52,7 +52,18 @@ Create these in n8n credentials. Do not hardcode secrets inside nodes.
 | DeepSeek API key | Scoring, drafting, reply classification | Use `deepseek-chat`. |
 | Google Workspace OAuth | Sending + reply detection | One outreach inbox for MVP. |
 | Notification channel | Replies, review alerts, weekly report | Email first; Telegram/Discord optional. |
-| App workflow API key | Optional HTTP endpoints | Use `x-n8n-api-key`. |
+| App workflow API key | Optional HTTP endpoints | Use `x-n8n-api-key`; prefer `N8N_API_KEY`, with `N8N_WORKFLOW_API_KEY` supported as a compatibility alias. |
+
+## VPS / Vercel Environment
+
+Set these in the Hetzner n8n container environment:
+
+```text
+APP_BASE_URL=https://ai-lead-generation-expert.vercel.app
+N8N_API_KEY=<same value configured in Vercel>
+```
+
+Set the same `N8N_API_KEY` in Vercel. Keep `GLOBAL_OUTREACH_PAUSED=true` and `app_settings.global_outreach.paused=true` until dry runs pass. DeepSeek should be configured as an n8n credential; do not rely on `$env.DEEPSEEK_API_KEY` inside n8n node expressions.
 
 ## Global Workflow Rules
 
@@ -64,7 +75,7 @@ Create these in n8n credentials. Do not hardcode secrets inside nodes.
 - WF-10 must crawl only Google Places `websiteUri` with depth/page/byte/time limits.
 - Never send if `app_settings.global_outreach.paused = true`.
 - Never send if a `reply_events` row exists for the lead.
-- Never send if lead status is `paused`, `replied`, `unsubscribed`, `bounced`, `not_interested`, or `archived`.
+- Never send if lead status is `paused`, `replied`, `replied_interested`, `replied_not_interested`, `replied_needs_review`, `unsubscribed`, `bounced`, `not_interested`, or `archived`.
 - Never send without a prospect email.
 - Band A Step 1 requires founder approval.
 - Interested replies are never auto-answered.
@@ -83,6 +94,10 @@ Create these in n8n credentials. Do not hardcode secrets inside nodes.
 10. Build `WF-07 Reply Detection`.
 11. Build `WF-08 Weekly Report`.
 12. Run dry test with `global_outreach.paused = true`.
+
+## Importable JSON Status
+
+`WF-01` and `WF-10` call the deployed Vercel app through `APP_BASE_URL`. `WF-04` through `WF-08` should be exported from the live n8n instance after confirming they call the live Supabase RPC endpoints. The checked-in table/schema migration supports those RPC contracts, but do not treat placeholder JSON exports as production-ready if they only contain source-query nodes and sticky notes.
 
 ## Files
 

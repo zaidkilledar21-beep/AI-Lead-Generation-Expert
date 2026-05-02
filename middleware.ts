@@ -1,38 +1,57 @@
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
-  const user = process.env.DASHBOARD_BASIC_AUTH_USER;
-  const password = process.env.DASHBOARD_BASIC_AUTH_PASSWORD;
+const PUBLIC_ROUTES = new Set(["/login"]);
+type CookieToSet = { name: string; value: string; options: CookieOptions };
 
+export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
-  if (!user || !password) {
+  let response = NextResponse.next({ request });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
     if (process.env.NODE_ENV === "production") {
-      return new NextResponse("Dashboard Basic Auth is not configured", { status: 500 });
+      return new NextResponse("Supabase Auth is not configured", { status: 500 });
     }
-    return NextResponse.next();
+    return response;
   }
 
-  const authHeader = request.headers.get("authorization");
-
-  if (authHeader) {
-    const [scheme, encoded] = authHeader.split(" ");
-    const decoded = encoded ? atob(encoded) : "";
-    const [providedUser, providedPassword] = decoded.split(":");
-
-    if (scheme === "Basic" && providedUser === user && providedPassword === password) {
-      return NextResponse.next();
-    }
-  }
-
-  return new NextResponse("Authentication required", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="AI Automation Lead Engine"'
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet: CookieToSet[]) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          request.cookies.set(name, value);
+          response.cookies.set(name, value, options);
+        });
+      }
     }
   });
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  const isPublicRoute = PUBLIC_ROUTES.has(request.nextUrl.pathname);
+
+  if (!user && !isPublicRoute) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (user && request.nextUrl.pathname === "/login") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  return response;
 }
 
 export const config = {

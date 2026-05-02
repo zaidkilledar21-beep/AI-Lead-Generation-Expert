@@ -1,7 +1,17 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { LeadStatus } from "@/lib/types";
 
-const blockedApprovalStatuses = new Set(["paused", "replied", "unsubscribed", "bounced", "not_interested", "archived"]);
+const blockedApprovalStatuses = new Set([
+  "paused",
+  "replied",
+  "replied_interested",
+  "replied_not_interested",
+  "replied_needs_review",
+  "unsubscribed",
+  "bounced",
+  "not_interested",
+  "archived"
+]);
 
 export async function updateLeadStatus(leadId: string, status: LeadStatus) {
   const supabase = createSupabaseServiceClient();
@@ -15,7 +25,13 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus) {
 export async function routeApprovedLead(leadId: string) {
   const supabase = createSupabaseServiceClient();
 
-  if (process.env.GLOBAL_OUTREACH_PAUSED === "true") {
+  const { data: globalOutreach } = await supabase.from("app_settings").select("value").eq("key", "global_outreach").maybeSingle();
+  const globalPaused =
+    globalOutreach?.value && typeof globalOutreach.value === "object" && "paused" in globalOutreach.value
+      ? Boolean((globalOutreach.value as { paused?: unknown }).paused)
+      : true;
+
+  if (globalPaused) {
     throw new Error("Global outreach is paused");
   }
 

@@ -7,9 +7,9 @@ import type { ScoringOutput } from "@/lib/types";
 const scoringPromptVersion = "icp_scoring_v2";
 
 function deriveBand(totalScore: number): ScoringOutput["band_recommendation"] {
-  if (totalScore >= 80) return "A";
-  if (totalScore >= 65) return "B";
-  if (totalScore >= 45) return "C";
+  if (totalScore >= 76) return "A";
+  if (totalScore >= 51) return "B";
+  if (totalScore >= 26) return "C";
   return "D";
 }
 
@@ -54,7 +54,7 @@ Metric rubric:
 - operational_complexity: reward evidence of appointments, services, multiple contact paths, FAQ/support load, or booking coordination.
 - growth_activity: reward recent-looking website activity only if directly visible in crawl evidence. Otherwise keep low and explain missing data.
 
-Band thresholds are deterministic: A >= 80, B = 65-79, C = 45-64, D < 45. Set band_recommendation to match total_score. Confidence must be low when source evidence, website crawl, or contact paths are missing.`;
+Band thresholds are deterministic: A = 76-100, B = 51-75, C = 26-50, D = 0-25. Set band_recommendation to match total_score. Confidence must be low when source evidence, website crawl, or contact paths are missing.`;
 }
 
 export async function scoreLead(leadId: string) {

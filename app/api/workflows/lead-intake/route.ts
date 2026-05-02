@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireWorkflowAuth } from "@/lib/api/auth";
 import { importDiscoveredLeads } from "@/lib/workflows/discovery";
+import { discoveryLimits } from "@/lib/contracts";
 import type { GooglePlacesLeadInput } from "@/lib/contracts";
 
 type LeadIntakePayload = {
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       {
         niche: body.niche,
         location: body.location,
-        max_results: Math.min(body.max_results ?? leads.length, leads.length)
+        max_results: Math.min(body.max_results ?? leads.length, leads.length, discoveryLimits.maxFinalLeadsPerDay)
       },
       leads
     );

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { assertCampaignConfigInput, discoveryLimits, type CampaignConfigInput } from "@/lib/contracts";
-import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
+import { createCrmCampaign, updateCrmCampaign, updateCrmCampaignStatus } from "@/lib/app/campaigns";
 
 function parseCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
@@ -39,17 +39,9 @@ function campaignFromForm(formData: FormData): CampaignConfigInput {
 }
 
 export async function createCampaign(_: unknown, formData: FormData) {
-  const supabase = createOptionalSupabaseServiceClient();
-  if (!supabase) return { error: "Supabase is not configured" };
-
   try {
     const campaign = campaignFromForm(formData);
-    const { error } = await supabase.from("campaigns").insert({
-      ...campaign,
-      created_by: null
-    });
-
-    if (error) return { error: error.message };
+    await createCrmCampaign(campaign);
     revalidatePath("/campaigns");
     return { error: null };
   } catch (error) {
@@ -58,14 +50,9 @@ export async function createCampaign(_: unknown, formData: FormData) {
 }
 
 export async function updateCampaign(campaignId: string, _: unknown, formData: FormData) {
-  const supabase = createOptionalSupabaseServiceClient();
-  if (!supabase) return { error: "Supabase is not configured" };
-
   try {
     const campaign = campaignFromForm(formData);
-    const { error } = await supabase.from("campaigns").update(campaign).eq("id", campaignId);
-
-    if (error) return { error: error.message };
+    await updateCrmCampaign(campaignId, campaign);
     revalidatePath("/campaigns");
     return { error: null };
   } catch (error) {
@@ -74,10 +61,6 @@ export async function updateCampaign(campaignId: string, _: unknown, formData: F
 }
 
 export async function updateCampaignStatus(campaignId: string, status: "active" | "paused" | "archived") {
-  const supabase = createOptionalSupabaseServiceClient();
-  if (!supabase) throw new Error("Supabase is not configured");
-
-  const { error } = await supabase.from("campaigns").update({ status }).eq("id", campaignId);
-  if (error) throw new Error(error.message);
+  await updateCrmCampaignStatus(campaignId, status);
   revalidatePath("/campaigns");
 }

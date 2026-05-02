@@ -1,4 +1,4 @@
-import type { EmailGenerationOutput, ReplyClassificationOutput, ScoringOutput } from "@/lib/types";
+import type { CampaignStatus, Confidence, EmailGenerationOutput, ReplyClassificationOutput, RunFrequency, ScoringOutput } from "@/lib/types";
 
 export type DiscoverLeadsInput = {
   niche: string;
@@ -13,8 +13,6 @@ export const discoveryLimits = {
   maxTotalPlacesCallsPerDay: 150,
   maxDiscoveryRunsPerDay: 1
 } as const;
-
-export type CampaignStatus = "active" | "paused" | "archived";
 
 export type CampaignConfigInput = {
   name: string;
@@ -31,6 +29,35 @@ export type CampaignConfigInput = {
   schedule: string;
   timezone: string;
   status: CampaignStatus;
+  description?: string | null;
+  primary_niche?: string | null;
+  niche_keywords?: string[];
+  target_countries?: string[];
+  target_cities?: string[];
+  exclude_cities?: string[];
+  language_of_business?: string[];
+  max_leads_per_run?: number;
+  lead_source?: "google_maps" | "google_search" | "directory" | "manual_import" | string;
+  min_google_rating?: number;
+  min_review_count?: number;
+  exclude_chains?: boolean;
+  exclude_already_discovered?: boolean;
+  run_frequency?: RunFrequency;
+  next_run_at?: string | null;
+  min_score_band_a?: number;
+  min_score_band_b?: number;
+  min_automation_opportunity?: number;
+  min_ability_to_pay?: number;
+  min_reachability?: number;
+  confidence_required?: Confidence;
+  sequence_band_a?: string | null;
+  sequence_band_b?: string | null;
+  sequence_band_c?: string | null;
+  auto_approve_band_b?: boolean;
+  require_approval_band_a?: boolean;
+  assigned_inbox_id?: string | null;
+  tags?: string[];
+  notes?: string | null;
 };
 
 export type GooglePlacesLeadInput = {
@@ -115,7 +142,35 @@ export function assertCampaignConfigInput(input: CampaignConfigInput) {
   if (input.max_total_places_calls_per_day < 1 || input.max_total_places_calls_per_day > discoveryLimits.maxTotalPlacesCallsPerDay) {
     throw new Error(`max total Places calls per day must be 1-${discoveryLimits.maxTotalPlacesCallsPerDay}`);
   }
-  if (!["active", "paused", "archived"].includes(input.status)) throw new Error("invalid campaign status");
+  if (!["draft", "active", "paused", "completed", "archived"].includes(input.status)) throw new Error("invalid campaign status");
+  if (input.max_leads_per_run !== undefined && (input.max_leads_per_run < 1 || input.max_leads_per_run > 1000)) {
+    throw new Error("max leads per run must be 1-1000");
+  }
+  if (input.min_google_rating !== undefined && (input.min_google_rating < 0 || input.min_google_rating > 5)) {
+    throw new Error("min google rating must be between 0 and 5");
+  }
+  if (input.min_review_count !== undefined && input.min_review_count < 0) {
+    throw new Error("min review count must be zero or greater");
+  }
+  if (input.run_frequency !== undefined && !["manual", "daily", "every_3_days", "weekly"].includes(input.run_frequency)) {
+    throw new Error("invalid run frequency");
+  }
+  if (input.confidence_required !== undefined && !["low", "medium", "high"].includes(input.confidence_required)) {
+    throw new Error("invalid confidence requirement");
+  }
+  if (input.min_score_band_a !== undefined && (input.min_score_band_a < 0 || input.min_score_band_a > 100)) {
+    throw new Error("min score for Band A must be between 0 and 100");
+  }
+  if (input.min_score_band_b !== undefined && (input.min_score_band_b < 0 || input.min_score_band_b > 100)) {
+    throw new Error("min score for Band B must be between 0 and 100");
+  }
+  if (
+    input.min_score_band_a !== undefined &&
+    input.min_score_band_b !== undefined &&
+    input.min_score_band_b > input.min_score_band_a
+  ) {
+    throw new Error("min score for Band B cannot exceed Band A");
+  }
 }
 
 export function assertScoringOutput(output: ScoringOutput) {
