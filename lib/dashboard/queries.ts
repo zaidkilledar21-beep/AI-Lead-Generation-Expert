@@ -1,4 +1,4 @@
-import { createSupabaseDashboardClient } from "@/lib/supabase/dashboard";
+import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
 
 type PipelineLead = {
   id: string;
@@ -13,7 +13,7 @@ type PipelineLead = {
 };
 
 export async function getPipelineSnapshot() {
-  const supabase = createSupabaseDashboardClient();
+  const supabase = createOptionalSupabaseServiceClient();
 
   if (!supabase) {
     return {
@@ -80,7 +80,7 @@ export async function getPipelineSnapshot() {
 }
 
 export async function getLeadDetail(leadId: string) {
-  const supabase = createSupabaseDashboardClient();
+  const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return null;
 
   const { data: lead } = await supabase.from("leads").select("*").eq("id", leadId).maybeSingle();
@@ -138,7 +138,7 @@ export async function getLeadDetail(leadId: string) {
 }
 
 export async function getManualReviewItems() {
-  const supabase = createSupabaseDashboardClient();
+  const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return [];
 
   const { data } = await supabase
@@ -178,7 +178,7 @@ export async function getMetricsSnapshot() {
 }
 
 export async function getCampaignDashboard() {
-  const supabase = createSupabaseDashboardClient();
+  const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) {
     return {
       campaigns: [],

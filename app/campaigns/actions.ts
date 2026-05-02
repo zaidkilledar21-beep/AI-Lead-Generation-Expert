@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { assertCampaignConfigInput, discoveryLimits, type CampaignConfigInput } from "@/lib/contracts";
-import { createSupabaseDashboardClient } from "@/lib/supabase/dashboard";
+import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
 
 function parseCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
@@ -39,15 +39,14 @@ function campaignFromForm(formData: FormData): CampaignConfigInput {
 }
 
 export async function createCampaign(_: unknown, formData: FormData) {
-  const supabase = createSupabaseDashboardClient();
+  const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return { error: "Supabase is not configured" };
 
   try {
     const campaign = campaignFromForm(formData);
-    const { data: userResult } = await supabase.auth.getUser();
     const { error } = await supabase.from("campaigns").insert({
       ...campaign,
-      created_by: userResult.user?.id ?? null
+      created_by: null
     });
 
     if (error) return { error: error.message };
@@ -59,7 +58,7 @@ export async function createCampaign(_: unknown, formData: FormData) {
 }
 
 export async function updateCampaign(campaignId: string, _: unknown, formData: FormData) {
-  const supabase = createSupabaseDashboardClient();
+  const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return { error: "Supabase is not configured" };
 
   try {
@@ -75,7 +74,7 @@ export async function updateCampaign(campaignId: string, _: unknown, formData: F
 }
 
 export async function updateCampaignStatus(campaignId: string, status: "active" | "paused" | "archived") {
-  const supabase = createSupabaseDashboardClient();
+  const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) throw new Error("Supabase is not configured");
 
   const { error } = await supabase.from("campaigns").update({ status }).eq("id", campaignId);
