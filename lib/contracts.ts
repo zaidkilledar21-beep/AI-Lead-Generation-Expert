@@ -68,6 +68,7 @@ export type EnrichLeadInput = {
 
 export type EnrichLeadOutput = {
   lead_id: string;
+  status: "completed" | "failed";
   enrichment_confidence: "low" | "medium" | "high";
   email_found?: string;
   workflow_signals: string[];
@@ -93,8 +94,8 @@ export type DetectRepliesOutput = {
 export function assertDiscoverInput(input: DiscoverLeadsInput) {
   if (!input.niche.trim()) throw new Error("niche is required");
   if (!input.location.trim()) throw new Error("location is required");
-  if (!Number.isInteger(input.max_results) || input.max_results < 1 || input.max_results > discoveryLimits.maxCandidatesCheckedPerDay) {
-    throw new Error(`max_results must be an integer between 1 and ${discoveryLimits.maxCandidatesCheckedPerDay}`);
+  if (!Number.isInteger(input.max_results) || input.max_results < 1 || input.max_results > discoveryLimits.maxFinalLeadsPerDay) {
+    throw new Error(`max_results must be an integer between 1 and ${discoveryLimits.maxFinalLeadsPerDay}`);
   }
 }
 

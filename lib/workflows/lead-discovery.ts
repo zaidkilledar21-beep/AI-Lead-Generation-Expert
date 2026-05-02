@@ -424,7 +424,18 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
 
     for (const leadId of importResult.created_lead_ids ?? []) {
       try {
-        await enrichLead(leadId);
+        const enrichmentResult = await enrichLead(leadId);
+        if (enrichmentResult.status === "failed") {
+          await logWorkflowEvent({
+            campaign_id: campaign.id,
+            discovery_run_id: runId,
+            event_type: "wf_02_enrichment",
+            status: "failed",
+            error_message: "Lead moved to manual review after failed enrichment",
+            payload: { lead_id: leadId, enrichment_confidence: enrichmentResult.enrichment_confidence }
+          });
+          continue;
+        }
         enriched += 1;
         await logWorkflowEvent({
           campaign_id: campaign.id,
