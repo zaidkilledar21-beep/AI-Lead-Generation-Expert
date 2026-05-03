@@ -16,30 +16,30 @@ export default async function NotificationsSettingsPage() {
           <form action={updateFounderProfileAction} className="form">
             <div className="form-grid">
               <label>
-                Display name
+                <span>Display name</span>
                 <input name="displayName" defaultValue={profile?.display_name ?? ""} />
               </label>
               <label>
-                Timezone
+                <span>Timezone</span>
                 <input name="timezone" defaultValue={profile?.timezone ?? "Asia/Karachi"} />
               </label>
               <label className="form-span-2">
-                Telegram chat id
+                <span>Telegram chat id</span>
                 <input name="telegramChatId" defaultValue={profile?.telegram_chat_id ?? ""} placeholder="Used by Telegram webhook routing" />
               </label>
             </div>
             <div className="toggle-grid">
               <label className="checkbox-row">
                 <input name="positiveReplies" type="checkbox" value="true" defaultChecked={preferences.positive_replies ?? true} />
-                Positive replies
+                <span>Positive replies</span>
               </label>
               <label className="checkbox-row">
                 <input name="reviewBacklog" type="checkbox" value="true" defaultChecked={preferences.review_backlog ?? true} />
-                Review backlog
+                <span>Review backlog</span>
               </label>
               <label className="checkbox-row">
                 <input name="weeklyReport" type="checkbox" value="true" defaultChecked={preferences.weekly_report ?? true} />
-                Weekly report
+                <span>Weekly report</span>
               </label>
             </div>
             <button className="ui-button ui-button-primary" type="submit">Save notification settings</button>

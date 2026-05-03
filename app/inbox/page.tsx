@@ -1,14 +1,12 @@
 import { PageHeader } from "@/components/crm/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { markReplyHandledAction } from "@/lib/crm/actions";
 import { getInboxThreads } from "@/lib/crm/queries";
+import { InboxView } from "@/components/crm/inbox-view";
 
 export default async function InboxPage({
   searchParams
-}: {
+}: Readonly<{
   searchParams?: { thread?: string; tab?: string };
-}) {
+}>) {
   const threads = await getInboxThreads();
   const tab = searchParams?.tab ?? "all";
   const filtered = threads.filter((thread) => {
@@ -23,79 +21,20 @@ export default async function InboxPage({
   return (
     <>
       <PageHeader title="Inbox" description="Shared founder inbox with full reply context, suggested next action, and one-click handling." />
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Views</h2>
-          <div className="button-row">
-            <a className={`ui-button ${tab === "all" ? "ui-button-primary" : "ui-button-secondary"}`} href="/inbox?tab=all">All</a>
-            <a className={`ui-button ${tab === "unhandled" ? "ui-button-primary" : "ui-button-secondary"}`} href="/inbox?tab=unhandled">Unhandled</a>
-            <a className={`ui-button ${tab === "positive" ? "ui-button-primary" : "ui-button-secondary"}`} href="/inbox?tab=positive">Positive</a>
-            <a className={`ui-button ${tab === "review" ? "ui-button-primary" : "ui-button-secondary"}`} href="/inbox?tab=review">Needs review</a>
+      <section className="glass-panel group">
+        <div className="p-6 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h2 className="text-lg font-medium text-white/90">Views</h2>
+          <div className="flex gap-2">
+            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "all" ? "bg-white/10 text-white" : "bg-transparent hover:bg-white/5 text-white/60"}`} href="/inbox?tab=all">All</a>
+            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "unhandled" ? "bg-brand/20 text-brand" : "bg-transparent hover:bg-white/5 text-white/60"}`} href="/inbox?tab=unhandled">Unhandled</a>
+            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "positive" ? "bg-blue-500/20 text-blue-400" : "bg-transparent hover:bg-white/5 text-white/60"}`} href="/inbox?tab=positive">Positive</a>
+            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "review" ? "bg-red-500/20 text-red-400" : "bg-transparent hover:bg-white/5 text-white/60"}`} href="/inbox?tab=review">Needs review</a>
           </div>
         </div>
       </section>
-      <div className="two-column inbox-grid">
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Replies</h2>
-            <div className="button-row">
-              <Badge tone="warning">{threads.filter((thread) => thread.isUnhandled).length} unhandled</Badge>
-              <Badge tone="muted">{filtered.length} visible</Badge>
-            </div>
-          </div>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead><tr><th>Lead</th><th>Intent</th><th>Campaign</th><th>Received</th><th>State</th></tr></thead>
-              <tbody>
-                {filtered.map((thread) => (
-                  <tr key={thread.id} className={selected?.id === thread.id ? "selected-row" : ""}>
-                    <td>
-                      <a href={`/inbox?tab=${tab}&thread=${thread.id}`}><strong>{thread.businessName}</strong></a>
-                      <div className="muted">{thread.fromEmail ?? "Unknown sender"}</div>
-                    </td>
-                    <td><Badge tone="info">{thread.intent ?? "unclassified"}</Badge></td>
-                    <td>{thread.campaignName ?? <span className="muted">No campaign</span>}</td>
-                    <td className="mono">{thread.receivedAt ? new Date(thread.receivedAt).toLocaleString() : "--"}</td>
-                    <td>{thread.isUnhandled ? <Badge tone="warning">Open</Badge> : <Badge tone="success">Handled</Badge>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <aside className="panel">
-          <div className="panel-header"><h2>Thread workspace</h2></div>
-          <div className="panel-body">
-            {selected ? (
-              <div className="stack-list">
-                <div className="record-card">
-                  <h3>{selected.businessName}</h3>
-                  <div className="button-row">
-                    <Badge tone="info">{selected.intent ?? "unclassified"}</Badge>
-                    <Badge tone={selected.isUnhandled ? "warning" : "success"}>{selected.isUnhandled ? "Open" : "Handled"}</Badge>
-                    {selected.band ? <Badge tone="muted">Band {selected.band}</Badge> : null}
-                  </div>
-                  <p>{selected.body || selected.excerpt || "No reply body stored."}</p>
-                  <div className="muted">Summary: {selected.summary ?? "No AI summary available."}</div>
-                  <div className="muted top-gap">Suggested next action: {selected.suggestedNextAction ?? "No suggestion yet."}</div>
-                </div>
-                <div className="record-card">
-                  <strong>AI draft reply</strong>
-                  <p>{selected.aiDraftReply ?? "No draft reply available yet."}</p>
-                </div>
-                <form action={markReplyHandledAction} className="form">
-                  <input type="hidden" name="replyEventId" value={selected.id} />
-                  <input type="hidden" name="leadId" value={selected.leadId} />
-                  <label>Handling notes<textarea name="notes" rows={5} placeholder="Outcome, pricing sent, booked call, objection noted." /></label>
-                  <Button type="submit">Mark handled</Button>
-                </form>
-              </div>
-            ) : (
-              <div className="empty-state">No replies match this view.</div>
-            )}
-          </div>
-        </aside>
-      </div>
+      
+      <InboxView filtered={filtered} selected={selected} tab={tab} />
+
     </>
   );
 }

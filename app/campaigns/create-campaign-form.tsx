@@ -20,11 +20,11 @@ export function CreateCampaignForm() {
       <input name="timezone" type="hidden" value="Asia/Karachi" />
       <div className="form-grid">
         <label>
-          Campaign name
+          <span>Campaign name</span>
           <input name="name" required placeholder="Dubai Dental Clinics - May" />
         </label>
         <label>
-          Status
+          <span>Status</span>
           <select name="status" defaultValue="draft">
             <option value="draft">Draft</option>
             <option value="active">Active</option>
@@ -32,15 +32,15 @@ export function CreateCampaignForm() {
           </select>
         </label>
         <label className="form-span-2">
-          Description
+          <span>Description</span>
           <textarea name="description" rows={3} placeholder="Internal notes, campaign intent, exclusions." />
         </label>
         <label>
-          Primary niche
+          <span>Primary niche</span>
           <input name="primary_niche" required placeholder="Dental Clinics" />
         </label>
         <label>
-          Lead source
+          <span>Lead source</span>
           <select name="lead_source" defaultValue="google_maps">
             <option value="google_maps">Google Maps</option>
             <option value="google_search">Google Search</option>
@@ -49,27 +49,27 @@ export function CreateCampaignForm() {
           </select>
         </label>
         <label className="form-span-2">
-          Niche keywords
-          <textarea name="niche_keywords" rows={3} placeholder="dentist&#10;dental surgery&#10;orthodontist" />
+          <span>Niche keywords</span>
+          <textarea name="niche_keywords" rows={3} placeholder={"dentist\ndental surgery\northodontist"} />
         </label>
         <label className="form-span-2">
-          Target countries
-          <textarea name="target_countries" rows={2} required placeholder="UAE&#10;Saudi Arabia" />
+          <span>Target countries</span>
+          <textarea name="target_countries" rows={2} required placeholder={"UAE\nSaudi Arabia"} />
         </label>
         <label>
-          Target cities
-          <textarea name="target_cities" rows={3} placeholder="Dubai&#10;Abu Dhabi" />
+          <span>Target cities</span>
+          <textarea name="target_cities" rows={3} placeholder={"Dubai\nAbu Dhabi"} />
         </label>
         <label>
-          Exclude cities
+          <span>Exclude cities</span>
           <textarea name="exclude_cities" rows={3} placeholder="Sharjah" />
         </label>
         <label>
-          Business languages
-          <textarea name="language_of_business" rows={3} placeholder="English&#10;Arabic" />
+          <span>Business languages</span>
+          <textarea name="language_of_business" rows={3} placeholder={"English\nArabic"} />
         </label>
         <label>
-          Run frequency
+          <span>Run frequency</span>
           <select name="run_frequency" defaultValue="manual">
             <option value="manual">Manual</option>
             <option value="daily">Daily</option>
@@ -78,55 +78,55 @@ export function CreateCampaignForm() {
           </select>
         </label>
         <label>
-          Next scheduled run
+          <span>Next scheduled run</span>
           <input name="next_run_at" type="datetime-local" />
         </label>
         <label>
-          Max leads per run
+          <span>Max leads per run</span>
           <input name="max_leads_per_run" type="number" min="1" max="1000" defaultValue="100" />
         </label>
         <label>
-          Max candidates checked per day
+          <span>Max candidates checked per day</span>
           <input name="max_candidates_per_day" type="number" min="1" max="75" defaultValue="75" />
         </label>
         <label>
-          Max Places details calls per day
+          <span>Max Places details calls per day</span>
           <input name="max_details_calls_per_day" type="number" min="1" max="100" defaultValue="100" />
         </label>
         <label>
-          Max total Places calls per day
+          <span>Max total Places calls per day</span>
           <input name="max_total_places_calls_per_day" type="number" min="1" max="150" defaultValue="150" />
         </label>
         <label>
-          Min Google rating
+          <span>Min Google rating</span>
           <input name="min_google_rating" type="number" min="0" max="5" step="0.1" defaultValue="3.5" />
         </label>
         <label>
-          Min review count
+          <span>Min review count</span>
           <input name="min_review_count" type="number" min="0" defaultValue="5" />
         </label>
         <label>
-          Min score for Band A
+          <span>Min score for Band A</span>
           <input name="min_score_band_a" type="number" min="0" max="100" defaultValue="76" />
         </label>
         <label>
-          Min score for Band B
+          <span>Min score for Band B</span>
           <input name="min_score_band_b" type="number" min="0" max="100" defaultValue="51" />
         </label>
         <label>
-          Min automation opportunity
+          <span>Min automation opportunity</span>
           <input name="min_automation_opportunity" type="number" min="0" max="20" defaultValue="13" />
         </label>
         <label>
-          Min ability to pay
+          <span>Min ability to pay</span>
           <input name="min_ability_to_pay" type="number" min="0" max="15" defaultValue="9" />
         </label>
         <label>
-          Min reachability
+          <span>Min reachability</span>
           <input name="min_reachability" type="number" min="0" max="10" defaultValue="6" />
         </label>
         <label>
-          Confidence required
+          <span>Confidence required</span>
           <select name="confidence_required" defaultValue="medium">
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -134,50 +134,50 @@ export function CreateCampaignForm() {
           </select>
         </label>
         <label>
-          Sequence for Band A
+          <span>Sequence for Band A</span>
           <input name="sequence_band_a" placeholder="UUID or leave blank" />
         </label>
         <label>
-          Sequence for Band B
+          <span>Sequence for Band B</span>
           <input name="sequence_band_b" placeholder="UUID or leave blank" />
         </label>
         <label>
-          Sequence for Band C
+          <span>Sequence for Band C</span>
           <input name="sequence_band_c" placeholder="UUID or leave blank" />
         </label>
         <label>
-          Assigned inbox
+          <span>Assigned inbox</span>
           <input name="assigned_inbox_id" placeholder="Inbox UUID or leave blank" />
         </label>
         <label className="form-span-2">
-          Internal tags
-          <textarea name="tags" rows={2} placeholder="Q2 push&#10;high priority" />
+          <span>Internal tags</span>
+          <textarea name="tags" rows={2} placeholder={"Q2 push\nhigh priority"} />
         </label>
         <label className="form-span-2">
-          Notes
+          <span>Notes</span>
           <textarea name="notes" rows={4} placeholder="Anything the founders need to remember about this campaign." />
         </label>
       </div>
       <div className="toggle-grid">
         <label className="checkbox-row">
           <input name="exclude_chains" type="checkbox" />
-          Exclude chains
+          <span>Exclude chains</span>
         </label>
         <label className="checkbox-row">
           <input name="exclude_already_discovered" type="checkbox" defaultChecked />
-          Exclude already discovered
+          <span>Exclude already discovered</span>
         </label>
         <label className="checkbox-row">
           <input name="auto_approve_band_b" type="checkbox" />
-          Auto-approve Band B
+          <span>Auto-approve Band B</span>
         </label>
         <label className="checkbox-row">
           <input name="require_approval_band_a" type="checkbox" defaultChecked />
-          Require Band A approval
+          <span>Require Band A approval</span>
         </label>
         <label className="checkbox-row">
           <input name="crawl_website" type="checkbox" defaultChecked />
-          Crawl website during discovery
+          <span>Crawl website during discovery</span>
         </label>
       </div>
       {state?.error ? <p className="ui-badge ui-badge-danger">{state.error}</p> : null}

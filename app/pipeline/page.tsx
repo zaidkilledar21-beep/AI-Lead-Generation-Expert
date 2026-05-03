@@ -1,10 +1,11 @@
 import { PageHeader } from "@/components/crm/page-header";
-import { Badge, bandTone } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
-import { ScoreBar } from "@/components/ui/score-bar";
-import { approveLeadAction, changeLeadStatusAction, deleteFilterAction, saveFilterAction } from "@/lib/crm/actions";
+import { deleteFilterAction, saveFilterAction } from "@/lib/crm/actions";
 import { getCrmHomeMetrics, getPipelineRows, getSavedFilters } from "@/lib/crm/queries";
+import { KanbanBoard } from "@/components/crm/kanban-board";
+import { PipelineListView } from "@/components/crm/pipeline-list-view";
 
 function matchesFilter(row: Awaited<ReturnType<typeof getPipelineRows>>[number], searchParams: Record<string, string | undefined>) {
   const q = searchParams.q?.toLowerCase().trim();
@@ -62,15 +63,15 @@ const boardColumns = [
 
 export default async function PipelinePage({
   searchParams
-}: {
+}: Readonly<{
   searchParams?: Record<string, string | undefined>;
-}) {
+}>) {
   const [metrics, rows, savedFilters] = await Promise.all([getCrmHomeMetrics(), getPipelineRows(500), getSavedFilters("pipeline")]);
   const filtered = rows.filter((row) => matchesFilter(row, searchParams ?? {}));
   const summary = summarizeRows(filtered);
   const campaigns = [...new Map(rows.filter((row) => row.campaignId).map((row) => [row.campaignId, row])).values()];
-  const countries = [...new Set(rows.map((row) => row.country).filter(Boolean))].sort();
-  const niches = [...new Set(rows.map((row) => row.niche).filter(Boolean))].sort();
+  const countries = [...new Set(rows.map((row) => row.country).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const niches = [...new Set(rows.map((row) => row.niche).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const view = searchParams?.view === "board" ? "board" : "list";
 
   return (
@@ -181,102 +182,9 @@ export default async function PipelinePage({
       </section>
 
       {view === "board" ? (
-        <section className="board board-wide">
-          {boardColumns.map((column) => {
-            const cards = filtered.filter((row) => row.status === column.key);
-            return (
-              <div className="board-column" key={column.key}>
-                <div className="panel-header">
-                  <h3>{column.label}</h3>
-                  <Badge tone="muted">{cards.length}</Badge>
-                </div>
-                {cards.map((row) => (
-                  <div className="board-card" key={row.id}>
-                    <a href={`/pipeline/${row.id}`}><strong>{row.businessName}</strong></a>
-                    <div className="muted">{row.niche ?? "No niche"}</div>
-                    <div className="button-row top-gap">
-                      <Badge tone={bandTone(row.effectiveBand)}>{row.effectiveBand ?? "NA"}</Badge>
-                      <span className="mono">{row.score ?? "--"}</span>
-                    </div>
-                    <div className="muted top-gap">{row.campaignName ?? "No campaign"}</div>
-                  </div>
-                ))}
-              </div>
-            );
-          })}
-        </section>
+        <KanbanBoard columns={boardColumns} leads={filtered} />
       ) : (
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Lead list</h2>
-            <span className="muted">Row actions are live; bulk actions are the next safe extension point.</span>
-          </div>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Business</th>
-                  <th>Score</th>
-                  <th>Status</th>
-                  <th>Campaign</th>
-                  <th>Reply</th>
-                  <th>Owner</th>
-                  <th>Review</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <a href={`/pipeline/${row.id}`}><strong>{row.businessName}</strong></a>
-                      <div className="muted">{[row.city, row.country].filter(Boolean).join(", ") || "Unknown geo"}</div>
-                    </td>
-                    <td>
-                      <div className="button-row">
-                        <Badge tone={bandTone(row.effectiveBand)}>{row.effectiveBand ?? "NA"}</Badge>
-                        <span className="mono">{row.score ?? "--"}</span>
-                      </div>
-                      <ScoreBar value={row.score ?? 0} band={row.effectiveBand ?? undefined} />
-                    </td>
-                    <td><Badge tone="info">{row.status}</Badge></td>
-                    <td>{row.campaignName ?? <span className="muted">Unassigned</span>}</td>
-                    <td>
-                      {row.latestReplyIntent ? <Badge tone="warning">{row.latestReplyIntent}</Badge> : <span className="muted">No reply</span>}
-                      {row.hasUnhandledReply ? <div className="muted">Unhandled</div> : null}
-                    </td>
-                    <td>{row.assignedTo ?? <span className="muted">Unassigned</span>}</td>
-                    <td>{row.hasPendingReview ? <Badge tone="danger">Pending</Badge> : <Badge tone="muted">Reviewed</Badge>}</td>
-                    <td>
-                      <div className="stacked-actions">
-                        {!row.approvedForOutreach ? (
-                          <form action={approveLeadAction}>
-                            <input type="hidden" name="leadId" value={row.id} />
-                            <button className="ui-button ui-button-primary" type="submit">Approve</button>
-                          </form>
-                        ) : (
-                          <Badge tone="success">Approved</Badge>
-                        )}
-                        <div className="button-row">
-                          <form action={changeLeadStatusAction}>
-                            <input type="hidden" name="leadId" value={row.id} />
-                            <input type="hidden" name="status" value="paused" />
-                            <button className="ui-button ui-button-secondary" type="submit">Pause</button>
-                          </form>
-                          <form action={changeLeadStatusAction}>
-                            <input type="hidden" name="leadId" value={row.id} />
-                            <input type="hidden" name="status" value="archived" />
-                            <button className="ui-button ui-button-danger" type="submit">Archive</button>
-                          </form>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <PipelineListView filtered={filtered} />
       )}
     </>
   );

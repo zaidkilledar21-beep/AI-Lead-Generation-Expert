@@ -4,11 +4,11 @@ export function PageHeader({
   title,
   description,
   actions
-}: {
+}: Readonly<{
   title: string;
   description?: string;
   actions?: ReactNode;
-}) {
+}>) {
   return (
     <section className="page-header">
       <div>

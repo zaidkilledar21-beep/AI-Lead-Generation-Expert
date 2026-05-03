@@ -9,10 +9,10 @@ import { getCampaignDetailData } from "@/lib/crm/queries";
 export default async function CampaignDetailPage({
   params,
   searchParams
-}: {
+}: Readonly<{
   params: { campaign_id: string };
   searchParams?: { tab?: string };
-}) {
+}>) {
   const detail = await getCampaignDetailData(params.campaign_id);
   if (!detail) notFound();
   const tab = searchParams?.tab ?? "overview";

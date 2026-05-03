@@ -5,15 +5,15 @@ import { logCrmAction, type CrmActionType } from "@/lib/app/audit";
 
 type LeadStatus = "paused" | "unsubscribed" | "archived";
 
-function createRequiredDashboardClient() {
-  const supabase = createSupabaseDashboardClient();
+async function createRequiredDashboardClient() {
+  const supabase = await createSupabaseDashboardClient();
   if (!supabase) throw new Error("Dashboard Supabase client is not configured");
   return supabase;
 }
 
 export async function approveCrmLeadForOutreach(leadId: string) {
   const actor = await requireAppActor();
-  const supabase = createRequiredDashboardClient();
+  const supabase = await createRequiredDashboardClient();
   const { error } = await supabase.rpc("dashboard_approve_lead_for_outreach", { target_lead_id: leadId });
 
   if (error) throw new Error(error.message);
@@ -37,7 +37,7 @@ export async function approveCrmLeadForOutreach(leadId: string) {
 
 export async function updateCrmLeadStatus(leadId: string, status: LeadStatus) {
   const actor = await requireAppActor();
-  const supabase = createRequiredDashboardClient();
+  const supabase = await createRequiredDashboardClient();
   const { error } = await supabase.rpc("dashboard_update_lead_status", {
     target_lead_id: leadId,
     next_status: status

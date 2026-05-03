@@ -167,7 +167,7 @@ export type CrmActionLogRecord = {
   reply_event_id: string | null;
   manual_review_id: string | null;
   email_draft_id: string | null;
-  action_type: CrmActionType | string;
+  action_type: CrmActionType;
   action_detail: Record<string, unknown>;
   performed_by: string;
   performed_by_user_id: string | null;
@@ -177,7 +177,7 @@ export type CrmActionLogRecord = {
 export type SavedFilterRecord = {
   id: string;
   name: string;
-  view_key: "pipeline" | "inbox" | "review" | "campaigns" | "analytics" | string;
+  view_key: "pipeline" | "inbox" | "review" | "campaigns" | "analytics";
   filters: Record<string, unknown>;
   created_by: string;
   created_by_user_id: string | null;

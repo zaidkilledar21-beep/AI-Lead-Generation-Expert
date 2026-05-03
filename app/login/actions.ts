@@ -7,11 +7,15 @@ export type LoginState = {
   error: string;
 };
 
+function str(value: FormDataEntryValue | null, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
 export async function signIn(_previousState: LoginState, formData: FormData): Promise<LoginState> {
-  const email = String(formData.get("email") ?? "");
-  const password = String(formData.get("password") ?? "");
-  const next = normalizeRedirectPath(String(formData.get("next") ?? "/"));
-  const supabase = createSupabaseDashboardClient();
+  const email = str(formData.get("email"));
+  const password = str(formData.get("password"));
+  const next = normalizeRedirectPath(str(formData.get("next"), "/"));
+  const supabase = await createSupabaseDashboardClient();
 
   if (!supabase) {
     return { error: "Supabase dashboard client is not configured" };
@@ -27,7 +31,7 @@ export async function signIn(_previousState: LoginState, formData: FormData): Pr
 }
 
 export async function signOut() {
-  const supabase = createSupabaseDashboardClient();
+  const supabase = await createSupabaseDashboardClient();
   if (supabase) {
     await supabase.auth.signOut();
   }

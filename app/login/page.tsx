@@ -33,11 +33,11 @@ function LoginForm() {
         <form action={action} className="form">
           <input name="next" type="hidden" value={next} />
           <label>
-            Email
+            <span>Email</span>
             <input name="email" type="email" required />
           </label>
           <label>
-            Password
+            <span>Password</span>
             <input name="password" type="password" required />
           </label>
           {state.error ? <p className="ui-badge ui-badge-danger">{state.error}</p> : null}

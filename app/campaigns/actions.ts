@@ -6,7 +6,8 @@ import { createCrmCampaign, markCampaignManualRunRequested, updateCrmCampaign, u
 import { runLeadDiscovery } from "@/lib/workflows/lead-discovery";
 
 function parseCsv(value: FormDataEntryValue | null) {
-  return String(value ?? "")
+  const raw = typeof value === "string" ? value : "";
+  return raw
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
@@ -26,40 +27,44 @@ function parseBoolean(value: FormDataEntryValue | null) {
   return value === "on" || value === "true";
 }
 
+function str(value: FormDataEntryValue | null, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
 function campaignFromForm(formData: FormData): CampaignConfigInput {
   const input = {
-    name: String(formData.get("name") ?? ""),
-    status: String(formData.get("status") ?? "draft") as CampaignConfigInput["status"],
-    description: String(formData.get("description") ?? "").trim() || null,
-    primary_niche: String(formData.get("primary_niche") ?? ""),
+    name: str(formData.get("name")),
+    status: str(formData.get("status"), "draft") as CampaignConfigInput["status"],
+    description: str(formData.get("description")).trim() || null,
+    primary_niche: str(formData.get("primary_niche")),
     niche_keywords: parseCsv(formData.get("niche_keywords")),
     target_countries: parseCsv(formData.get("target_countries")),
     target_cities: parseCsv(formData.get("target_cities")),
     exclude_cities: parseCsv(formData.get("exclude_cities")),
     language_of_business: parseCsv(formData.get("language_of_business")),
     max_leads_per_run: parseNumber(formData.get("max_leads_per_run"), discoveryLimits.maxFinalLeadsPerDay),
-    lead_source: String(formData.get("lead_source") ?? "google_maps"),
+    lead_source: str(formData.get("lead_source"), "google_maps") as CampaignConfigInput["lead_source"],
     min_google_rating: parseOptionalNumber(formData.get("min_google_rating"), 3.5),
     min_review_count: parseOptionalNumber(formData.get("min_review_count"), 5),
     exclude_chains: parseBoolean(formData.get("exclude_chains")),
     exclude_already_discovered: formData.get("exclude_already_discovered") !== "off",
-    run_frequency: String(formData.get("run_frequency") ?? "manual") as CampaignConfigInput["run_frequency"],
-    next_run_at: String(formData.get("next_run_at") ?? "").trim() || null,
+    run_frequency: str(formData.get("run_frequency"), "manual") as CampaignConfigInput["run_frequency"],
+    next_run_at: str(formData.get("next_run_at")).trim() || null,
     min_score_band_a: parseOptionalNumber(formData.get("min_score_band_a"), 76),
     min_score_band_b: parseOptionalNumber(formData.get("min_score_band_b"), 51),
     min_automation_opportunity: parseOptionalNumber(formData.get("min_automation_opportunity"), 13),
     min_ability_to_pay: parseOptionalNumber(formData.get("min_ability_to_pay"), 9),
     min_reachability: parseOptionalNumber(formData.get("min_reachability"), 6),
-    confidence_required: String(formData.get("confidence_required") ?? "medium") as CampaignConfigInput["confidence_required"],
-    sequence_band_a: String(formData.get("sequence_band_a") ?? "").trim() || null,
-    sequence_band_b: String(formData.get("sequence_band_b") ?? "").trim() || null,
-    sequence_band_c: String(formData.get("sequence_band_c") ?? "").trim() || null,
+    confidence_required: str(formData.get("confidence_required"), "medium") as CampaignConfigInput["confidence_required"],
+    sequence_band_a: str(formData.get("sequence_band_a")).trim() || null,
+    sequence_band_b: str(formData.get("sequence_band_b")).trim() || null,
+    sequence_band_c: str(formData.get("sequence_band_c")).trim() || null,
     auto_approve_band_b: parseBoolean(formData.get("auto_approve_band_b")),
     require_approval_band_a: formData.get("require_approval_band_a") !== "off",
-    assigned_inbox_id: String(formData.get("assigned_inbox_id") ?? "").trim() || null,
+    assigned_inbox_id: str(formData.get("assigned_inbox_id")).trim() || null,
     tags: parseCsv(formData.get("tags")),
-    notes: String(formData.get("notes") ?? "").trim() || null,
-    timezone: String(formData.get("timezone") ?? "UTC"),
+    notes: str(formData.get("notes")).trim() || null,
+    timezone: str(formData.get("timezone"), "UTC"),
     crawl_website: formData.get("crawl_website") !== "off",
     max_candidates_per_day: parseNumber(formData.get("max_candidates_per_day"), discoveryLimits.maxCandidatesCheckedPerDay),
     max_details_calls_per_day: parseNumber(formData.get("max_details_calls_per_day"), discoveryLimits.maxPlacesDetailsCallsPerDay),

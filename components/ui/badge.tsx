@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 type BadgeTone = "default" | "success" | "info" | "warning" | "danger" | "muted" | "band-a" | "band-b" | "band-c" | "band-d";
 
-export function Badge({ children, tone = "default" }: { children: ReactNode; tone?: BadgeTone }) {
+export function Badge({ children, tone = "default" }: Readonly<{ children: ReactNode; tone?: BadgeTone }>) {
   return <span className={`ui-badge ui-badge-${tone}`}>{children}</span>;
 }
 
