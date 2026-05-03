@@ -51,9 +51,11 @@ export type RunLeadDiscoveryInput = {
   dry_run?: boolean;
 };
 
+type DiscoveryRunStatus = "completed" | "failed" | "quota_exhausted";
+
 export type RunLeadDiscoveryOutput = {
   run_id: string | null;
-  status: "completed" | "failed" | "quota_exhausted" | "paused";
+  status: DiscoveryRunStatus | "paused";
   created: number;
   duplicates: number;
   manual_review: number;
@@ -444,16 +446,19 @@ function buildCandidateFromDetails(
   return candidate;
 }
 
-async function insertCandidateRecord(
-  candidate: RawLeadInput,
-  details: PlacesDetails,
-  campaign: CampaignRow,
-  runId: string,
-  searchQueryId: string | null,
-  validation: CandidateValidation,
-  crawlStatus: CrawlResult["crawlStatus"],
-  crawlSummary: string | null
-): Promise<{ id: string } | null> {
+type InsertCandidateInput = {
+  candidate: RawLeadInput;
+  details: PlacesDetails;
+  campaign: CampaignRow;
+  runId: string;
+  searchQueryId: string | null;
+  validation: CandidateValidation;
+  crawlStatus: CrawlResult["crawlStatus"];
+  crawlSummary: string | null;
+};
+
+async function insertCandidateRecord(input: InsertCandidateInput): Promise<{ id: string } | null> {
+  const { candidate, details, campaign, runId, searchQueryId, validation, crawlStatus, crawlSummary } = input;
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
     .from("lead_candidates")
@@ -542,7 +547,7 @@ async function processCandidatePlace(
     stats.crawlFailures += resolved.crawlFailures;
   }
 
-  const inserted = await insertCandidateRecord(candidate, details, campaign, runId, searchQueryId, validation, crawlStatus, crawlSummary);
+  const inserted = await insertCandidateRecord({ candidate, details, campaign, runId, searchQueryId, validation, crawlStatus, crawlSummary });
   if (!inserted) {
     errors.push(`Failed to insert candidate for place ${placeId}`);
     return { quotaExhausted: false };
@@ -644,13 +649,13 @@ async function processSearchResultPlaces(
 function resolveRunStatus(
   quotaExhausted: boolean,
   errorsCount: number
-): "completed" | "failed" | "quota_exhausted" {
+): DiscoveryRunStatus {
   if (quotaExhausted) return "quota_exhausted";
   if (errorsCount > 0) return "failed";
   return "completed";
 }
 
-function mapEventStatus(status: "completed" | "failed" | "quota_exhausted"): "completed" | "failed" | "blocked" {
+function mapEventStatus(status: DiscoveryRunStatus): "completed" | "failed" | "blocked" {
   if (status === "quota_exhausted") return "blocked";
   if (status === "failed") return "failed";
   return "completed";
@@ -661,7 +666,7 @@ async function finalizeDiscoveryRun(
   runId: string,
   stats: DiscoveryStats,
   errors: string[],
-  status: "completed" | "failed" | "quota_exhausted"
+  status: DiscoveryRunStatus
 ): Promise<void> {
   const supabase = createSupabaseServiceClient();
 
