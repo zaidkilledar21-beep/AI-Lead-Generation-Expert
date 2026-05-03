@@ -112,7 +112,7 @@ body {
 }
 
 .crm-sidebar {
-  @apply glass-panel;
+  @apply backdrop-blur-lg bg-black/40 border border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.2)];
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -129,7 +129,7 @@ body {
 }
 
 .crm-topbar {
-  @apply glass-panel;
+  @apply backdrop-blur-lg bg-black/40 border border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.2)];
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: 16px;
@@ -159,21 +159,21 @@ body {
 .crm-nav a:hover, .crm-nav a.active { background: var(--color-brand-subtle); color: var(--text); }
 .nav-badge { align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; color: var(--text); display: inline-flex; font-size: 12px; justify-content: center; min-width: 22px; padding: 2px 7px; }
 .global-search { flex: 1; max-width: 620px; }
-.global-search input { @apply glass-input w-full min-h-[36px] px-3 py-2 text-sm text-white placeholder-gray-400 outline-none transition-all duration-200; }
+.global-search input { @apply backdrop-blur-sm bg-white/5 border border-white/10 focus:border-brand focus:bg-white/10 rounded-lg w-full min-h-[36px] px-3 py-2 text-sm text-white placeholder-gray-400 outline-none transition-all duration-200; }
 .topbar-actions { align-items: center; display: flex; gap: 8px; }
 .global-pause { background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.5); border-radius: var(--radius); color: #fde8e8; cursor: pointer; min-height: 34px; padding: 7px 10px; transition: all 0.2s ease; }
 .global-pause:hover { background: rgba(239, 68, 68, 0.2); }
-.notification-button { @apply glass flex items-center justify-center rounded-full h-8 w-8 cursor-pointer transition-all hover:bg-white/10; }
-.founder-chip { @apply glass flex items-center px-3 py-1.5 rounded-lg text-sm text-gray-300; }
+.notification-button { @apply backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center rounded-full h-8 w-8 cursor-pointer transition-all hover:bg-white/10; }
+.founder-chip { @apply backdrop-blur-md bg-white/5 border border-white/10 flex items-center px-3 py-1.5 rounded-lg text-sm text-gray-300; }
 .page-header { align-items: flex-start; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 18px; margin-bottom: 18px; padding-bottom: 16px; }
 .page-header h1 { font-size: 24px; line-height: 1.15; margin: 0; font-weight: 600; }
 .page-header p { color: var(--muted); margin: 6px 0 0; }
 .metric-grid { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
-.metric-card { @apply glass-card p-4 transition-transform duration-300 hover:scale-[1.02]; }
+.metric-card { @apply backdrop-blur-md bg-white/5 border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] p-4 transition-transform duration-300 hover:scale-[1.02]; }
 .metric-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
 .metric-value { font-family: ui-monospace, monospace; font-size: 28px; font-weight: 700; margin-top: 8px; }
 .metric-delta { color: var(--status-success); font-size: 12px; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; }
-.panel { @apply glass-card mb-4 overflow-hidden; }
+.panel { @apply backdrop-blur-md bg-white/5 border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] mb-4 overflow-hidden; }
 .panel-header { align-items: center; border-bottom: 1px solid var(--border); display: flex; gap: 12px; justify-content: space-between; padding: 16px; }
 .panel-header h2, .panel-header h3 { font-size: 16px; margin: 0; font-weight: 600; }
 .panel-body { padding: 16px; }
@@ -193,14 +193,14 @@ body {
 .ui-button { @apply flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 active:scale-[0.98]; border: 1px solid transparent; }
 .ui-button-primary { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(130, 81, 238, 0.3); }
 .ui-button-primary:hover { background: var(--color-brand-hover); box-shadow: 0 6px 20px rgba(130, 81, 238, 0.4); }
-.ui-button-secondary, .ui-button-ghost { @apply glass hover:bg-white/10; color: var(--text); }
+.ui-button-secondary, .ui-button-ghost { @apply backdrop-blur-md bg-white/5 border border-white/10 hover:bg-white/10; color: var(--text); }
 .ui-button-danger { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.3); color: #fde8e8; }
 .ui-button-danger:hover { background: rgba(239, 68, 68, 0.25); }
 .form { display: grid; gap: 16px; }
 .form-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form label { color: var(--muted); display: grid; font-size: 13px; font-weight: 500; gap: 8px; }
-.form input, .form select, .form textarea { @apply glass-input w-full min-h-[40px] px-3 py-2 text-sm text-white placeholder-gray-500 outline-none transition-all duration-200; }
-.empty-state { color: var(--muted); padding: 40px 24px; text-align: center; @apply glass-card; }
+.form input, .form select, .form textarea { @apply backdrop-blur-sm bg-white/5 border border-white/10 focus:border-brand focus:bg-white/10 rounded-lg w-full min-h-[40px] px-3 py-2 text-sm text-white placeholder-gray-500 outline-none transition-all duration-200; }
+.empty-state { color: var(--muted); padding: 40px 24px; text-align: center; @apply backdrop-blur-md bg-white/5 border border-white/10 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.12)]; }
 
 @media (max-width: 960px) {
   .crm-shell { grid-template-columns: 1fr; }
