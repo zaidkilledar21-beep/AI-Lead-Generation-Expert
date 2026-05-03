@@ -394,45 +394,31 @@ type CandidateProcessingResult = {
   quotaExhausted: boolean;
 };
 
-async function processCandidatePlace(
-  placeId: string,
+type CrawlResult = {
+  crawlStatus: "pending" | "skipped" | "success" | "failed";
+  crawlSummary: string | null;
+  crawlFailures: number;
+};
+
+function resolveCrawlStatus(
+  enrichment: { status: "success" | "failed" | "skipped"; summary: string | null }
+): CrawlResult {
+  if (enrichment.status === "success") {
+    return { crawlStatus: "success", crawlSummary: enrichment.summary, crawlFailures: 0 };
+  }
+  if (enrichment.status === "failed") {
+    return { crawlStatus: "failed", crawlSummary: enrichment.summary, crawlFailures: 1 };
+  }
+  return { crawlStatus: "skipped", crawlSummary: enrichment.summary, crawlFailures: 0 };
+}
+
+function buildCandidateFromDetails(
+  details: PlacesDetails,
   campaign: CampaignRow,
-  runId: string,
-  searchQueryId: string | null,
-  queryText: string,
-  stats: { duplicates: number; rejected: number; manualReview: number; crawlFailures: number; candidatesChecked: number; detailsCalls: number; },
-  errors: string[]
-): Promise<CandidateProcessingResult> {
-  const supabase = createSupabaseServiceClient();
-
-  if (!(await reserveQuota(campaign, "candidates_checked", campaign.max_candidates_per_day))) {
-    return { quotaExhausted: true };
-  }
-  stats.candidatesChecked += 1;
-
-  if (await candidateExists(placeId)) {
-    stats.duplicates += 1;
-    return { quotaExhausted: false };
-  }
-
-  if (!(await reserveQuota(campaign, "places_details_calls", campaign.max_details_calls_per_day))) {
-    return { quotaExhausted: true };
-  }
-  stats.detailsCalls += 1;
-
-  let details: PlacesDetails;
-  try {
-    details = await placeDetails(placeId);
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : `Details failed for ${placeId}`);
-    return { quotaExhausted: false };
-  }
-
+  queryText: string
+): RawLeadInput | null {
   const businessName = details.displayName?.text?.trim();
-  if (!businessName || !details.formattedAddress) {
-    stats.rejected += 1;
-    return { quotaExhausted: false };
-  }
+  if (!businessName || !details.formattedAddress) return null;
 
   const candidate: RawLeadInput = {
     business_name: businessName,
@@ -455,31 +441,21 @@ async function processCandidatePlace(
     }
   };
   candidate.dedupe_key = buildLeadDedupeKey(candidate);
+  return candidate;
+}
 
-  const validation = await validateCandidate(candidate, campaign);
-  if (validation.status === "rejected") {
-    stats.rejected += 1;
-  } else if (validation.status === "manual_review") {
-    stats.manualReview += 1;
-  }
-
-  let crawlStatus: "pending" | "skipped" | "success" | "failed" = candidate.website ? "pending" : "skipped";
-  let crawlSummary: string | null = null;
-
-  if (validation.status === "details_fetched" && campaign.crawl_website && candidate.website) {
-    const enrichment = await enrichCandidateFromWebsite(candidate);
-    if (enrichment.status === "success") {
-      crawlStatus = "success";
-    } else if (enrichment.status === "failed") {
-      crawlStatus = "failed";
-      stats.crawlFailures += 1;
-    } else {
-      crawlStatus = "skipped";
-    }
-    crawlSummary = enrichment.summary;
-  }
-
-  const { data: insertedCandidate, error: candidateError } = await supabase
+async function insertCandidateRecord(
+  candidate: RawLeadInput,
+  details: PlacesDetails,
+  campaign: CampaignRow,
+  runId: string,
+  searchQueryId: string | null,
+  validation: CandidateValidation,
+  crawlStatus: CrawlResult["crawlStatus"],
+  crawlSummary: string | null
+): Promise<{ id: string } | null> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
     .from("lead_candidates")
     .insert({
       campaign_id: campaign.id,
@@ -509,14 +485,72 @@ async function processCandidatePlace(
     .select("id")
     .single();
 
-  if (candidateError) {
-    errors.push(candidateError.message);
+  if (error) return null;
+  return data;
+}
+
+async function processCandidatePlace(
+  placeId: string,
+  campaign: CampaignRow,
+  runId: string,
+  searchQueryId: string | null,
+  queryText: string,
+  stats: { duplicates: number; rejected: number; manualReview: number; crawlFailures: number; candidatesChecked: number; detailsCalls: number; },
+  errors: string[]
+): Promise<CandidateProcessingResult> {
+  if (!(await reserveQuota(campaign, "candidates_checked", campaign.max_candidates_per_day))) {
+    return { quotaExhausted: true };
+  }
+  stats.candidatesChecked += 1;
+
+  if (await candidateExists(placeId)) {
+    stats.duplicates += 1;
+    return { quotaExhausted: false };
+  }
+
+  if (!(await reserveQuota(campaign, "places_details_calls", campaign.max_details_calls_per_day))) {
+    return { quotaExhausted: true };
+  }
+  stats.detailsCalls += 1;
+
+  let details: PlacesDetails;
+  try {
+    details = await placeDetails(placeId);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : `Details failed for ${placeId}`);
+    return { quotaExhausted: false };
+  }
+
+  const candidate = buildCandidateFromDetails(details, campaign, queryText);
+  if (!candidate) {
+    stats.rejected += 1;
+    return { quotaExhausted: false };
+  }
+
+  const validation = await validateCandidate(candidate, campaign);
+  if (validation.status === "rejected") stats.rejected += 1;
+  if (validation.status === "manual_review") stats.manualReview += 1;
+
+  let crawlStatus: CrawlResult["crawlStatus"] = candidate.website ? "pending" : "skipped";
+  let crawlSummary: string | null = null;
+
+  if (validation.status === "details_fetched" && campaign.crawl_website && candidate.website) {
+    const enrichment = await enrichCandidateFromWebsite(candidate);
+    const resolved = resolveCrawlStatus(enrichment);
+    crawlStatus = resolved.crawlStatus;
+    crawlSummary = resolved.crawlSummary;
+    stats.crawlFailures += resolved.crawlFailures;
+  }
+
+  const inserted = await insertCandidateRecord(candidate, details, campaign, runId, searchQueryId, validation, crawlStatus, crawlSummary);
+  if (!inserted) {
+    errors.push(`Failed to insert candidate for place ${placeId}`);
     return { quotaExhausted: false };
   }
 
   if (validation.status === "details_fetched") {
     return {
-      candidate: { ...candidate, candidate_id: insertedCandidate.id, campaign_id: campaign.id, discovery_run_id: runId },
+      candidate: { ...candidate, candidate_id: inserted.id, campaign_id: campaign.id, discovery_run_id: runId },
       quotaExhausted: false
     };
   }
@@ -524,36 +558,22 @@ async function processCandidatePlace(
   return { quotaExhausted: false };
 }
 
-export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promise<RunLeadDiscoveryOutput> {
+type DiscoveryStats = {
+  created: number; duplicates: number; manualReview: number; rejected: number;
+  crawlFailures: number; candidatesChecked: number; textSearchCalls: number;
+  detailsCalls: number; enriched: number; scored: number;
+};
+
+async function executeSearchQueries(
+  queries: string[],
+  campaign: CampaignRow,
+  runId: string,
+  stats: DiscoveryStats,
+  errors: string[]
+): Promise<{ promotable: RawLeadInput[]; quotaExhausted: boolean }> {
   const supabase = createSupabaseServiceClient();
-  const campaign = await getCampaign(input.campaign_id);
-
-  if (!campaign) {
-    return { run_id: null, status: "paused", created: 0, duplicates: 0, manual_review: 0, errors: ["No active campaign found"] };
-  }
-
-  if (!(await reserveQuota(campaign, "run_count", campaign.max_discovery_runs_per_day))) {
-    await logWorkflowEvent({ campaign_id: campaign.id, event_type: "quota_enforced", status: "blocked", payload: { counter: "run_count" } });
-    return { run_id: null, status: "quota_exhausted", created: 0, duplicates: 0, manual_review: 0, errors: ["Daily discovery run cap reached"] };
-  }
-
-  const { data: run, error: runError } = await supabase
-    .from("discovery_runs")
-    .insert({ campaign_id: campaign.id, trigger_type: input.dry_run ? "manual" : "schedule", source: campaign.lead_source })
-    .select("id")
-    .single();
-
-  if (runError) throw new Error(runError.message);
-
-  const runId = run.id as string;
-  const errors: string[] = [];
-  const stats = { created: 0, duplicates: 0, manualReview: 0, rejected: 0, crawlFailures: 0, candidatesChecked: 0, textSearchCalls: 0, detailsCalls: 0, enriched: 0, scored: 0 };
-  let quotaExhausted = false;
-
-  await logWorkflowEvent({ campaign_id: campaign.id, discovery_run_id: runId, event_type: "discovery_run", status: "started" });
-
   const promotable: RawLeadInput[] = [];
-  const queries = buildQueries(campaign);
+  let quotaExhausted = false;
 
   for (const queryText of queries) {
     if (!(await reserveQuota(campaign, "places_text_search_calls", 50))) {
@@ -579,45 +599,71 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       continue;
     }
 
-    for (const place of searchResult.places ?? []) {
-      if (promotable.length >= campaign.max_leads_per_run) break;
+    const placeResult = await processSearchResultPlaces(
+      searchResult.places ?? [],
+      campaign,
+      runId,
+      searchQuery?.id ?? null,
+      queryText,
+      stats,
+      errors
+    );
 
-      const result = await processCandidatePlace(
-        place.id,
-        campaign,
-        runId,
-        searchQuery?.id ?? null,
-        queryText,
-        stats,
-        errors
-      );
-
-      if (result.quotaExhausted) {
-        quotaExhausted = true;
-        break;
-      }
-
-      if (result.candidate) {
-        promotable.push(result.candidate);
-      }
+    promotable.push(...placeResult.candidates);
+    if (placeResult.quotaExhausted) {
+      quotaExhausted = true;
+      break;
     }
 
-    if (quotaExhausted || promotable.length >= campaign.max_leads_per_run) break;
+    if (promotable.length >= campaign.max_leads_per_run) break;
   }
 
-  const promotionResults = await promoteAndProcessLeads(promotable, campaign, runId, !!input.dry_run);
-  stats.created = promotionResults.created;
-  stats.duplicates += promotionResults.duplicates;
-  stats.enriched = promotionResults.enriched;
-  stats.scored = promotionResults.scored;
-  errors.push(...promotionResults.errors);
+  return { promotable, quotaExhausted };
+}
 
-  let status: "completed" | "failed" | "quota_exhausted" = "completed";
-  if (quotaExhausted) {
-    status = "quota_exhausted";
-  } else if (errors.length > 0) {
-    status = "failed";
+async function processSearchResultPlaces(
+  places: Array<{ id: string }>,
+  campaign: CampaignRow,
+  runId: string,
+  searchQueryId: string | null,
+  queryText: string,
+  stats: DiscoveryStats,
+  errors: string[]
+): Promise<{ candidates: RawLeadInput[]; quotaExhausted: boolean }> {
+  const candidates: RawLeadInput[] = [];
+  for (const place of places) {
+    if (candidates.length >= campaign.max_leads_per_run) break;
+
+    const result = await processCandidatePlace(place.id, campaign, runId, searchQueryId, queryText, stats, errors);
+    if (result.quotaExhausted) return { candidates, quotaExhausted: true };
+    if (result.candidate) candidates.push(result.candidate);
   }
+  return { candidates, quotaExhausted: false };
+}
+
+function resolveRunStatus(
+  quotaExhausted: boolean,
+  errorsCount: number
+): "completed" | "failed" | "quota_exhausted" {
+  if (quotaExhausted) return "quota_exhausted";
+  if (errorsCount > 0) return "failed";
+  return "completed";
+}
+
+function mapEventStatus(status: "completed" | "failed" | "quota_exhausted"): "completed" | "failed" | "blocked" {
+  if (status === "quota_exhausted") return "blocked";
+  if (status === "failed") return "failed";
+  return "completed";
+}
+
+async function finalizeDiscoveryRun(
+  campaign: CampaignRow,
+  runId: string,
+  stats: DiscoveryStats,
+  errors: string[],
+  status: "completed" | "failed" | "quota_exhausted"
+): Promise<void> {
+  const supabase = createSupabaseServiceClient();
 
   await supabase
     .from("discovery_runs")
@@ -637,21 +683,55 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
     })
     .eq("id", runId);
 
-  let eventStatus: "completed" | "failed" | "blocked" = "completed";
-  if (status === "quota_exhausted") {
-    eventStatus = "blocked";
-  } else if (status === "failed") {
-    eventStatus = "failed";
-  }
-
   await logWorkflowEvent({
     campaign_id: campaign.id,
     discovery_run_id: runId,
     event_type: "discovery_run",
-    status: eventStatus,
+    status: mapEventStatus(status),
     error_message: errors[0],
     payload: { created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, enriched: stats.enriched, scored: stats.scored, errors_count: errors.length }
   });
+}
+
+export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promise<RunLeadDiscoveryOutput> {
+  const supabase = createSupabaseServiceClient();
+  const campaign = await getCampaign(input.campaign_id);
+
+  if (!campaign) {
+    return { run_id: null, status: "paused", created: 0, duplicates: 0, manual_review: 0, errors: ["No active campaign found"] };
+  }
+
+  if (!(await reserveQuota(campaign, "run_count", campaign.max_discovery_runs_per_day))) {
+    await logWorkflowEvent({ campaign_id: campaign.id, event_type: "quota_enforced", status: "blocked", payload: { counter: "run_count" } });
+    return { run_id: null, status: "quota_exhausted", created: 0, duplicates: 0, manual_review: 0, errors: ["Daily discovery run cap reached"] };
+  }
+
+  const { data: run, error: runError } = await supabase
+    .from("discovery_runs")
+    .insert({ campaign_id: campaign.id, trigger_type: input.dry_run ? "manual" : "schedule", source: campaign.lead_source })
+    .select("id")
+    .single();
+
+  if (runError) throw new Error(runError.message);
+
+  const runId = run.id as string;
+  const errors: string[] = [];
+  const stats: DiscoveryStats = { created: 0, duplicates: 0, manualReview: 0, rejected: 0, crawlFailures: 0, candidatesChecked: 0, textSearchCalls: 0, detailsCalls: 0, enriched: 0, scored: 0 };
+
+  await logWorkflowEvent({ campaign_id: campaign.id, discovery_run_id: runId, event_type: "discovery_run", status: "started" });
+
+  const queries = buildQueries(campaign);
+  const { promotable, quotaExhausted } = await executeSearchQueries(queries, campaign, runId, stats, errors);
+
+  const promotionResults = await promoteAndProcessLeads(promotable, campaign, runId, !!input.dry_run);
+  stats.created = promotionResults.created;
+  stats.duplicates += promotionResults.duplicates;
+  stats.enriched = promotionResults.enriched;
+  stats.scored = promotionResults.scored;
+  errors.push(...promotionResults.errors);
+
+  const status = resolveRunStatus(quotaExhausted, errors.length);
+  await finalizeDiscoveryRun(campaign, runId, stats, errors, status);
 
   return { run_id: runId, status, created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, errors };
 }
