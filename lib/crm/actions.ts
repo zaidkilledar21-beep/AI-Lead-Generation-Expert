@@ -24,6 +24,7 @@ export async function assignLeadAction(formData: FormData) {
   await logCrmAction({ actor, actionType: "assigned_to_founder", leadId, detail: { assigned_to: assignedTo } });
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/inbox");
 }
 
 export async function approveLeadAction(formData: FormData) {
@@ -98,6 +99,7 @@ export async function closeLeadAction(formData: FormData) {
   });
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/inbox");
 }
 
 export async function overrideBandAction(formData: FormData) {
@@ -213,4 +215,117 @@ export async function deleteFilterAction(formData: FormData) {
   const { error } = await supabase.from("saved_filters").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/pipeline");
+}
+
+export async function toggleGlobalPauseAction() {
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+  
+  // Get current state
+  const { data: current } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", "global_outreach")
+    .maybeSingle();
+    
+  const value = current?.value as { paused?: boolean } | null;
+  const isCurrentlyPaused = value?.paused ?? true;
+  const newPausedState = !isCurrentlyPaused;
+  
+  // Upsert the new state
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert({
+      key: "global_outreach",
+      value: { paused: newPausedState },
+      updated_at: new Date().toISOString()
+    }, { onConflict: "key" });
+    
+  if (error) throw new Error(error.message);
+  
+  await logCrmAction({ 
+    actor, 
+    actionType: newPausedState ? "global_pause_enabled" : "global_pause_disabled", 
+    leadId: "system", 
+    detail: { paused: newPausedState } 
+  });
+  
+  // Revalidate layout to update the initial state
+  revalidatePath("/", "layout");
+}
+
+export async function bulkApproveLeadsAction(leadIds: string[]) {
+  if (!leadIds || leadIds.length === 0) return;
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ status: "approved" })
+    .in("id", leadIds);
+
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "bulk_approved",
+    leadId: "system",
+    detail: { count: leadIds.length, leadIds }
+  });
+
+  revalidatePath("/pipeline");
+}
+
+export async function bulkChangeLeadStatusAction(leadIds: string[], status: "paused" | "unsubscribed" | "archived") {
+  if (!leadIds || leadIds.length === 0) return;
+  if (!["paused", "unsubscribed", "archived"].includes(status)) {
+    throw new Error("Unsupported status");
+  }
+
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ status })
+    .in("id", leadIds);
+
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "bulk_status_change",
+    leadId: "system",
+    detail: { count: leadIds.length, status, leadIds }
+  });
+
+  revalidatePath("/pipeline");
+}
+
+export async function updateLeadFieldAction(leadId: string, field: string, value: string) {
+  if (!leadId || !field) throw new Error("leadId and field are required");
+  
+  const allowedFields = ["email", "phone", "whatsapp", "linkedin_url", "website"];
+  if (!allowedFields.includes(field)) {
+    throw new Error(`Unsupported field update: ${field}`);
+  }
+
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ [field]: value, updated_at: new Date().toISOString() })
+    .eq("id", leadId);
+
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "note_added",
+    leadId,
+    detail: { event: "field_updated", field, value }
+  });
+
+  revalidatePath(`/pipeline/${leadId}`);
 }

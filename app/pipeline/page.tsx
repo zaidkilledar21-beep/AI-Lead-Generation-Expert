@@ -81,15 +81,16 @@ const boardColumns = [
 export default async function PipelinePage({
   searchParams
 }: Readonly<{
-  searchParams?: Record<string, string | undefined>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }>) {
+  const resolvedParams = await searchParams;
   const [metrics, rows, savedFilters] = await Promise.all([getCrmHomeMetrics(), getPipelineRows(500), getSavedFilters("pipeline")]);
-  const filtered = rows.filter((row) => matchesFilter(row, searchParams ?? {}));
+  const filtered = rows.filter((row) => matchesFilter(row, resolvedParams));
   const summary = summarizeRows(filtered);
   const campaigns = [...new Map(rows.filter((row) => row.campaignId).map((row) => [row.campaignId, row])).values()];
   const countries = [...new Set(rows.map((row) => row.country).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const niches = [...new Set(rows.map((row) => row.niche).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const view = searchParams?.view === "board" ? "board" : "list";
+  const view = resolvedParams.view === "board" ? "board" : "list";
 
   return (
     <>
@@ -160,7 +161,7 @@ export default async function PipelinePage({
           </div>
           <div className="flex items-center gap-4">
             <span className="text-xs font-medium px-2 py-1 bg-white/5 border border-white/10 rounded text-muted">{filtered.length} leads found</span>
-            {Object.keys(searchParams ?? {}).length > 0 && (
+            {Object.keys(resolvedParams).length > 0 && (
               <LinkButton href="/pipeline" variant="ghost" className="text-xs h-7 px-2">
                 <XCircle className="w-3 h-3" />
                 Clear
@@ -169,124 +170,139 @@ export default async function PipelinePage({
           </div>
         </div>
         <div className="panel-body">
-          <form className="filter-grid">
-            <div className="field-group col-span-2">
-              <label htmlFor="filter-q" className="field-label">Keyword Search</label>
+          <form className="filter-grid bg-white/[0.02] p-5 rounded-xl border border-white/5 shadow-inner">
+            <div className="field-group lg:col-span-2">
+              <label htmlFor="filter-q" className="field-label flex items-center gap-2">
+                <Search className="w-3 h-3" /> Keyword Search
+              </label>
               <div className="relative group">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-brand transition-colors" />
-                <input id="filter-q" className="field pl-9 bg-black/20 border-white/10 focus:border-brand/50 focus:ring-1 focus:ring-brand/20" name="q" placeholder="Entity, email, or locale..." defaultValue={searchParams?.q ?? ""} />
+                <input 
+                  id="filter-q" 
+                  className="field w-full bg-black/40 border-white/10 focus:border-brand/50 focus:ring-1 focus:ring-brand/20 rounded-lg px-4 py-2.5 text-sm transition-all" 
+                  name="q" 
+                  placeholder="Entity, email, or locale..." 
+                  defaultValue={resolvedParams.q ?? ""} 
+                />
               </div>
             </div>
 
             <div className="field-group">
-              <label htmlFor="filter-band" className="field-label">Lead Band</label>
+              <label htmlFor="filter-band" className="field-label flex items-center gap-2">
+                <Tag className="w-3 h-3" /> Lead Band
+              </label>
               <div className="relative group">
-                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-focus-within:text-brand" />
-                <select id="filter-band" className="field pl-9 appearance-none bg-black/20" name="band" defaultValue={searchParams?.band ?? ""}>
+                <select id="filter-band" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="band" defaultValue={resolvedParams.band ?? ""}>
                   <option value="">All Bands</option>
                   {["A", "B", "C", "D"].map((band) => <option key={band} value={band}>Band {band}</option>)}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
             </div>
 
             <div className="field-group">
-              <label htmlFor="filter-status" className="field-label">Lifecycle Status</label>
+              <label htmlFor="filter-status" className="field-label flex items-center gap-2">
+                <CheckCircle className="w-3 h-3" /> Lifecycle Status
+              </label>
               <div className="relative group">
-                <CheckCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-focus-within:text-brand" />
-                <select id="filter-status" className="field pl-9 appearance-none bg-black/20" name="status" defaultValue={searchParams?.status ?? ""}>
+                <select id="filter-status" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="status" defaultValue={resolvedParams.status ?? ""}>
                   <option value="">All Statuses</option>
                   {[...new Set(rows.map((row) => row.status))].map((status) => (
                     <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}</option>
                   ))}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
             </div>
 
             <div className="field-group">
-              <label htmlFor="filter-campaign" className="field-label">Active Campaign</label>
+              <label htmlFor="filter-campaign" className="field-label flex items-center gap-2">
+                <Briefcase className="w-3 h-3" /> Active Campaign
+              </label>
               <div className="relative group">
-                <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-focus-within:text-brand" />
-                <select id="filter-campaign" className="field pl-9 appearance-none bg-black/20" name="campaign" defaultValue={searchParams?.campaign ?? ""}>
+                <select id="filter-campaign" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="campaign" defaultValue={resolvedParams.campaign ?? ""}>
                   <option value="">All Campaigns</option>
                   {campaigns.map((row) => <option key={row.campaignId} value={row.campaignId ?? ""}>{row.campaignName}</option>)}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
             </div>
 
             <div className="field-group">
-              <label htmlFor="filter-niche" className="field-label">Market Niche</label>
+              <label htmlFor="filter-niche" className="field-label flex items-center gap-2">
+                <Hash className="w-3 h-3" /> Market Niche
+              </label>
               <div className="relative group">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-focus-within:text-brand" />
-                <select id="filter-niche" className="field pl-9 appearance-none bg-black/20" name="niche" defaultValue={searchParams?.niche ?? ""}>
+                <select id="filter-niche" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="niche" defaultValue={resolvedParams.niche ?? ""}>
                   <option value="">All Niches</option>
                   {niches.map((niche) => <option key={niche} value={niche}>{niche}</option>)}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
             </div>
 
             <div className="field-group">
-              <label htmlFor="filter-country" className="field-label">Geography</label>
+              <label htmlFor="filter-country" className="field-label flex items-center gap-2">
+                <Globe className="w-3 h-3" /> Geography
+              </label>
               <div className="relative group">
-                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-focus-within:text-brand" />
-                <select id="filter-country" className="field pl-9 appearance-none bg-black/20" name="country" defaultValue={searchParams?.country ?? ""}>
+                <select id="filter-country" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="country" defaultValue={resolvedParams.country ?? ""}>
                   <option value="">All Countries</option>
                   {countries.map((country) => <option key={country} value={country}>{country}</option>)}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
             </div>
 
             <div className="field-group">
-              <label htmlFor="filter-reply" className="field-label">Reply Intent</label>
+              <label htmlFor="filter-reply" className="field-label flex items-center gap-2">
+                <MessageSquare className="w-3 h-3" /> Reply Intent
+              </label>
               <div className="relative group">
-                <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-focus-within:text-brand" />
-                <select id="filter-reply" className="field pl-9 appearance-none bg-black/20" name="reply" defaultValue={searchParams?.reply ?? ""}>
+                <select id="filter-reply" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="reply" defaultValue={resolvedParams.reply ?? ""}>
                   <option value="">Any Intent</option>
                   <option value="no_reply">No Reply</option>
                   <option value="has_reply">Has Reply</option>
                   <option value="positive">Positive Interest</option>
                   <option value="objection">Objection / Review</option>
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
             </div>
 
             <div className="field-group">
-              <label htmlFor="filter-review" className="field-label">Review State</label>
+              <label htmlFor="filter-review" className="field-label flex items-center gap-2">
+                <User className="w-3 h-3" /> Review State
+              </label>
               <div className="relative group">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-focus-within:text-brand" />
-                <select id="filter-review" className="field pl-9 appearance-none bg-black/20" name="review" defaultValue={searchParams?.review ?? ""}>
+                <select id="filter-review" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="review" defaultValue={resolvedParams.review ?? ""}>
                   <option value="">All States</option>
                   <option value="pending">Pending</option>
                   <option value="reviewed">Reviewed</option>
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
             </div>
 
             <div className="field-group">
-              <label htmlFor="filter-owner" className="field-label">Assigned Owner</label>
+              <label htmlFor="filter-owner" className="field-label flex items-center gap-2">
+                <User className="w-3 h-3" /> Assigned Owner
+              </label>
               <div className="relative group">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-focus-within:text-brand" />
-                <select id="filter-owner" className="field pl-9 appearance-none bg-black/20" name="assigned" defaultValue={searchParams?.assigned ?? ""}>
+                <select id="filter-owner" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="assigned" defaultValue={resolvedParams.assigned ?? ""}>
                   <option value="">All Owners</option>
                   <option value="Uz">Uz</option>
                   <option value="Ziki">Ziki</option>
                   <option value="unassigned">Unassigned</option>
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 pointer-events-none" />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
             </div>
 
             <input type="hidden" name="view" value={view} />
             
-            <div className="flex items-end h-full">
-              <button className="ui-button ui-button-primary w-full h-[40px] shadow-lg shadow-brand/20 font-bold tracking-wide" type="submit">
-                RUN QUERY
+            <div className="field-group flex justify-end h-full mt-2 lg:col-span-full">
+              <button className="ui-button ui-button-primary w-full md:w-auto px-8 h-[44px] shadow-lg shadow-brand/20 font-bold tracking-wide rounded-lg" type="submit">
+                APPLY FILTERS
               </button>
             </div>
           </form>
@@ -316,7 +332,7 @@ export default async function PipelinePage({
               type="hidden"
               name="filters"
               value={JSON.stringify(
-                Object.fromEntries(Object.entries(searchParams ?? {}).filter(([, value]) => typeof value === "string" && value.length > 0))
+                Object.fromEntries(Object.entries(resolvedParams).filter(([, value]) => typeof value === "string" && value.length > 0))
               )}
             />
             <div className="field-group relative flex-1">

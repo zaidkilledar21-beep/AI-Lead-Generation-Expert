@@ -3,11 +3,15 @@ import { PageHeader } from "@/components/crm/page-header";
 import { Badge, bandTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScoreVisualizer } from "@/components/crm/score-visualizer";
+import { StickyBottomBar } from "@/components/crm/sticky-bottom-bar";
+import { InlineEditableField } from "@/components/crm/inline-editable-field";
 import { approveLeadAction, assignLeadAction, changeLeadStatusAction, closeLeadAction, overrideBandAction, updateLeadNotesAction } from "@/lib/crm/actions";
 import { getLeadDetail } from "@/lib/crm/queries";
+import { Mail, MessageSquare, Briefcase, Activity, CheckCircle, Search, ThumbsDown } from "lucide-react";
 
-export default async function LeadDetailPage({ params }: Readonly<{ params: { lead_id: string } }>) {
-  const lead = await getLeadDetail(params.lead_id);
+export default async function LeadDetailPage({ params }: Readonly<{ params: Promise<{ lead_id: string }> }>) {
+  const { lead_id } = await params;
+  const lead = await getLeadDetail(lead_id);
   if (!lead) notFound();
 
   return (
@@ -42,9 +46,9 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: { le
               </div>
             </div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
-              <div><span className="metric-label">Email</span><strong>{lead.email ?? "Unknown"}</strong></div>
-              <div><span className="metric-label">Phone</span><strong>{lead.phone ?? "Unknown"}</strong></div>
-              <div><span className="metric-label">WhatsApp</span><strong>{lead.whatsapp ?? "Unknown"}</strong></div>
+              <InlineEditableField leadId={lead.id} field="email" initialValue={lead.email} label="Email" />
+              <InlineEditableField leadId={lead.id} field="phone" initialValue={lead.phone} label="Phone" />
+              <InlineEditableField leadId={lead.id} field="whatsapp" initialValue={lead.whatsapp} label="WhatsApp" />
               <div><span className="metric-label">Source</span><strong>{lead.source ?? "Unknown"}</strong></div>
               <div><span className="metric-label">Campaign</span><strong>{lead.campaignName ?? "Unassigned"}</strong></div>
               <div><span className="metric-label">Owner</span><strong>{lead.assignedTo ?? "Unassigned"}</strong></div>
@@ -112,16 +116,28 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: { le
 
           <div className="glass-panel group">
             <div className="p-6 border-b border-white/5"><h2 className="text-lg font-medium text-white/90">Timeline</h2></div>
-            <div className="p-6 relative pl-8 border-l border-white/10 ml-6 space-y-6">
+            <div className="p-6 relative pl-10 border-l border-white/10 ml-8 space-y-8">
               {lead.timeline.length === 0 ? <div className="empty-state">No timeline events yet.</div> : null}
-              {lead.timeline.map((item) => (
-                <div className="relative" key={item.id}>
-                  <div className="absolute -left-[41px] top-1.5 w-3 h-3 rounded-full bg-brand/50 border-2 border-[#09090b]"></div>
-                  <strong className="block text-white/90 font-medium mb-1">{item.label}</strong>
-                  <span className="block text-sm text-white/50">{item.detail}</span>
-                  {item.at ? <time className="block text-xs font-mono text-white/30 mt-2">{new Date(item.at).toLocaleString()}</time> : null}
-                </div>
-              ))}
+              {lead.timeline.map((item) => {
+                let Icon = Activity;
+                if (item.label.includes("Approved")) Icon = CheckCircle;
+                if (item.label.includes("Email")) Icon = Mail;
+                if (item.label.includes("Reply")) Icon = MessageSquare;
+                if (item.label.includes("Discovered") || item.label.includes("Enriched")) Icon = Search;
+                if (item.label.includes("Closed won")) Icon = Briefcase;
+                if (item.label.includes("Closed lost") || item.label.includes("Rejected")) Icon = ThumbsDown;
+
+                return (
+                  <div className="relative" key={item.id}>
+                    <div className="absolute -left-[57px] top-0.5 w-8 h-8 flex items-center justify-center rounded-full bg-black border border-white/10 text-white/60 shadow-lg">
+                      <Icon className="w-4 h-4 text-brand" />
+                    </div>
+                    <strong className="block text-white/90 font-medium mb-1">{item.label}</strong>
+                    <span className="block text-sm text-white/50 bg-white/5 p-3 rounded-lg border border-white/5 mt-2">{item.detail}</span>
+                    {item.at ? <time className="block text-xs font-mono text-brand/60 mt-2">{new Date(item.at).toLocaleString()}</time> : null}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -233,6 +249,39 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: { le
           </div>
         </aside>
       </div>
+      <StickyBottomBar>
+        <div className="flex items-center gap-3 w-full">
+          {lead.approvedForOutreach ? (
+            <div className="flex-1 text-center text-sm font-medium text-green-400 bg-green-400/10 py-2 rounded-xl border border-green-400/20">
+              <CheckCircle className="w-4 h-4 inline-block mr-2" />
+              Approved
+            </div>
+          ) : (
+            <form action={approveLeadAction} className="flex-1">
+              <input type="hidden" name="leadId" value={lead.id} />
+              <button type="submit" className="w-full px-4 py-2 bg-brand hover:bg-brand-light text-white font-medium rounded-xl transition-all shadow-lg shadow-brand/20">
+                Approve for Outreach
+              </button>
+            </form>
+          )}
+          <div className="flex gap-2">
+            <form action={changeLeadStatusAction}>
+              <input type="hidden" name="leadId" value={lead.id} />
+              <input type="hidden" name="status" value="paused" />
+              <button type="submit" className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all border border-white/10">
+                Pause
+              </button>
+            </form>
+            <form action={changeLeadStatusAction}>
+              <input type="hidden" name="leadId" value={lead.id} />
+              <input type="hidden" name="status" value="archived" />
+              <button type="submit" className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-xl transition-all border border-red-500/20">
+                Archive
+              </button>
+            </form>
+          </div>
+        </div>
+      </StickyBottomBar>
     </>
   );
 }

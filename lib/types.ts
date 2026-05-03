@@ -67,6 +67,10 @@ export type CrmActionType =
   | "inbox_paused"
   | "inbox_updated"
   | "global_pause_toggled"
+  | "global_pause_enabled"
+  | "global_pause_disabled"
+  | "bulk_approved"
+  | "bulk_status_change"
   | "assigned_to_founder";
 
 export type LeadRecord = {
