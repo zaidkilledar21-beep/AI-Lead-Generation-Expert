@@ -2,7 +2,10 @@ import { CrmShell } from "@/components/crm/crm-shell";
 import { requireAppActor } from "@/lib/app/auth";
 import { getCrmNavSnapshot } from "@/lib/dashboard/queries";
 import { PageTransition } from "@/components/ui/page-transition";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "Outreach CRM",
@@ -18,8 +21,8 @@ export default async function RootLayout({
   ]);
 
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" className={inter.className}>
+      <body className="antialiased">
         <CrmShell
           initialInboxUnhandled={navSnapshot.inboxUnhandled}
           initialReviewPending={navSnapshot.reviewPending}
