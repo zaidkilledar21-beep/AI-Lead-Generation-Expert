@@ -28,7 +28,7 @@ export async function signIn(_previousState: LoginState, formData: FormData): Pr
     return { error: error.message };
   }
 
-  redirect(next as Route<string>);
+  redirect(next);
 }
 
 export async function signOut() {
@@ -39,8 +39,8 @@ export async function signOut() {
   redirect("/login");
 }
 
-function normalizeRedirectPath(value: string) {
+function normalizeRedirectPath(value: string): Route {
   if (!value.startsWith("/") || value.startsWith("//")) return "/";
   if (value.startsWith("/login")) return "/";
-  return value;
+  return value as unknown as Route;
 }
