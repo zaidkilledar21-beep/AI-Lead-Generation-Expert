@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toggleGlobalPauseAction } from "@/app/settings/actions";
-import { createSupabaseBrowserClient } from "@/lib/supabase/server";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type CrmShellProps = {
   children: ReactNode;
