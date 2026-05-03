@@ -85,3 +85,54 @@ export type InboxThread = {
   handledAt: string | null;
   receivedAt: string | null;
 };
+
+export interface AnalyticsCampaign {
+  campaign_id: string;
+  name: string;
+  status: string;
+  primary_niche: string | null;
+  total_leads: number;
+  scored_leads: number;
+  replies: number;
+  positive_replies: number;
+  reply_rate: number;
+}
+
+export interface AnalyticsDaily {
+  metric_date: string;
+  campaign_id: string | null;
+  campaign_name: string | null;
+  leads_discovered: number;
+  emails_sent: number;
+  replies: number;
+  positive_replies: number;
+}
+
+export interface AnalyticsSequenceStep {
+  sequence_id: string;
+  sequence_name: string;
+  step_number: number;
+  sent: number;
+  replies: number;
+  positive_replies: number;
+  reply_rate: number;
+}
+
+export interface IntentData {
+  name: string;
+  value: number;
+}
+
+export interface NicheData {
+  niche: string;
+  replies: number;
+  positive: number;
+}
+
+export interface LeadProfile {
+  user_id: string;
+  display_name: string;
+  timezone?: string | null;
+  telegram_chat_id?: string | null;
+  notification_preferences?: Record<string, unknown> | null;
+}
