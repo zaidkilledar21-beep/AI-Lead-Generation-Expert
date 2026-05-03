@@ -92,7 +92,7 @@ function normalizeDomain(value?: string | null) {
 function cityFromAddress(address?: string | null, fallback?: string | null) {
   if (!address) return fallback ?? null;
   const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
-  return parts.length >= 2 ? parts[parts.length - 2] : fallback ?? null;
+  return parts.at(-2) ?? fallback ?? null;
 }
 
 function countryFromAddress(address?: string | null, fallback?: string | null) {
@@ -206,7 +206,7 @@ async function candidateExists(placeId: string) {
 async function isSuppressed(candidate: RawLeadInput) {
   const supabase = createSupabaseServiceClient();
   const domain = normalizeDomain(candidate.website);
-  const phone = candidate.phone?.replace(/\D/g, "") || null;
+  const phone = candidate.phone?.replaceAll(/\D/g, "") || null;
 
   const checks = [];
   if (candidate.email) checks.push(supabase.from("suppression_list").select("id", { count: "exact", head: true }).eq("normalized_email", candidate.email.toLowerCase()));
@@ -216,6 +216,312 @@ async function isSuppressed(candidate: RawLeadInput) {
 
   const results = await Promise.all(checks);
   return results.some((result) => (result.count ?? 0) > 0);
+}
+
+type CandidateValidation = {
+  status: "details_fetched" | "rejected" | "manual_review";
+  reason: string | null;
+};
+
+async function validateCandidate(candidate: RawLeadInput, campaign: CampaignRow): Promise<CandidateValidation> {
+  if ((candidate.rating ?? campaign.min_google_rating) < campaign.min_google_rating) {
+    return { status: "rejected", reason: "below_rating_threshold" };
+  }
+  if ((candidate.review_count ?? campaign.min_review_count) < campaign.min_review_count) {
+    return { status: "rejected", reason: "below_review_threshold" };
+  }
+  if (hasExcludedTerm(candidate, campaign.exclude_cities)) {
+    return { status: "rejected", reason: "excluded_city" };
+  }
+  const excludedKeywords = campaign.niche_keywords.filter((term) => term.startsWith("-"));
+  if (hasExcludedTerm(candidate, excludedKeywords)) {
+    return { status: "rejected", reason: "excluded_keyword" };
+  }
+  if (await isSuppressed(candidate)) {
+    return { status: "rejected", reason: "suppressed" };
+  }
+  if (!candidate.website) {
+    return { status: "manual_review", reason: "missing_website" };
+  }
+  return { status: "details_fetched", reason: null };
+}
+
+async function enrichCandidateFromWebsite(candidate: RawLeadInput) {
+  if (!candidate.website) return { status: "skipped" as const, summary: null };
+
+  const crawl = await crawlBusinessWebsite(candidate.website);
+  if (crawl.status !== "success") {
+    return { status: "failed" as const, summary: crawl.summary };
+  }
+
+  const signals = extractWebsiteSignals(crawl.pages);
+  candidate.email = signals.emails[0] ?? null;
+  candidate.phone = candidate.phone ?? signals.phones[0] ?? null;
+  candidate.whatsapp = signals.whatsapp_found ? "visible" : null;
+  candidate.source_attribution = {
+    ...candidate.source_attribution,
+    website_crawl_signals: {
+      booking_link_found: signals.booking_link_found,
+      contact_form_found: signals.contact_form_found,
+      whatsapp_found: signals.whatsapp_found,
+      chat_widget_found: signals.chat_widget_found,
+      raw_scrape_summary: signals.raw_scrape_summary
+    }
+  };
+
+  return { status: "success" as const, summary: crawl.summary };
+}
+
+
+async function processLeadEnrichmentAndScoring(
+  leadId: string,
+  campaign: CampaignRow,
+  runId: string
+): Promise<{ enriched: boolean; scored: boolean; error?: string }> {
+  let enriched = false;
+  let scored = false;
+
+  try {
+    const enrichmentResult = await enrichLead(leadId);
+    if (enrichmentResult.status === "failed") {
+      await logWorkflowEvent({
+        campaign_id: campaign.id,
+        discovery_run_id: runId,
+        event_type: "wf_02_enrichment",
+        status: "failed",
+        error_message: "Lead moved to manual review after failed enrichment",
+        payload: { lead_id: leadId, enrichment_confidence: enrichmentResult.enrichment_confidence }
+      });
+    } else {
+      enriched = true;
+      await logWorkflowEvent({
+        campaign_id: campaign.id,
+        discovery_run_id: runId,
+        event_type: "wf_02_enrichment",
+        status: "completed",
+        payload: { lead_id: leadId }
+      });
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? `WF-02 enrichment failed for ${leadId}: ${error.message}` : `WF-02 enrichment failed for ${leadId}`;
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "wf_02_enrichment",
+      status: "failed",
+      error_message: error instanceof Error ? error.message : "Unknown enrichment error",
+      payload: { lead_id: leadId }
+    });
+    return { enriched, scored, error: errorMsg };
+  }
+
+  try {
+    await scoreLead(leadId);
+    scored = true;
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "wf_03_scoring",
+      status: "completed",
+      payload: { lead_id: leadId }
+    });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? `WF-03 scoring failed for ${leadId}: ${error.message}` : `WF-03 scoring failed for ${leadId}`;
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "wf_03_scoring",
+      status: "failed",
+      error_message: error instanceof Error ? error.message : "Unknown scoring error",
+      payload: { lead_id: leadId }
+    });
+    return { enriched, scored, error: errorMsg };
+  }
+
+  return { enriched, scored };
+}
+
+async function promoteAndProcessLeads(
+  promotableLeads: RawLeadInput[],
+  campaign: CampaignRow,
+  runId: string,
+  dryRun: boolean
+) {
+  const supabase = createSupabaseServiceClient();
+  const results = { created: 0, duplicates: 0, enriched: 0, scored: 0, errors: [] as string[] };
+
+  if (dryRun || promotableLeads.length === 0) return results;
+
+  const importResult = await importDiscoveredLeads(
+    {
+      niche: campaign.primary_niche ?? campaign.niche,
+      location: campaign.target_countries[0] ?? campaign.region,
+      max_results: Math.min(campaign.max_leads_per_run, discoveryLimits.maxFinalLeadsPerDay)
+    },
+    promotableLeads
+  );
+
+  results.created = importResult.created;
+  results.duplicates = importResult.duplicates;
+  results.errors.push(...importResult.errors);
+
+  for (const leadId of importResult.created_lead_ids ?? []) {
+    const { enriched, scored, error } = await processLeadEnrichmentAndScoring(leadId, campaign, runId);
+    if (enriched) results.enriched += 1;
+    if (scored) results.scored += 1;
+    if (error) results.errors.push(error);
+  }
+
+  for (const lead of promotableLeads) {
+    if (lead.candidate_id) {
+      await supabase
+        .from("lead_candidates")
+        .update({ candidate_status: "promoted" })
+        .eq("id", lead.candidate_id)
+        .is("final_lead_id", null);
+    }
+  }
+
+  for (let i = 0; i < results.created; i += 1) {
+    await reserveQuota(campaign, "final_leads", campaign.max_leads_per_run);
+  }
+
+  return results;
+}
+
+type CandidateProcessingResult = {
+  candidate?: RawLeadInput;
+  quotaExhausted: boolean;
+};
+
+async function processCandidatePlace(
+  placeId: string,
+  campaign: CampaignRow,
+  runId: string,
+  searchQueryId: string | null,
+  queryText: string,
+  stats: { duplicates: number; rejected: number; manualReview: number; crawlFailures: number; candidatesChecked: number; detailsCalls: number; },
+  errors: string[]
+): Promise<CandidateProcessingResult> {
+  const supabase = createSupabaseServiceClient();
+
+  if (!(await reserveQuota(campaign, "candidates_checked", campaign.max_candidates_per_day))) {
+    return { quotaExhausted: true };
+  }
+  stats.candidatesChecked += 1;
+
+  if (await candidateExists(placeId)) {
+    stats.duplicates += 1;
+    return { quotaExhausted: false };
+  }
+
+  if (!(await reserveQuota(campaign, "places_details_calls", campaign.max_details_calls_per_day))) {
+    return { quotaExhausted: true };
+  }
+  stats.detailsCalls += 1;
+
+  let details: PlacesDetails;
+  try {
+    details = await placeDetails(placeId);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : `Details failed for ${placeId}`);
+    return { quotaExhausted: false };
+  }
+
+  const businessName = details.displayName?.text?.trim();
+  if (!businessName || !details.formattedAddress) {
+    stats.rejected += 1;
+    return { quotaExhausted: false };
+  }
+
+  const candidate: RawLeadInput = {
+    business_name: businessName,
+    website: details.websiteUri ?? null,
+    city: cityFromAddress(details.formattedAddress, campaign.target_cities[0] ?? campaign.region),
+    country: countryFromAddress(details.formattedAddress, campaign.target_countries[0] ?? campaign.region),
+    niche: campaign.primary_niche ?? campaign.niche,
+    source: (campaign.lead_source as "google_places" | "manual_import") || "google_places",
+    google_place_id: details.id,
+    google_maps_url: details.googleMapsUri ?? null,
+    phone: details.nationalPhoneNumber ?? null,
+    rating: details.rating ?? null,
+    review_count: details.userRatingCount ?? null,
+    address: details.formattedAddress,
+    source_attribution: {
+      provider: "google_places",
+      query: queryText,
+      field_mask: getDetailsFieldMask(),
+      retrieved_at: new Date().toISOString()
+    }
+  };
+  candidate.dedupe_key = buildLeadDedupeKey(candidate);
+
+  const validation = await validateCandidate(candidate, campaign);
+  if (validation.status === "rejected") {
+    stats.rejected += 1;
+  } else if (validation.status === "manual_review") {
+    stats.manualReview += 1;
+  }
+
+  let crawlStatus: "pending" | "skipped" | "success" | "failed" = candidate.website ? "pending" : "skipped";
+  let crawlSummary: string | null = null;
+
+  if (validation.status === "details_fetched" && campaign.crawl_website && candidate.website) {
+    const enrichment = await enrichCandidateFromWebsite(candidate);
+    if (enrichment.status === "success") {
+      crawlStatus = "success";
+    } else if (enrichment.status === "failed") {
+      crawlStatus = "failed";
+      stats.crawlFailures += 1;
+    } else {
+      crawlStatus = "skipped";
+    }
+    crawlSummary = enrichment.summary;
+  }
+
+  const { data: insertedCandidate, error: candidateError } = await supabase
+    .from("lead_candidates")
+    .insert({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      search_query_id: searchQueryId,
+      google_place_id: candidate.google_place_id,
+      business_name: candidate.business_name,
+      website: candidate.website,
+      domain: normalizeDomain(candidate.website),
+      country: candidate.country,
+      city: candidate.city,
+      niche: candidate.niche,
+      google_maps_url: candidate.google_maps_url,
+      phone: candidate.phone,
+      rating: candidate.rating,
+      review_count: candidate.review_count,
+      address: candidate.address,
+      dedupe_key: candidate.dedupe_key,
+      source_attribution: candidate.source_attribution,
+      raw_place_payload: details,
+      normalized_payload: candidate,
+      website_crawl_status: crawlStatus,
+      website_crawl_summary: crawlSummary,
+      candidate_status: validation.status,
+      rejection_reason: validation.reason
+    })
+    .select("id")
+    .single();
+
+  if (candidateError) {
+    errors.push(candidateError.message);
+    return { quotaExhausted: false };
+  }
+
+  if (validation.status === "details_fetched") {
+    return {
+      candidate: { ...candidate, candidate_id: insertedCandidate.id, campaign_id: campaign.id, discovery_run_id: runId },
+      quotaExhausted: false
+    };
+  }
+
+  return { quotaExhausted: false };
 }
 
 export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promise<RunLeadDiscoveryOutput> {
@@ -241,16 +547,7 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
 
   const runId = run.id as string;
   const errors: string[] = [];
-  let created = 0;
-  let duplicates = 0;
-  let manualReview = 0;
-  let rejected = 0;
-  let crawlFailures = 0;
-  let candidatesChecked = 0;
-  let textSearchCalls = 0;
-  let detailsCalls = 0;
-  let enriched = 0;
-  let scored = 0;
+  const stats = { created: 0, duplicates: 0, manualReview: 0, rejected: 0, crawlFailures: 0, candidatesChecked: 0, textSearchCalls: 0, detailsCalls: 0, enriched: 0, scored: 0 };
   let quotaExhausted = false;
 
   await logWorkflowEvent({ campaign_id: campaign.id, discovery_run_id: runId, event_type: "discovery_run", status: "started" });
@@ -263,7 +560,7 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       quotaExhausted = true;
       break;
     }
-    textSearchCalls += 1;
+    stats.textSearchCalls += 1;
 
     const { data: searchQuery } = await supabase
       .from("campaign_search_queries")
@@ -285,270 +582,76 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
     for (const place of searchResult.places ?? []) {
       if (promotable.length >= campaign.max_leads_per_run) break;
 
-      if (!(await reserveQuota(campaign, "candidates_checked", campaign.max_candidates_per_day))) {
+      const result = await processCandidatePlace(
+        place.id,
+        campaign,
+        runId,
+        searchQuery?.id ?? null,
+        queryText,
+        stats,
+        errors
+      );
+
+      if (result.quotaExhausted) {
         quotaExhausted = true;
         break;
       }
-      candidatesChecked += 1;
 
-      if (await candidateExists(place.id)) {
-        duplicates += 1;
-        continue;
-      }
-
-      if (!(await reserveQuota(campaign, "places_details_calls", campaign.max_details_calls_per_day))) {
-        quotaExhausted = true;
-        break;
-      }
-      detailsCalls += 1;
-
-      let details: PlacesDetails;
-      try {
-        details = await placeDetails(place.id);
-      } catch (error) {
-        errors.push(error instanceof Error ? error.message : `Details failed for ${place.id}`);
-        continue;
-      }
-
-      const businessName = details.displayName?.text?.trim();
-      if (!businessName || !details.formattedAddress) {
-        rejected += 1;
-        continue;
-      }
-
-      const candidate: RawLeadInput = {
-        business_name: businessName,
-        website: details.websiteUri ?? null,
-        city: cityFromAddress(details.formattedAddress, campaign.target_cities[0] ?? campaign.region),
-        country: countryFromAddress(details.formattedAddress, campaign.target_countries[0] ?? campaign.region),
-        niche: campaign.primary_niche ?? campaign.niche,
-        source: campaign.lead_source || "google_places",
-        google_place_id: details.id,
-        google_maps_url: details.googleMapsUri ?? null,
-        phone: details.nationalPhoneNumber ?? null,
-        rating: details.rating ?? null,
-        review_count: details.userRatingCount ?? null,
-        address: details.formattedAddress,
-        source_attribution: {
-          provider: "google_places",
-          query: queryText,
-          field_mask: getDetailsFieldMask(),
-          retrieved_at: new Date().toISOString()
-        }
-      };
-      candidate.dedupe_key = buildLeadDedupeKey(candidate);
-
-      let candidateStatus: "details_fetched" | "duplicate" | "rejected" | "manual_review" = "details_fetched";
-      let rejectionReason: string | null = null;
-      let crawlStatus: "pending" | "skipped" | "success" | "failed" = candidate.website ? "pending" : "skipped";
-      let crawlSummary: string | null = null;
-
-      if ((candidate.rating ?? campaign.min_google_rating) < campaign.min_google_rating) {
-        candidateStatus = "rejected";
-        rejectionReason = "below_rating_threshold";
-        rejected += 1;
-      } else if ((candidate.review_count ?? campaign.min_review_count) < campaign.min_review_count) {
-        candidateStatus = "rejected";
-        rejectionReason = "below_review_threshold";
-        rejected += 1;
-      } else if (hasExcludedTerm(candidate, campaign.exclude_cities)) {
-        candidateStatus = "rejected";
-        rejectionReason = "excluded_city";
-        rejected += 1;
-      } else if (hasExcludedTerm(candidate, campaign.niche_keywords.filter((term) => term.startsWith("-")))) {
-        candidateStatus = "rejected";
-        rejectionReason = "excluded_keyword";
-        rejected += 1;
-      } else if (await isSuppressed(candidate)) {
-        candidateStatus = "rejected";
-        rejectionReason = "suppressed";
-        rejected += 1;
-      } else if (!candidate.website) {
-        candidateStatus = "manual_review";
-        rejectionReason = "missing_website";
-        manualReview += 1;
-      }
-
-      if (candidateStatus === "details_fetched" && campaign.crawl_website && candidate.website) {
-        const crawl = await crawlBusinessWebsite(candidate.website);
-        crawlStatus = crawl.status === "success" ? "success" : "failed";
-        crawlSummary = crawl.summary;
-        if (crawl.status === "success") {
-          const signals = extractWebsiteSignals(crawl.pages);
-          candidate.email = signals.emails[0] ?? null;
-          candidate.phone = candidate.phone ?? signals.phones[0] ?? null;
-          candidate.whatsapp = signals.whatsapp_found ? "visible" : null;
-          candidate.source_attribution = {
-            ...candidate.source_attribution,
-            website_crawl_signals: {
-              booking_link_found: signals.booking_link_found,
-              contact_form_found: signals.contact_form_found,
-              whatsapp_found: signals.whatsapp_found,
-              chat_widget_found: signals.chat_widget_found,
-              raw_scrape_summary: signals.raw_scrape_summary
-            }
-          };
-        } else {
-          crawlFailures += 1;
-        }
-      }
-
-      const { data: insertedCandidate, error: candidateError } = await supabase
-        .from("lead_candidates")
-        .insert({
-          campaign_id: campaign.id,
-          discovery_run_id: runId,
-          search_query_id: searchQuery?.id ?? null,
-          google_place_id: candidate.google_place_id,
-          business_name: candidate.business_name,
-          website: candidate.website,
-          domain: normalizeDomain(candidate.website),
-          country: candidate.country,
-          city: candidate.city,
-          niche: candidate.niche,
-          google_maps_url: candidate.google_maps_url,
-          phone: candidate.phone,
-          rating: candidate.rating,
-          review_count: candidate.review_count,
-          address: candidate.address,
-          dedupe_key: candidate.dedupe_key,
-          source_attribution: candidate.source_attribution,
-          raw_place_payload: details,
-          normalized_payload: candidate,
-          website_crawl_status: crawlStatus,
-          website_crawl_summary: crawlSummary,
-          candidate_status: candidateStatus,
-          rejection_reason: rejectionReason
-        })
-        .select("id")
-        .single();
-
-      if (candidateError) {
-        errors.push(candidateError.message);
-        continue;
-      }
-
-      if (candidateStatus === "details_fetched") {
-        promotable.push({ ...candidate, candidate_id: insertedCandidate.id, campaign_id: campaign.id, discovery_run_id: runId });
+      if (result.candidate) {
+        promotable.push(result.candidate);
       }
     }
 
     if (quotaExhausted || promotable.length >= campaign.max_leads_per_run) break;
   }
 
-  if (!input.dry_run && promotable.length > 0) {
-    const importResult = await importDiscoveredLeads(
-      {
-        niche: campaign.primary_niche ?? campaign.niche,
-        location: campaign.target_countries[0] ?? campaign.region,
-        max_results: Math.min(campaign.max_leads_per_run, discoveryLimits.maxFinalLeadsPerDay)
-      },
-      promotable
-    );
-    created = importResult.created;
-    duplicates += importResult.duplicates;
-    errors.push(...importResult.errors);
+  const promotionResults = await promoteAndProcessLeads(promotable, campaign, runId, !!input.dry_run);
+  stats.created = promotionResults.created;
+  stats.duplicates += promotionResults.duplicates;
+  stats.enriched = promotionResults.enriched;
+  stats.scored = promotionResults.scored;
+  errors.push(...promotionResults.errors);
 
-    for (const leadId of importResult.created_lead_ids ?? []) {
-      try {
-        const enrichmentResult = await enrichLead(leadId);
-        if (enrichmentResult.status === "failed") {
-          await logWorkflowEvent({
-            campaign_id: campaign.id,
-            discovery_run_id: runId,
-            event_type: "wf_02_enrichment",
-            status: "failed",
-            error_message: "Lead moved to manual review after failed enrichment",
-            payload: { lead_id: leadId, enrichment_confidence: enrichmentResult.enrichment_confidence }
-          });
-          continue;
-        }
-        enriched += 1;
-        await logWorkflowEvent({
-          campaign_id: campaign.id,
-          discovery_run_id: runId,
-          event_type: "wf_02_enrichment",
-          status: "completed",
-          payload: { lead_id: leadId }
-        });
-      } catch (error) {
-        errors.push(error instanceof Error ? `WF-02 enrichment failed for ${leadId}: ${error.message}` : `WF-02 enrichment failed for ${leadId}`);
-        await logWorkflowEvent({
-          campaign_id: campaign.id,
-          discovery_run_id: runId,
-          event_type: "wf_02_enrichment",
-          status: "failed",
-          error_message: error instanceof Error ? error.message : "Unknown enrichment error",
-          payload: { lead_id: leadId }
-        });
-        continue;
-      }
-
-      try {
-        await scoreLead(leadId);
-        scored += 1;
-        await logWorkflowEvent({
-          campaign_id: campaign.id,
-          discovery_run_id: runId,
-          event_type: "wf_03_scoring",
-          status: "completed",
-          payload: { lead_id: leadId }
-        });
-      } catch (error) {
-        errors.push(error instanceof Error ? `WF-03 scoring failed for ${leadId}: ${error.message}` : `WF-03 scoring failed for ${leadId}`);
-        await logWorkflowEvent({
-          campaign_id: campaign.id,
-          discovery_run_id: runId,
-          event_type: "wf_03_scoring",
-          status: "failed",
-          error_message: error instanceof Error ? error.message : "Unknown scoring error",
-          payload: { lead_id: leadId }
-        });
-      }
-    }
-
-    for (const lead of promotable) {
-      if (lead.candidate_id) {
-        await supabase
-          .from("lead_candidates")
-          .update({ candidate_status: "promoted" })
-          .eq("id", lead.candidate_id)
-          .is("final_lead_id", null);
-      }
-    }
-
-    for (let i = 0; i < created; i += 1) {
-      await reserveQuota(campaign, "final_leads", campaign.max_leads_per_run);
-    }
+  let status: "completed" | "failed" | "quota_exhausted" = "completed";
+  if (quotaExhausted) {
+    status = "quota_exhausted";
+  } else if (errors.length > 0) {
+    status = "failed";
   }
 
-  const status = quotaExhausted ? "quota_exhausted" : errors.length ? "failed" : "completed";
   await supabase
     .from("discovery_runs")
     .update({
       status,
-      candidates_checked: candidatesChecked,
-      places_text_search_calls: textSearchCalls,
-      places_details_calls: detailsCalls,
-      total_places_calls: textSearchCalls + detailsCalls,
-      duplicates_skipped: duplicates,
-      candidates_rejected: rejected,
-      candidates_promoted: created,
-      manual_review_candidates: manualReview,
-      crawl_failures: crawlFailures,
+      candidates_checked: stats.candidatesChecked,
+      places_text_search_calls: stats.textSearchCalls,
+      places_details_calls: stats.detailsCalls,
+      total_places_calls: stats.textSearchCalls + stats.detailsCalls,
+      duplicates_skipped: stats.duplicates,
+      candidates_rejected: stats.rejected,
+      candidates_promoted: stats.created,
+      manual_review_candidates: stats.manualReview,
+      crawl_failures: stats.crawlFailures,
       error_message: errors[0] ?? null,
       completed_at: new Date().toISOString()
     })
     .eq("id", runId);
 
+  let eventStatus: "completed" | "failed" | "blocked" = "completed";
+  if (status === "quota_exhausted") {
+    eventStatus = "blocked";
+  } else if (status === "failed") {
+    eventStatus = "failed";
+  }
+
   await logWorkflowEvent({
     campaign_id: campaign.id,
     discovery_run_id: runId,
     event_type: "discovery_run",
-    status: status === "failed" ? "failed" : status === "quota_exhausted" ? "blocked" : "completed",
+    status: eventStatus,
     error_message: errors[0],
-    payload: { created, duplicates, manual_review: manualReview, enriched, scored, errors_count: errors.length }
+    payload: { created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, enriched: stats.enriched, scored: stats.scored, errors_count: errors.length }
   });
 
-  return { run_id: runId, status, created, duplicates, manual_review: manualReview, errors };
+  return { run_id: runId, status, created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, errors };
 }

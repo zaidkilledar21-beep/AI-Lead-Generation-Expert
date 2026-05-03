@@ -28,7 +28,7 @@ export async function signIn(_previousState: LoginState, formData: FormData): Pr
     return { error: error.message };
   }
 
-  redirect(next);
+  redirect(next as unknown as Route);
 }
 
 export async function signOut() {
