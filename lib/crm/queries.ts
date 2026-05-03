@@ -1,4 +1,19 @@
 import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
+import type { AnalyticsCampaign, AnalyticsDaily, AnalyticsSequenceStep, IntentData, NicheData, LeadProfile } from "@/lib/crm/types";
+
+/** Safely coerce an `unknown` DB value to string. Objects would produce `[object Object]` via String(), so we guard against that. */
+function toStr(value: unknown, fallback = ""): string {
+  if (value == null) return fallback;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
+}
+
+/** Like toStr but returns null when the value is nullish. Uses a positive null-check to satisfy the no-negated-condition lint rule. */
+function toStrOrNull(value: unknown): string | null {
+  if (value == null) return null;
+  return toStr(value);
+}
 
 function asArray<T>(value: T[] | null | undefined): T[] {
   return value ?? [];
@@ -191,11 +206,11 @@ export async function getLeadDetail(leadId: string) {
     supabase.from("lead_enrichment").select("*").eq("lead_id", leadId).order("last_enriched_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("score_evidence").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }),
     supabase.from("automation_hypotheses").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("crm_action_log").select("*").eq("lead_id", leadId).order("performed_at", { ascending: false }).limit(20),
-    supabase.from("reply_events").select("*").eq("lead_id", leadId).order("reply_received_at", { ascending: false }).limit(10),
-    supabase.from("email_drafts").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(10),
-    supabase.from("lead_notes").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(10),
-    supabase.from("manual_review_queue").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(10)
+    supabase.from("crm_action_log").select("*").eq("lead_id", leadId).order("performed_at", { ascending: false }).limit(50),
+    supabase.from("reply_events").select("*").eq("lead_id", leadId).order("reply_received_at", { ascending: false }).limit(50),
+    supabase.from("email_drafts").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("lead_notes").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("manual_review_queue").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50)
   ]);
 
   const timeline = [
@@ -356,7 +371,9 @@ export async function getInboxThreads() {
     requiresHumanReview: Boolean(item.requires_human_review),
     providerThreadId: item.provider_thread_id ?? null,
     sentCount: item.sent_count ?? 0,
-    lastSentAt: item.last_sent_at ?? null
+    lastSentAt: item.last_sent_at ?? null,
+    leadAssignedTo: item.lead_assigned_to ?? null,
+    replyAssignedTo: item.reply_assigned_to ?? null
   }));
 }
 
@@ -375,35 +392,156 @@ export async function getSettingsData() {
   ]);
 
   return {
-    inboxes: asArray(inboxes as Array<Record<string, any>>),
-    profiles: asArray(profiles as Array<Record<string, any>>),
-    sequences: asArray(sequences as Array<Record<string, any>>),
-    settings: asArray(settings as Array<Record<string, any>>),
+    inboxes: asArray(inboxes as Array<Record<string, unknown>>),
+    profiles: asArray(profiles as Array<Record<string, unknown>>).map((p): LeadProfile => ({
+      user_id: toStr(p.user_id ?? p.id),
+      display_name: toStr(p.display_name),
+      timezone: toStrOrNull(p.timezone),
+      telegram_chat_id: toStrOrNull(p.telegram_chat_id),
+      notification_preferences: p.notification_preferences == null
+        ? null
+        : (p.notification_preferences as Record<string, unknown>),
+    })),
+    sequences: asArray(sequences as Array<Record<string, unknown>>),
+    settings: asArray(settings as Array<Record<string, unknown>>),
     savedFilters
   };
 }
 
-export async function getAnalyticsData(rangeDays = 30) {
+export async function getAnalyticsData(rangeDays = 30, from?: string, to?: string) {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) {
-    return { metrics: [], campaigns: [], daily: [], sequenceFunnel: [] };
+    return { metrics: [], campaigns: [] as AnalyticsCampaign[], daily: [] as AnalyticsDaily[], sequenceFunnel: [] as AnalyticsSequenceStep[], comparison: null, replyIntentBreakdown: [] as IntentData[], performanceByNiche: [] as NicheData[] };
   }
 
-  const fromDate = new Date();
-  fromDate.setDate(fromDate.getDate() - (rangeDays - 1));
-  const since = fromDate.toISOString().slice(0, 10);
+  const end = to ? new Date(to) : new Date();
+  const start = from ? new Date(from) : new Date();
+  if (!from) {
+    start.setDate(end.getDate() - (rangeDays - 1));
+  }
+  
+  const diff = end.getTime() - start.getTime();
+  const prevEnd = new Date(start.getTime() - 86400000);
+  const prevStart = new Date(prevEnd.getTime() - diff);
 
-  const [homeMetrics, campaigns, daily, sequenceFunnel] = await Promise.all([
+  const since = start.toISOString().slice(0, 10);
+  const until = end.toISOString().slice(0, 10);
+  const prevSince = prevStart.toISOString().slice(0, 10);
+  const prevUntil = prevEnd.toISOString().slice(0, 10);
+
+  const [homeMetrics, campaigns, daily, prevDaily, sequenceFunnel, replies] = await Promise.all([
     getCrmHomeMetrics(),
     supabase.from("campaign_analytics").select("*").order("reply_rate", { ascending: false }),
-    supabase.from("analytics_daily_rollup").select("*").gte("metric_date", since).order("metric_date"),
-    supabase.from("sequence_step_funnel").select("*").order("band").order("step_number")
+    supabase.from("analytics_daily_rollup").select("*").gte("metric_date", since).lte("metric_date", until).order("metric_date"),
+    supabase.from("analytics_daily_rollup").select("*").gte("metric_date", prevSince).lte("metric_date", prevUntil).order("metric_date"),
+    supabase.from("sequence_step_funnel").select("*").order("band").order("step_number"),
+    supabase.from("reply_events").select("intent_classification").gte("reply_received_at", since).lte("reply_received_at", until)
   ]);
+
+  const currentStats = asArray(daily.data as any[]).reduce((acc, curr) => ({
+    emails: acc.emails + Number(curr.emails_sent || 0),
+    replies: acc.replies + Number(curr.replies || 0),
+    positive: acc.positive + Number(curr.positive_replies || 0)
+  }), { emails: 0, replies: 0, positive: 0 });
+
+  const prevStats = asArray(prevDaily.data as any[]).reduce((acc, curr) => ({
+    emails: acc.emails + Number(curr.emails_sent || 0),
+    replies: acc.replies + Number(curr.replies || 0),
+    positive: acc.positive + Number(curr.positive_replies || 0)
+  }), { emails: 0, replies: 0, positive: 0 });
+
+  const calculateChange = (curr: number, prev: number) => {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return ((curr - prev) / prev) * 100;
+  };
+
+  const intentMap = asArray(replies.data as any[]).reduce((acc, curr) => {
+    const key = curr.intent_classification || "unclassified";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const replyIntentBreakdown = Object.entries(intentMap).map(([name, value]) => ({ name, value }));
+
+  const nicheMap = asArray(campaigns.data as any[]).reduce((acc, curr) => {
+    const key = curr.primary_niche || "Unknown";
+    if (!acc[key]) acc[key] = { niche: key, leads: 0, replies: 0, positive: 0 };
+    acc[key].leads += Number(curr.total_leads || 0);
+    acc[key].replies += Number(curr.replies || 0);
+    acc[key].positive += Number(curr.positive_replies || 0);
+    return acc;
+  }, {} as Record<string, any>);
+
+  const performanceByNiche = Object.values(nicheMap).sort((a: any, b: any) => b.leads - a.leads);
 
   return {
     metrics: homeMetrics,
-    campaigns: asArray(campaigns.data as Array<Record<string, any>>),
-    daily: asArray(daily.data as Array<Record<string, any>>),
-    sequenceFunnel: asArray(sequenceFunnel.data as Array<Record<string, any>>)
+    campaigns: asArray(campaigns.data as Array<Record<string, unknown>>).map((row): AnalyticsCampaign => ({
+      campaign_id: toStr(row.campaign_id ?? row.id),
+      name: toStr(row.name),
+      status: toStr(row.status),
+      primary_niche: toStrOrNull(row.primary_niche),
+      total_leads: Number(row.total_leads ?? 0),
+      scored_leads: Number(row.scored_leads ?? 0),
+      replies: Number(row.replies ?? 0),
+      positive_replies: Number(row.positive_replies ?? 0),
+      reply_rate: Number(row.reply_rate ?? 0),
+    })),
+    daily: asArray(daily.data as Array<Record<string, unknown>>).map((row): AnalyticsDaily => ({
+      metric_date: toStr(row.metric_date),
+      campaign_id: toStrOrNull(row.campaign_id),
+      campaign_name: toStrOrNull(row.campaign_name),
+      leads_discovered: Number(row.leads_discovered ?? 0),
+      emails_sent: Number(row.emails_sent ?? 0),
+      replies: Number(row.replies ?? 0),
+      positive_replies: Number(row.positive_replies ?? 0),
+    })),
+    sequenceFunnel: asArray(sequenceFunnel.data as Array<Record<string, unknown>>).map((row): AnalyticsSequenceStep => ({
+      sequence_id: toStr(row.sequence_id ?? row.id),
+      sequence_name: toStr(row.sequence_name ?? row.name),
+      step_number: Number(row.step_number ?? 0),
+      sent: Number(row.sent ?? 0),
+      replies: Number(row.replies ?? 0),
+      positive_replies: Number(row.positive_replies ?? 0),
+      reply_rate: Number(row.reply_rate ?? 0),
+    })),
+    comparison: {
+      emails: { current: currentStats.emails, prev: prevStats.emails, change: calculateChange(currentStats.emails, prevStats.emails) },
+      replies: { current: currentStats.replies, prev: prevStats.replies, change: calculateChange(currentStats.replies, prevStats.replies) },
+      positive: { current: currentStats.positive, prev: prevStats.positive, change: calculateChange(currentStats.positive, prevStats.positive) }
+    },
+    replyIntentBreakdown: replyIntentBreakdown as IntentData[],
+    performanceByNiche: performanceByNiche as NicheData[],
   };
+}
+
+export async function getThreadHistory(leadId: string) {
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) return [];
+
+  const [{ data: actions }, { data: replies }] = await Promise.all([
+    supabase.from("crm_action_log").select("*").eq("lead_id", leadId).order("performed_at", { ascending: true }),
+    supabase.from("reply_events").select("*").eq("lead_id", leadId).order("reply_received_at", { ascending: true })
+  ]);
+
+  const history = [
+    ...asArray(actions as Array<Record<string, any>>).map((item) => ({
+      id: `action-${item.id}`,
+      type: "sent",
+      label: item.action_type,
+      body: item.detail?.body || item.detail?.subject || item.action_type,
+      at: item.performed_at ?? null,
+      sender: item.performed_by
+    })),
+    ...asArray(replies as Array<Record<string, any>>).map((item) => ({
+      id: `reply-${item.id}`,
+      type: "received",
+      label: item.intent_classification ?? "reply",
+      body: item.reply_body ?? item.summary ?? "Reply received",
+      at: item.reply_received_at ?? null,
+      sender: item.from_email
+    }))
+  ].sort((a, b) => new Date(a.at ?? 0).getTime() - new Date(b.at ?? 0).getTime());
+
+  return history;
 }

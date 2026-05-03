@@ -1,14 +1,14 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
-import { motion } from "framer-motion";
-import { LayoutDashboard, Megaphone, Inbox, CheckSquare, BarChart3, Settings, Search, Bell, PauseCircle, Fingerprint } from "lucide-react";
-
-// Removed static navItems, will construct dynamically inside the component
+import { useOptimistic, useTransition } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { LayoutDashboard, Megaphone, Inbox, CheckSquare, BarChart3, Settings, Search, Bell, PauseCircle, Fingerprint, PlayCircle } from "lucide-react";
+import { useCrmRealtime } from "@/lib/hooks/use-crm-realtime";
+import { toggleGlobalPauseAction } from "@/lib/crm/actions";
 
 interface CrmShellProps {
-  children: ReactNode;
+  children: React.ReactNode;
   initialInboxUnhandled?: number;
   initialReviewPending?: number;
   initialGlobalPaused?: boolean;
@@ -23,6 +23,26 @@ export function CrmShell({
   founderName = "Founder"
 }: Readonly<CrmShellProps>) {
   const pathname = usePathname();
+  const [isPending, startTransition] = useTransition();
+  const [optimisticPaused, setOptimisticPaused] = useOptimistic(
+    initialGlobalPaused,
+    (state, newPausedState: boolean) => newPausedState
+  );
+
+  // Sync badges using the realtime hook
+  useCrmRealtime();
+
+  const handleTogglePause = () => {
+    startTransition(async () => {
+      setOptimisticPaused(!optimisticPaused);
+      try {
+        await toggleGlobalPauseAction();
+      } catch (error) {
+        // Optimistic state will revert when the layout data is refetched
+        console.error("Failed to toggle pause", error);
+      }
+    });
+  };
 
   if (pathname === "/login") {
     return <>{children}</>;
@@ -38,7 +58,22 @@ export function CrmShell({
   ];
 
   return (
-    <div className="crm-shell">
+    <div className="crm-shell relative">
+      <AnimatePresence>
+        {optimisticPaused && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-none fixed inset-0 z-50 border-4 border-red-500/50 mix-blend-screen"
+            style={{ 
+              boxShadow: "inset 0 0 50px rgba(239, 68, 68, 0.2)",
+              animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite"
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar Glass Panel */}
       <motion.aside 
         className="crm-sidebar" 
@@ -102,7 +137,7 @@ export function CrmShell({
       <div className="crm-main flex flex-col h-screen overflow-hidden">
         {/* Topbar Glass Panel */}
         <motion.header 
-          className="crm-topbar"
+          className="crm-topbar relative z-40"
           initial={{ y: -60, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
@@ -120,14 +155,16 @@ export function CrmShell({
 
           <div className="topbar-actions ml-auto">
             <motion.button 
-              className="global-pause flex items-center gap-2 font-medium" 
+              className={`global-pause flex items-center gap-2 font-medium transition-colors ${optimisticPaused ? 'text-red-400 bg-red-400/10 border border-red-400/20 px-3 py-1.5 rounded-md' : 'text-zinc-300 hover:text-white'}`}
               type="button" 
-              aria-pressed="false"
+              onClick={handleTogglePause}
+              disabled={isPending}
+              aria-pressed={optimisticPaused}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <PauseCircle className="w-4 h-4" />
-              <span>Global Pause</span>
+              {optimisticPaused ? <PlayCircle className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
+              <span>{optimisticPaused ? "Resume Outreach" : "Global Pause"}</span>
             </motion.button>
             <motion.button 
               className="notification-button relative" 
@@ -150,10 +187,11 @@ export function CrmShell({
         </motion.header>
 
         {/* Scrollable Main Content */}
-        <main className="crm-content flex-1 overflow-y-auto w-full">
+        <main className="crm-content flex-1 overflow-y-auto w-full relative z-10">
           {children}
         </main>
       </div>
     </div>
   );
 }
+

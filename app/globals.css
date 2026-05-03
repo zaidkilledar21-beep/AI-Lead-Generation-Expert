@@ -212,13 +212,13 @@ body {
 .page-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px; /* Increased gap for better spacing */
 }
 
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
   align-items: flex-end;
 }
 

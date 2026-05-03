@@ -24,6 +24,10 @@ export type CrmActionType =
   | "campaign_archived"
   | "inbox_updated"
   | "global_pause_toggled"
+  | "global_pause_enabled"
+  | "global_pause_disabled"
+  | "bulk_approved"
+  | "bulk_status_change"
   | "assigned_to_founder";
 
 type LogCrmActionInput = {
