@@ -16,48 +16,49 @@ export const discoveryLimits = {
 
 export type CampaignConfigInput = {
   name: string;
-  niche: string;
-  region: string;
-  keywords: string[];
-  excluded_keywords: string[];
-  target_business_types: string[];
-  max_leads_per_day: number;
-  max_candidates_per_day: number;
-  max_details_calls_per_day: number;
-  max_total_places_calls_per_day: number;
-  crawl_website: boolean;
-  schedule: string;
-  timezone: string;
   status: CampaignStatus;
   description?: string | null;
-  primary_niche?: string | null;
-  niche_keywords?: string[];
-  target_countries?: string[];
-  target_cities?: string[];
-  exclude_cities?: string[];
-  language_of_business?: string[];
-  max_leads_per_run?: number;
-  lead_source?: "google_maps" | "google_search" | "directory" | "manual_import" | string;
-  min_google_rating?: number;
-  min_review_count?: number;
-  exclude_chains?: boolean;
-  exclude_already_discovered?: boolean;
-  run_frequency?: RunFrequency;
+  primary_niche: string;
+  niche_keywords: string[];
+  target_countries: string[];
+  target_cities: string[];
+  exclude_cities: string[];
+  language_of_business: string[];
+  max_leads_per_run: number;
+  lead_source: "google_maps" | "google_search" | "directory" | "manual_import" | string;
+  min_google_rating: number;
+  min_review_count: number;
+  exclude_chains: boolean;
+  exclude_already_discovered: boolean;
+  run_frequency: RunFrequency;
   next_run_at?: string | null;
-  min_score_band_a?: number;
-  min_score_band_b?: number;
-  min_automation_opportunity?: number;
-  min_ability_to_pay?: number;
-  min_reachability?: number;
-  confidence_required?: Confidence;
+  min_score_band_a: number;
+  min_score_band_b: number;
+  min_automation_opportunity: number;
+  min_ability_to_pay: number;
+  min_reachability: number;
+  confidence_required: Confidence;
   sequence_band_a?: string | null;
   sequence_band_b?: string | null;
   sequence_band_c?: string | null;
-  auto_approve_band_b?: boolean;
-  require_approval_band_a?: boolean;
+  auto_approve_band_b: boolean;
+  require_approval_band_a: boolean;
   assigned_inbox_id?: string | null;
-  tags?: string[];
+  tags: string[];
   notes?: string | null;
+  timezone: string;
+  crawl_website: boolean;
+  max_candidates_per_day: number;
+  max_details_calls_per_day: number;
+  max_total_places_calls_per_day: number;
+  max_discovery_runs_per_day?: number;
+  niche?: string;
+  region?: string;
+  keywords?: string[];
+  excluded_keywords?: string[];
+  target_business_types?: string[];
+  max_leads_per_day?: number;
+  schedule?: string;
 };
 
 export type GooglePlacesLeadInput = {
@@ -128,10 +129,10 @@ export function assertDiscoverInput(input: DiscoverLeadsInput) {
 
 export function assertCampaignConfigInput(input: CampaignConfigInput) {
   if (!input.name.trim()) throw new Error("campaign name is required");
-  if (!input.niche.trim()) throw new Error("niche is required");
-  if (!input.region.trim()) throw new Error("region is required");
-  if (input.max_leads_per_day < 1 || input.max_leads_per_day > discoveryLimits.maxFinalLeadsPerDay) {
-    throw new Error(`max leads per day must be 1-${discoveryLimits.maxFinalLeadsPerDay}`);
+  if (!input.primary_niche.trim()) throw new Error("primary niche is required");
+  if (input.target_countries.length === 0) throw new Error("at least one target country is required");
+  if (input.max_leads_per_run < 1 || input.max_leads_per_run > 1000) {
+    throw new Error("max leads per run must be 1-1000");
   }
   if (input.max_candidates_per_day < 1 || input.max_candidates_per_day > discoveryLimits.maxCandidatesCheckedPerDay) {
     throw new Error(`max candidates per day must be 1-${discoveryLimits.maxCandidatesCheckedPerDay}`);
@@ -143,34 +144,28 @@ export function assertCampaignConfigInput(input: CampaignConfigInput) {
     throw new Error(`max total Places calls per day must be 1-${discoveryLimits.maxTotalPlacesCallsPerDay}`);
   }
   if (!["draft", "active", "paused", "completed", "archived"].includes(input.status)) throw new Error("invalid campaign status");
-  if (input.max_leads_per_run !== undefined && (input.max_leads_per_run < 1 || input.max_leads_per_run > 1000)) {
-    throw new Error("max leads per run must be 1-1000");
-  }
-  if (input.min_google_rating !== undefined && (input.min_google_rating < 0 || input.min_google_rating > 5)) {
+  if (input.min_google_rating < 0 || input.min_google_rating > 5) {
     throw new Error("min google rating must be between 0 and 5");
   }
-  if (input.min_review_count !== undefined && input.min_review_count < 0) {
+  if (input.min_review_count < 0) {
     throw new Error("min review count must be zero or greater");
   }
-  if (input.run_frequency !== undefined && !["manual", "daily", "every_3_days", "weekly"].includes(input.run_frequency)) {
+  if (!["manual", "daily", "every_3_days", "weekly"].includes(input.run_frequency)) {
     throw new Error("invalid run frequency");
   }
-  if (input.confidence_required !== undefined && !["low", "medium", "high"].includes(input.confidence_required)) {
+  if (!["low", "medium", "high"].includes(input.confidence_required)) {
     throw new Error("invalid confidence requirement");
   }
-  if (input.min_score_band_a !== undefined && (input.min_score_band_a < 0 || input.min_score_band_a > 100)) {
+  if (input.min_score_band_a < 0 || input.min_score_band_a > 100) {
     throw new Error("min score for Band A must be between 0 and 100");
   }
-  if (input.min_score_band_b !== undefined && (input.min_score_band_b < 0 || input.min_score_band_b > 100)) {
+  if (input.min_score_band_b < 0 || input.min_score_band_b > 100) {
     throw new Error("min score for Band B must be between 0 and 100");
   }
-  if (
-    input.min_score_band_a !== undefined &&
-    input.min_score_band_b !== undefined &&
-    input.min_score_band_b > input.min_score_band_a
-  ) {
+  if (input.min_score_band_b > input.min_score_band_a) {
     throw new Error("min score for Band B cannot exceed Band A");
   }
+  if (!input.lead_source.trim()) throw new Error("lead source is required");
 }
 
 export function assertScoringOutput(output: ScoringOutput) {

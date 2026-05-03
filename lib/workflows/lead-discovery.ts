@@ -11,16 +11,23 @@ type CampaignRow = {
   name: string;
   niche: string;
   region: string;
-  keywords: string[];
-  excluded_keywords: string[];
+  primary_niche: string | null;
+  niche_keywords: string[];
+  target_countries: string[];
+  target_cities: string[];
+  exclude_cities: string[];
   target_business_types: string[];
   max_leads_per_day: number;
+  max_leads_per_run: number;
   max_candidates_per_day: number;
   max_details_calls_per_day: number;
   max_total_places_calls_per_day: number;
   max_discovery_runs_per_day: number;
+  lead_source: string;
+  min_google_rating: number;
+  min_review_count: number;
   crawl_website: boolean;
-  status: "active" | "paused" | "archived";
+  status: "active" | "paused" | "archived" | "draft" | "completed";
 };
 
 type PlacesSearchResult = {
@@ -96,15 +103,19 @@ function countryFromAddress(address?: string | null, fallback?: string | null) {
 
 function buildQueries(campaign: CampaignRow) {
   const baseTerms = [
-    campaign.niche,
+    campaign.primary_niche ?? campaign.niche,
     ...campaign.target_business_types.slice(0, 2),
-    ...campaign.keywords.slice(0, 2)
+    ...campaign.niche_keywords.slice(0, 3)
   ]
     .map((term) => term.trim())
     .filter(Boolean);
 
-  const uniqueTerms = [...new Set(baseTerms.length ? baseTerms : [campaign.niche])];
-  return uniqueTerms.slice(0, 3).map((term) => `${term} in ${campaign.region}`);
+  const uniqueTerms = [...new Set(baseTerms.length ? baseTerms : [campaign.primary_niche ?? campaign.niche])];
+  const geoTargets = campaign.target_cities.length > 0
+    ? campaign.target_cities.flatMap((city) => campaign.target_countries.map((country) => `${city}, ${country}`))
+    : campaign.target_countries;
+
+  return geoTargets.slice(0, 6).flatMap((geo) => uniqueTerms.slice(0, 3).map((term) => `${term} in ${geo}`));
 }
 
 function hasExcludedTerm(candidate: RawLeadInput, excluded: string[]) {
@@ -222,7 +233,7 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
 
   const { data: run, error: runError } = await supabase
     .from("discovery_runs")
-    .insert({ campaign_id: campaign.id, trigger_type: input.dry_run ? "manual" : "schedule" })
+    .insert({ campaign_id: campaign.id, trigger_type: input.dry_run ? "manual" : "schedule", source: campaign.lead_source })
     .select("id")
     .single();
 
@@ -272,7 +283,7 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
     }
 
     for (const place of searchResult.places ?? []) {
-      if (promotable.length >= campaign.max_leads_per_day) break;
+      if (promotable.length >= campaign.max_leads_per_run) break;
 
       if (!(await reserveQuota(campaign, "candidates_checked", campaign.max_candidates_per_day))) {
         quotaExhausted = true;
@@ -308,10 +319,10 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       const candidate: RawLeadInput = {
         business_name: businessName,
         website: details.websiteUri ?? null,
-        city: cityFromAddress(details.formattedAddress, campaign.region),
-        country: countryFromAddress(details.formattedAddress, campaign.region),
-        niche: campaign.niche,
-        source: "google_places",
+        city: cityFromAddress(details.formattedAddress, campaign.target_cities[0] ?? campaign.region),
+        country: countryFromAddress(details.formattedAddress, campaign.target_countries[0] ?? campaign.region),
+        niche: campaign.primary_niche ?? campaign.niche,
+        source: campaign.lead_source || "google_places",
         google_place_id: details.id,
         google_maps_url: details.googleMapsUri ?? null,
         phone: details.nationalPhoneNumber ?? null,
@@ -332,7 +343,19 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       let crawlStatus: "pending" | "skipped" | "success" | "failed" = candidate.website ? "pending" : "skipped";
       let crawlSummary: string | null = null;
 
-      if (hasExcludedTerm(candidate, campaign.excluded_keywords)) {
+      if ((candidate.rating ?? campaign.min_google_rating) < campaign.min_google_rating) {
+        candidateStatus = "rejected";
+        rejectionReason = "below_rating_threshold";
+        rejected += 1;
+      } else if ((candidate.review_count ?? campaign.min_review_count) < campaign.min_review_count) {
+        candidateStatus = "rejected";
+        rejectionReason = "below_review_threshold";
+        rejected += 1;
+      } else if (hasExcludedTerm(candidate, campaign.exclude_cities)) {
+        candidateStatus = "rejected";
+        rejectionReason = "excluded_city";
+        rejected += 1;
+      } else if (hasExcludedTerm(candidate, campaign.niche_keywords.filter((term) => term.startsWith("-")))) {
         candidateStatus = "rejected";
         rejectionReason = "excluded_keyword";
         rejected += 1;
@@ -410,12 +433,16 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       }
     }
 
-    if (quotaExhausted || promotable.length >= campaign.max_leads_per_day) break;
+    if (quotaExhausted || promotable.length >= campaign.max_leads_per_run) break;
   }
 
   if (!input.dry_run && promotable.length > 0) {
     const importResult = await importDiscoveredLeads(
-      { niche: campaign.niche, location: campaign.region, max_results: Math.min(campaign.max_leads_per_day, discoveryLimits.maxFinalLeadsPerDay) },
+      {
+        niche: campaign.primary_niche ?? campaign.niche,
+        location: campaign.target_countries[0] ?? campaign.region,
+        max_results: Math.min(campaign.max_leads_per_run, discoveryLimits.maxFinalLeadsPerDay)
+      },
       promotable
     );
     created = importResult.created;
@@ -491,7 +518,7 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
     }
 
     for (let i = 0; i < created; i += 1) {
-      await reserveQuota(campaign, "final_leads", campaign.max_leads_per_day);
+      await reserveQuota(campaign, "final_leads", campaign.max_leads_per_run);
     }
   }
 
