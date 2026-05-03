@@ -5,6 +5,32 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export type CampaignStatusChange = "active" | "paused" | "archived";
 
+function deriveLegacyCampaignColumns(input: CampaignConfigInput) {
+  const region = input.target_cities.length > 0
+    ? `${input.target_cities.join(", ")} / ${input.target_countries.join(", ")}`
+    : input.target_countries.join(", ");
+
+  return {
+    niche: input.primary_niche,
+    region,
+    keywords: input.niche_keywords,
+    excluded_keywords: input.exclude_cities,
+    target_business_types: [input.primary_niche],
+    max_leads_per_day: Math.min(input.max_leads_per_run, 30),
+    schedule: input.run_frequency === "every_3_days" ? "daily" : input.run_frequency,
+    crawl_website: input.crawl_website
+  };
+}
+
+function toCampaignRow(input: CampaignConfigInput, actorUserId?: string) {
+  const legacy = deriveLegacyCampaignColumns(input);
+  return {
+    ...legacy,
+    ...input,
+    ...(actorUserId ? { created_by: actorUserId } : {})
+  };
+}
+
 export async function createCrmCampaign(input: CampaignConfigInput) {
   assertCampaignConfigInput(input);
 
@@ -12,10 +38,7 @@ export async function createCrmCampaign(input: CampaignConfigInput) {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase
     .from("campaigns")
-    .insert({
-      ...input,
-      created_by: actor.userId
-    })
+    .insert(toCampaignRow(input, actor.userId))
     .select("id")
     .single();
 
@@ -36,7 +59,7 @@ export async function updateCrmCampaign(campaignId: string, input: CampaignConfi
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
-  const { error } = await supabase.from("campaigns").update(input).eq("id", campaignId);
+  const { error } = await supabase.from("campaigns").update(toCampaignRow(input)).eq("id", campaignId);
 
   if (error) throw new Error(error.message);
 

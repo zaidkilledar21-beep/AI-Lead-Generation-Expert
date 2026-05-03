@@ -212,6 +212,10 @@ textarea:focus-visible {
   padding: 7px 10px;
 }
 
+.global-pause.is-paused {
+  background: rgba(239, 68, 68, 0.22);
+}
+
 .notification-button {
   cursor: pointer;
   height: 34px;
@@ -487,6 +491,90 @@ textarea:focus-visible {
   gap: 6px;
 }
 
+.filter-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.toggle-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.checkbox-row {
+  align-items: center;
+  color: var(--text);
+  display: flex;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.form-span-2,
+.detail-span-2 {
+  grid-column: span 2;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.top-gap {
+  margin-top: 10px;
+}
+
+.stack-list {
+  display: grid;
+  gap: 10px;
+}
+
+.record-card,
+.saved-filter-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.saved-filter-row,
+.save-filter-form,
+.inline-form,
+.stacked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.save-filter-form {
+  margin-top: 12px;
+}
+
+.compact-input {
+  max-width: 120px;
+}
+
+.selected-row {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.board-wide {
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+}
+
+.metric-grid-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric-value-small {
+  font-size: 18px;
+}
+
 .empty-state {
   color: var(--muted);
   padding: 24px;
@@ -539,7 +627,16 @@ textarea:focus-visible {
 
   .metric-grid,
   .board,
-  .form-grid {
+  .form-grid,
+  .filter-grid,
+  .toggle-grid,
+  .detail-grid,
+  .metric-grid-compact {
     grid-template-columns: 1fr;
+  }
+
+  .form-span-2,
+  .detail-span-2 {
+    grid-column: span 1;
   }
 }

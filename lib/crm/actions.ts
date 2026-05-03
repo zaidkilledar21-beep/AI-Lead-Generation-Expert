@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAppActor } from "@/lib/app/auth";
 import { logCrmAction } from "@/lib/app/audit";
+import { approveCrmLeadForOutreach, updateCrmLeadStatus } from "@/lib/app/leads";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 function cleanText(value: FormDataEntryValue | null) {
@@ -21,6 +22,26 @@ export async function assignLeadAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   await logCrmAction({ actor, actionType: "assigned_to_founder", leadId, detail: { assigned_to: assignedTo } });
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${leadId}`);
+}
+
+export async function approveLeadAction(formData: FormData) {
+  const leadId = cleanText(formData.get("leadId"));
+  if (!leadId) throw new Error("leadId is required");
+  await approveCrmLeadForOutreach(leadId);
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${leadId}`);
+}
+
+export async function changeLeadStatusAction(formData: FormData) {
+  const leadId = cleanText(formData.get("leadId"));
+  const status = cleanText(formData.get("status"));
+  if (!leadId) throw new Error("leadId is required");
+  if (!status || !["paused", "unsubscribed", "archived"].includes(status)) {
+    throw new Error("Unsupported status");
+  }
+  await updateCrmLeadStatus(leadId, status as "paused" | "unsubscribed" | "archived");
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
 }
@@ -161,4 +182,35 @@ export async function completeReviewAction(formData: FormData) {
   });
   revalidatePath("/review");
   if (leadId) revalidatePath(`/pipeline/${leadId}`);
+}
+
+export async function saveFilterAction(formData: FormData) {
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+  const name = cleanText(formData.get("name"));
+  const viewKey = cleanText(formData.get("viewKey")) ?? "pipeline";
+  const filtersRaw = cleanText(formData.get("filters"));
+  if (!name || !filtersRaw) throw new Error("Filter name and filters are required");
+
+  const filters = JSON.parse(filtersRaw);
+  const { error } = await supabase.from("saved_filters").insert({
+    name,
+    view_key: viewKey,
+    filters,
+    created_by: actor.displayName,
+    created_by_user_id: actor.userId,
+    is_shared: true
+  });
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/pipeline");
+}
+
+export async function deleteFilterAction(formData: FormData) {
+  const id = cleanText(formData.get("id"));
+  if (!id) throw new Error("Saved filter id is required");
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase.from("saved_filters").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/pipeline");
 }
