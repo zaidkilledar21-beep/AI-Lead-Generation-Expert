@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { createSupabaseDashboardClient } from "@/lib/supabase/dashboard";
 
 export type LoginState = {
@@ -27,7 +28,7 @@ export async function signIn(_previousState: LoginState, formData: FormData): Pr
     return { error: error.message };
   }
 
-  redirect(next);
+  redirect(next as Route<string>);
 }
 
 export async function signOut() {
