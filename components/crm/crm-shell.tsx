@@ -1,160 +1,158 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { toggleGlobalPauseAction } from "@/app/settings/actions";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
+import { motion } from "framer-motion";
+import { LayoutDashboard, Megaphone, Inbox, CheckSquare, BarChart3, Settings, Search, Bell, PauseCircle, Fingerprint } from "lucide-react";
 
-type CrmShellProps = {
+// Removed static navItems, will construct dynamically inside the component
+
+interface CrmShellProps {
   children: ReactNode;
-  initialInboxUnhandled: number;
-  initialReviewPending: number;
-  initialGlobalPaused: boolean;
-  founderName: string;
-};
+  initialInboxUnhandled?: number;
+  initialReviewPending?: number;
+  initialGlobalPaused?: boolean;
+  founderName?: string;
+}
 
-const navItems = [
-  { href: "/pipeline", label: "Pipeline" },
-  { href: "/campaigns", label: "Campaigns" },
-  { href: "/inbox", label: "Inbox", badgeKey: "inbox" as const },
-  { href: "/review", label: "Review Queue", badgeKey: "review" as const },
-  { href: "/analytics", label: "Analytics" },
-  { href: "/settings", label: "Settings" }
-];
-
-export function CrmShell({
-  children,
-  initialInboxUnhandled,
-  initialReviewPending,
-  initialGlobalPaused,
-  founderName
-}: CrmShellProps) {
+export function CrmShell({ 
+  children, 
+  initialInboxUnhandled = 0,
+  initialReviewPending = 0,
+  initialGlobalPaused = false,
+  founderName = "Founder"
+}: Readonly<CrmShellProps>) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [inboxUnhandled, setInboxUnhandled] = useState(initialInboxUnhandled);
-  const [reviewPending, setReviewPending] = useState(initialReviewPending);
-  const [globalPaused, setGlobalPaused] = useState(initialGlobalPaused);
-
-  const searchTarget = useMemo(() => {
-    if (pathname.startsWith("/inbox")) return "/inbox";
-    if (pathname.startsWith("/campaigns")) return "/campaigns";
-    return "/pipeline";
-  }, [pathname]);
-
-  useEffect(() => {
-    setInboxUnhandled(initialInboxUnhandled);
-    setReviewPending(initialReviewPending);
-    setGlobalPaused(initialGlobalPaused);
-  }, [initialGlobalPaused, initialInboxUnhandled, initialReviewPending]);
-
-  useEffect(() => {
-    if (pathname === "/login") return;
-
-    const supabase = createSupabaseBrowserClient();
-    const refresh = () => router.refresh();
-    const channel = supabase
-      .channel("crm-shell")
-      .on("postgres_changes", { event: "*", schema: "public", table: "reply_events" }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "manual_review_queue" }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, refresh)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [pathname, router]);
-
-  useEffect(() => {
-    if (pathname === "/login") return;
-
-    let pendingPrefix: "g" | null = null;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.target as HTMLElement | null)?.closest("input, textarea, select")) return;
-      const key = event.key.toLowerCase();
-
-      if ((event.metaKey || event.ctrlKey) && key === "k") {
-        event.preventDefault();
-        const input = document.getElementById("global-search");
-        input?.focus();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && key === "p") {
-        event.preventDefault();
-        setGlobalPaused((value) => !value);
-        return;
-      }
-
-      if (key === "g") {
-        pendingPrefix = "g";
-        window.setTimeout(() => {
-          pendingPrefix = null;
-        }, 800);
-        return;
-      }
-
-      if (pendingPrefix === "g") {
-        pendingPrefix = null;
-        if (key === "p") router.push("/pipeline");
-        if (key === "c") router.push("/campaigns");
-        if (key === "i") router.push("/inbox");
-        if (key === "r") router.push("/review");
-        if (key === "a") router.push("/analytics");
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [pathname, router]);
 
   if (pathname === "/login") {
     return <>{children}</>;
   }
 
+  const navItems = [
+    { href: "/pipeline", label: "Pipeline", icon: LayoutDashboard, badge: null },
+    { href: "/campaigns", label: "Campaigns", icon: Megaphone, badge: null },
+    { href: "/inbox", label: "Inbox", icon: Inbox, badge: initialInboxUnhandled > 0 ? String(initialInboxUnhandled) : null },
+    { href: "/review", label: "Review Queue", icon: CheckSquare, badge: initialReviewPending > 0 ? String(initialReviewPending) : null },
+    { href: "/analytics", label: "Analytics", icon: BarChart3, badge: null },
+    { href: "/settings", label: "Settings", icon: Settings, badge: null }
+  ];
+
   return (
     <div className="crm-shell">
-      <aside className="crm-sidebar" aria-label="CRM navigation">
+      {/* Sidebar Glass Panel */}
+      <motion.aside 
+        className="crm-sidebar" 
+        aria-label="CRM navigation"
+        initial={{ x: -250, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      >
         <a className="crm-brand" href="/pipeline" aria-label="AI Automation CRM home">
-          <span className="crm-brand-mark">AA</span>
+          <motion.span 
+            className="crm-brand-mark"
+            whileHover={{ rotate: 180, scale: 1.1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 10 }}
+          >
+            <Fingerprint className="w-5 h-5" />
+          </motion.span>
           <span>
             <strong>Outreach CRM</strong>
             <small>AI Automation</small>
           </span>
         </a>
-        <nav className="crm-nav" aria-label="Primary">
-          {navItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const badge = item.badgeKey === "inbox" ? inboxUnhandled : item.badgeKey === "review" ? reviewPending : null;
 
+        <nav className="crm-nav mt-4" aria-label="Primary">
+          {navItems.map((item, idx) => {
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
-              <a className={active ? "active" : ""} href={item.href} key={item.href} aria-current={active ? "page" : undefined}>
-                <span>{item.label}</span>
-                {typeof badge === "number" ? <span className="nav-badge">{badge}</span> : null}
-              </a>
+              <motion.a 
+                className={active ? "active relative" : "relative"} 
+                href={item.href} 
+                key={item.href} 
+                aria-current={active ? "page" : undefined}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.05 + 0.1, duration: 0.3 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {active && (
+                  <motion.div 
+                    layoutId="active-nav-bg"
+                    className="absolute inset-0 bg-[var(--color-brand-subtle)] rounded-lg z-0"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="flex items-center gap-3 z-10 relative">
+                  <item.icon className={`w-4 h-4 ${active ? 'text-white' : 'text-zinc-400'}`} />
+                  <span className="font-medium">{item.label}</span>
+                </span>
+                {item.badge ? (
+                  <span className="nav-badge z-10 relative" aria-label={`${item.label} count`}>
+                    {item.badge}
+                  </span>
+                ) : null}
+              </motion.a>
             );
           })}
         </nav>
-      </aside>
-      <div className="crm-main">
-        <header className="crm-topbar">
-          <form className="global-search" role="search" action={searchTarget}>
+      </motion.aside>
+
+      <div className="crm-main flex flex-col h-screen overflow-hidden">
+        {/* Topbar Glass Panel */}
+        <motion.header 
+          className="crm-topbar"
+          initial={{ y: -60, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
+        >
+          <form className="global-search relative flex-1 max-w-xl group" role="search">
             <label className="sr-only" htmlFor="global-search">Search CRM</label>
-            <input id="global-search" name="q" placeholder="Search business, email, niche, city" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[var(--accent)] transition-colors" />
+            <input 
+              id="global-search" 
+              name="q" 
+              className="pl-10 bg-white/5 border border-white/10 rounded-xl focus:bg-white/10 focus:border-[var(--accent)] transition-all h-10 w-full text-sm placeholder-zinc-500 shadow-inner"
+              placeholder="Search business, email, niche, city..." 
+            />
           </form>
-          <div className="topbar-actions">
-            <form action={toggleGlobalPauseAction}>
-              <input type="hidden" name="paused" value={String(!globalPaused)} />
-              <button className={`global-pause ${globalPaused ? "is-paused" : ""}`.trim()} type="submit" aria-pressed={globalPaused}>
-                {globalPaused ? "Outreach paused" : "Outreach live"}
-              </button>
-            </form>
-            <button className="notification-button" type="button" aria-label="Notifications">
-              {inboxUnhandled + reviewPending}
-            </button>
-            <div className="founder-chip" aria-label="Logged in founder">{founderName}</div>
+
+          <div className="topbar-actions ml-auto">
+            <motion.button 
+              className="global-pause flex items-center gap-2 font-medium" 
+              type="button" 
+              aria-pressed="false"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <PauseCircle className="w-4 h-4" />
+              <span>Global Pause</span>
+            </motion.button>
+            <motion.button 
+              className="notification-button relative" 
+              type="button" 
+              aria-label="Notifications"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              <Bell className="w-4 h-4 text-zinc-300" />
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-[var(--bg)]" />
+            </motion.button>
+            <motion.div 
+              className="founder-chip font-medium border-white/10 cursor-pointer" 
+              aria-label="Logged in founder"
+              whileHover={{ scale: 1.05, backgroundColor: 'rgba(255,255,255,0.1)' }}
+            >
+              {founderName}
+            </motion.div>
           </div>
-        </header>
-        <main className="crm-content">{children}</main>
+        </motion.header>
+
+        {/* Scrollable Main Content */}
+        <main className="crm-content flex-1 overflow-y-auto w-full">
+          {children}
+        </main>
       </div>
     </div>
   );

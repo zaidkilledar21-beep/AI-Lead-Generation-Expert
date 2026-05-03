@@ -15,15 +15,15 @@ export default async function AccountSettingsPage() {
           <form action={updateFounderProfileAction} className="form">
             <div className="form-grid">
               <label>
-                Display name
+                <span>Display name</span>
                 <input name="displayName" defaultValue={profile?.display_name ?? ""} />
               </label>
               <label>
-                Timezone
+                <span>Timezone</span>
                 <input name="timezone" defaultValue={profile?.timezone ?? "Asia/Karachi"} />
               </label>
               <label className="form-span-2">
-                Telegram chat id
+                <span>Telegram chat id</span>
                 <input name="telegramChatId" defaultValue={profile?.telegram_chat_id ?? ""} />
               </label>
             </div>

@@ -3,6 +3,12 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { getCampaignRows } from "@/lib/crm/queries";
 
+function statusTone(status: string) {
+  if (status === "active") return "success" as const;
+  if (status === "paused") return "warning" as const;
+  return "muted" as const;
+}
+
 export default async function CampaignsPage() {
   const campaigns = await getCampaignRows();
 
@@ -41,7 +47,7 @@ export default async function CampaignsPage() {
                     <a href={`/campaigns/${campaign.id}`}><strong>{campaign.name}</strong></a>
                     <div className="muted">{campaign.description ?? "No description"}</div>
                   </td>
-                  <td><Badge tone={campaign.status === "active" ? "success" : campaign.status === "paused" ? "warning" : "muted"}>{campaign.status}</Badge></td>
+                  <td><Badge tone={statusTone(campaign.status)}>{campaign.status}</Badge></td>
                   <td>{campaign.primaryNiche ?? campaign.niche}</td>
                   <td>{campaign.targetCountries.join(", ") || campaign.region}</td>
                   <td>{campaign.leadSource}</td>

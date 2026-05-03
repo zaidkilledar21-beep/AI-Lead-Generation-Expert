@@ -1,12 +1,13 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { getAnalyticsData } from "@/lib/crm/queries";
+import { DailyRollupChart, SequenceFunnelChart } from "@/components/crm/analytics-charts";
 
 export default async function AnalyticsPage({
   searchParams
-}: {
+}: Readonly<{
   searchParams?: { days?: string };
-}) {
+}>) {
   const days = Math.max(7, Math.min(90, Number(searchParams?.days ?? "30") || 30));
   const analytics = await getAnalyticsData(days);
 
@@ -27,7 +28,7 @@ export default async function AnalyticsPage({
         {analytics.metrics.map((metric) => <MetricCard key={metric.label} label={metric.label} value={metric.value} />)}
       </section>
 
-      <section className="panel">
+      <section className="panel glass-panel">
         <div className="panel-header"><h2>Campaign performance</h2></div>
         <div className="table-wrap">
           <table className="data-table">
@@ -52,9 +53,10 @@ export default async function AnalyticsPage({
       </section>
 
       <div className="two-column analytics-grid">
-        <section className="panel">
+        <section className="panel glass-panel">
           <div className="panel-header"><h2>Daily rollup</h2></div>
-          <div className="table-wrap">
+          <DailyRollupChart data={analytics.daily} />
+          <div className="table-wrap mt-6">
             <table className="data-table">
               <thead><tr><th>Date</th><th>Campaign</th><th>Leads</th><th>Scored</th><th>Emails</th><th>Replies</th><th>Positive</th></tr></thead>
               <tbody>
@@ -73,9 +75,10 @@ export default async function AnalyticsPage({
             </table>
           </div>
         </section>
-        <aside className="panel">
+        <aside className="panel glass-panel">
           <div className="panel-header"><h2>Sequence funnel</h2></div>
-          <div className="table-wrap">
+          <SequenceFunnelChart data={analytics.sequenceFunnel} />
+          <div className="table-wrap mt-6">
             <table className="data-table">
               <thead><tr><th>Sequence</th><th>Step</th><th>Sent</th><th>Replies</th><th>Positive</th><th>Reply rate</th></tr></thead>
               <tbody>

@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
 import { CrmShell } from "@/components/crm/crm-shell";
 import { requireAppActor } from "@/lib/app/auth";
 import { getCrmNavSnapshot } from "@/lib/dashboard/queries";
+import { PageTransition } from "@/components/ui/page-transition";
 import "./globals.css";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Outreach CRM",
   description: "Internal AI automation outreach CRM"
 };
@@ -26,7 +26,7 @@ export default async function RootLayout({
           initialGlobalPaused={navSnapshot.globalPaused}
           founderName={actor?.displayName ?? "Founder"}
         >
-          {children}
+          <PageTransition>{children}</PageTransition>
         </CrmShell>
       </body>
     </html>

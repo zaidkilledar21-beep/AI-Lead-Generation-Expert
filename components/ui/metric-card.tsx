@@ -5,12 +5,12 @@ export function MetricCard({
   value,
   delta,
   children
-}: {
+}: Readonly<{
   label: string;
   value: ReactNode;
   delta?: string;
   children?: ReactNode;
-}) {
+}>) {
   return (
     <div className="metric-card">
       <div className="metric-label">{label}</div>

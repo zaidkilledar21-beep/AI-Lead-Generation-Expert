@@ -8,8 +8,14 @@ export type AppActor = {
   role: "founder" | "admin" | "viewer";
 };
 
+function resolveDisplayName(metadata?: Record<string, unknown>): string | null {
+  if (typeof metadata?.display_name === "string") return metadata.display_name;
+  if (typeof metadata?.name === "string") return metadata.name;
+  return null;
+}
+
 export async function requireAppActor(allowedRoles: AppActor["role"][] = ["founder", "admin"]) {
-  const authClient = createSupabaseDashboardClient();
+  const authClient = await createSupabaseDashboardClient();
   if (!authClient) throw new Error("Dashboard Supabase client is not configured");
 
   const {
@@ -34,12 +40,7 @@ export async function requireAppActor(allowedRoles: AppActor["role"][] = ["found
     throw new Error("Insufficient dashboard permissions");
   }
 
-  const metadataName =
-    typeof user.user_metadata?.display_name === "string"
-      ? user.user_metadata.display_name
-      : typeof user.user_metadata?.name === "string"
-        ? user.user_metadata.name
-        : null;
+  const metadataName = resolveDisplayName(user.user_metadata);
 
   return {
     userId: user.id,

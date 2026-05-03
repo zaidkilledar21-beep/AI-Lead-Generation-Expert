@@ -13,7 +13,7 @@ function validCampaign() {
     exclude_cities: [],
     language_of_business: ["English", "Arabic"],
     max_leads_per_run: 100,
-    lead_source: "google_maps",
+    lead_source: "google_maps" as const,
     min_google_rating: 3.5,
     min_review_count: 5,
     exclude_chains: false,

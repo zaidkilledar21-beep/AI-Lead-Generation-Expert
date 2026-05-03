@@ -71,6 +71,12 @@ export async function updateCrmCampaign(campaignId: string, input: CampaignConfi
   });
 }
 
+function campaignStatusAction(status: CampaignStatusChange) {
+  if (status === "active") return "campaign_resumed" as const;
+  if (status === "paused") return "campaign_paused" as const;
+  return "campaign_archived" as const;
+}
+
 export async function updateCrmCampaignStatus(campaignId: string, status: CampaignStatusChange) {
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
@@ -80,7 +86,7 @@ export async function updateCrmCampaignStatus(campaignId: string, status: Campai
 
   await logCrmAction({
     actor,
-    actionType: status === "active" ? "campaign_resumed" : status === "paused" ? "campaign_paused" : "campaign_archived",
+    actionType: campaignStatusAction(status),
     campaignId,
     detail: { status }
   });
