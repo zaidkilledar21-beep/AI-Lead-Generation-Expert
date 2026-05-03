@@ -18,14 +18,16 @@ export function Button({
 export function LinkButton({
   children,
   href,
+  className = "",
   variant = "primary"
 }: Readonly<{
   children: ReactNode;
   href: string;
+  className?: string;
   variant?: ButtonVariant;
 }>) {
   return (
-    <a className={`ui-button ui-button-${variant}`} href={href}>
+    <a className={`ui-button ui-button-${variant} ${className}`.trim()} href={href}>
       {children}
     </a>
   );
