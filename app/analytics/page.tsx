@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { getAnalyticsData } from "@/lib/crm/queries";
+import { AnalyticsFilters } from "@/components/crm/analytics-filters";
 import { DailyRollupChart, SequenceFunnelChart, ReplyBreakdownDonut, NichePerformanceBar } from "@/components/crm/analytics-charts";
 
 export default async function AnalyticsPage({
@@ -20,50 +21,7 @@ export default async function AnalyticsPage({
       <PageHeader
         title="Analytics"
         description="Campaign performance, delivery throughput, reply performance, and sequence funnel health."
-        actions={
-          <form className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Custom Range</span>
-              <input 
-                type="date" 
-                name="from" 
-                defaultValue={from} 
-                className="field text-xs py-1 px-2 h-8 w-32"
-                onChange={(e) => e.target.form?.submit()}
-              />
-              <span className="text-white/20">to</span>
-              <input 
-                type="date" 
-                name="to" 
-                defaultValue={to} 
-                className="field text-xs py-1 px-2 h-8 w-32"
-                onChange={(e) => e.target.form?.submit()}
-              />
-            </div>
-            <div className="w-[1px] h-4 bg-white/10" />
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Presets</span>
-              <select 
-                className="field text-xs py-1 px-2 h-8" 
-                name="days" 
-                defaultValue={String(days)} 
-                onChange={(e) => {
-                  // Clear custom dates if preset is selected
-                  const form = e.target.form;
-                  if (form) {
-                    const fromInput = form.querySelector('input[name="from"]') as HTMLInputElement;
-                    const toInput = form.querySelector('input[name="to"]') as HTMLInputElement;
-                    if (fromInput) fromInput.value = "";
-                    if (toInput) toInput.value = "";
-                    form.submit();
-                  }
-                }}
-              >
-                {[7, 14, 30, 60, 90].map((value) => <option key={value} value={value}>{value} days</option>)}
-              </select>
-            </div>
-          </form>
-        }
+        actions={<AnalyticsFilters from={from} to={to} days={days} />}
       />
 
       <section className="metric-grid">
