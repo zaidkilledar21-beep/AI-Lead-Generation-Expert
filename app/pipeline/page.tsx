@@ -4,6 +4,7 @@ import { LinkButton } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { deleteFilterAction, saveFilterAction } from "@/lib/crm/actions";
 import { getCrmHomeMetrics, getPipelineRows, getSavedFilters } from "@/lib/crm/queries";
+import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS, formatStatusLabel } from "@/lib/crm/status-contract";
 import { KanbanBoard } from "@/components/crm/kanban-board";
 import { PipelineListView } from "@/components/crm/pipeline-list-view";
 import { 
@@ -48,8 +49,8 @@ function matchesFilter(row: Awaited<ReturnType<typeof getPipelineRows>>[number],
     (!replyFilter ||
       (replyFilter === "has_reply" && row.replyCount > 0) ||
       (replyFilter === "no_reply" && row.replyCount === 0) ||
-      (replyFilter === "positive" && ["interested", "pricing_request", "call_request", "positive_interest"].includes(row.latestReplyIntent ?? "")) ||
-      (replyFilter === "objection" && ["objection", "ambiguous", "manual_review_required"].includes(row.latestReplyIntent ?? ""))) &&
+      (replyFilter === "positive" && (POSITIVE_REPLY_INTENTS as readonly string[]).includes(row.latestReplyIntent ?? "")) ||
+      (replyFilter === "objection" && (OBJECTION_REPLY_INTENTS as readonly string[]).includes(row.latestReplyIntent ?? ""))) &&
     (!reviewFilter ||
       (reviewFilter === "pending" && row.hasPendingReview) ||
       (reviewFilter === "reviewed" && !row.hasPendingReview))
@@ -71,11 +72,16 @@ const boardColumns = [
   { key: "new", label: "New" },
   { key: "enriched", label: "Enriched" },
   { key: "scored", label: "Scored" },
+  { key: "review_pending", label: "Review Pending" },
   { key: "pending_approval", label: "Pending Approval" },
   { key: "queued", label: "Queued" },
+  { key: "drafted", label: "Drafted" },
   { key: "in_sequence", label: "In Sequence" },
-  { key: "replied", label: "Replied" },
-  { key: "closed_won", label: "Closed Won" }
+  { key: "replied_needs_review", label: "Reply Review" },
+  { key: "replied_interested", label: "Interested" },
+  { key: "replied_not_interested", label: "Not Interested" },
+  { key: "closed_won", label: "Closed Won" },
+  { key: "closed_lost", label: "Closed Lost" }
 ];
 
 export default async function PipelinePage({
@@ -207,7 +213,7 @@ export default async function PipelinePage({
                 <select id="filter-status" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="status" defaultValue={resolvedParams.status ?? ""}>
                   <option value="">All Statuses</option>
                   {[...new Set(rows.map((row) => row.status))].map((status) => (
-                    <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}</option>
+                    <option key={status} value={status}>{formatStatusLabel(status)}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />

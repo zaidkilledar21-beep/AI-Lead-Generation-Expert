@@ -3,7 +3,20 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { requireAppActor } from "@/lib/app/auth";
 import { logCrmAction, type CrmActionType } from "@/lib/app/audit";
 
-type LeadStatus = "paused" | "unsubscribed" | "archived";
+export type DashboardLeadStatus =
+  | "queued"
+  | "paused"
+  | "unsubscribed"
+  | "archived"
+  | "review_pending"
+  | "pending_approval"
+  | "blocked"
+  | "replied_interested"
+  | "replied_not_interested"
+  | "replied_needs_review"
+  | "closed_won"
+  | "closed_lost"
+  | "not_interested";
 
 async function createRequiredDashboardClient() {
   const supabase = await createSupabaseDashboardClient();
@@ -35,7 +48,7 @@ export async function approveCrmLeadForOutreach(leadId: string) {
   });
 }
 
-export async function updateCrmLeadStatus(leadId: string, status: LeadStatus) {
+export async function updateCrmLeadStatus(leadId: string, status: DashboardLeadStatus) {
   const actor = await requireAppActor();
   const supabase = await createRequiredDashboardClient();
   const { error } = await supabase.rpc("dashboard_update_lead_status", {
@@ -45,15 +58,17 @@ export async function updateCrmLeadStatus(leadId: string, status: LeadStatus) {
 
   if (error) throw new Error(error.message);
 
-  const actionTypeByStatus: Record<LeadStatus, CrmActionType> = {
+  const actionTypeByStatus: Partial<Record<DashboardLeadStatus, CrmActionType>> = {
     paused: "paused_sequence",
     unsubscribed: "marked_unsubscribed",
-    archived: "archived"
+    archived: "archived",
+    closed_won: "marked_closed_won",
+    closed_lost: "marked_closed_lost"
   };
 
   await logCrmAction({
     actor,
-    actionType: actionTypeByStatus[status],
+    actionType: actionTypeByStatus[status] ?? "inbox_updated",
     leadId,
     detail: { status }
   });

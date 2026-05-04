@@ -25,6 +25,11 @@ function decisionVariant(decision: string) {
   return "secondary" as const;
 }
 
+const reviewDecisions = [
+  { value: "approved", label: "Approve for outreach" },
+  { value: "rejected", label: "Reject / archive" }
+] as const;
+
 export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
   const [selectedId, setSelectedId] = useState<string | null>(items[0]?.id || null);
 
@@ -118,17 +123,17 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                    {["approved", "rejected", "handled"].map((decision) => (
-                      <form action={completeReviewAction} key={decision} className="flex-1">
+                    {reviewDecisions.map((decision) => (
+                      <form action={completeReviewAction} key={decision.value} className="flex-1">
                         <input type="hidden" name="reviewId" value={selected.id} />
                         <input type="hidden" name="leadId" value={selected.leadId} />
-                        <input type="hidden" name="decision" value={decision} />
+                        <input type="hidden" name="decision" value={decision.value} />
                         <Button 
                           type="submit" 
-                          variant={decisionVariant(decision)}
+                          variant={decisionVariant(decision.value)}
                           className="w-full shadow-lg"
                         >
-                          {decision}
+                          {decision.label}
                         </Button>
                       </form>
                     ))}

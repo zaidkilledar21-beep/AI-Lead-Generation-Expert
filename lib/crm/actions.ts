@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAppActor } from "@/lib/app/auth";
 import { logCrmAction } from "@/lib/app/audit";
-import { approveCrmLeadForOutreach, updateCrmLeadStatus } from "@/lib/app/leads";
+import { approveCrmLeadForOutreach, updateCrmLeadStatus, type DashboardLeadStatus } from "@/lib/app/leads";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 function cleanText(value: FormDataEntryValue | null) {
@@ -42,7 +42,7 @@ export async function changeLeadStatusAction(formData: FormData) {
   if (!status || !["paused", "unsubscribed", "archived"].includes(status)) {
     throw new Error("Unsupported status");
   }
-  await updateCrmLeadStatus(leadId, status as "paused" | "unsubscribed" | "archived");
+  await updateCrmLeadStatus(leadId, status as DashboardLeadStatus);
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
 }
@@ -79,27 +79,40 @@ export async function updateLeadNotesAction(formData: FormData) {
 export async function closeLeadAction(formData: FormData) {
   const leadId = cleanText(formData.get("leadId"));
   const outcome = cleanText(formData.get("outcome"));
+  const replyEventId = cleanText(formData.get("replyEventId"));
+  const notes = cleanText(formData.get("notes"));
   if (!leadId) throw new Error("leadId is required");
   if (outcome !== "won" && outcome !== "lost") throw new Error("Unsupported close outcome");
 
   const actor = await requireAppActor();
   const status = outcome === "won" ? "closed_won" : "closed_lost";
+  await updateCrmLeadStatus(leadId, status);
+
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase
     .from("leads")
-    .update({ status, closed_at: new Date().toISOString(), closed_by: actor.displayName })
+    .update({ closed_at: new Date().toISOString(), closed_by: actor.displayName })
     .eq("id", leadId);
   if (error) throw new Error(error.message);
 
-  await logCrmAction({
-    actor,
-    actionType: outcome === "won" ? "marked_closed_won" : "marked_closed_lost",
-    leadId,
-    detail: { status }
-  });
+  if (replyEventId) {
+    const { error: replyError } = await supabase
+      .from("reply_events")
+      .update({
+        handled_at: new Date().toISOString(),
+        handled_by: actor.displayName,
+        handled_by_user_id: actor.userId,
+        handled_notes: notes ?? `Marked ${outcome}`,
+        requires_human_review: false
+      })
+      .eq("id", replyEventId);
+    if (replyError) throw new Error(replyError.message);
+  }
+
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
   revalidatePath("/inbox");
+  revalidatePath("/review");
 }
 
 export async function overrideBandAction(formData: FormData) {
@@ -141,13 +154,30 @@ export async function markReplyHandledAction(formData: FormData) {
       handled_at: new Date().toISOString(),
       handled_by: actor.displayName,
       handled_by_user_id: actor.userId,
-      handled_notes: notes
+      handled_notes: notes,
+      requires_human_review: false
     })
     .eq("id", replyEventId);
   if (error) throw new Error(error.message);
 
+  if (leadId) {
+    const { error: eventError } = await supabase.from("outreach_events").insert({
+      lead_id: leadId,
+      event_type: "manual_takeover",
+      metadata: {
+        source: "crm_inbox",
+        reply_event_id: replyEventId,
+        handled_by: actor.displayName
+      },
+      created_at: new Date().toISOString()
+    });
+    if (eventError) throw new Error(eventError.message);
+  }
+
   await logCrmAction({ actor, actionType: "reply_handled", leadId, replyEventId, detail: { notes } });
   revalidatePath("/inbox");
+  revalidatePath("/review");
+  revalidatePath("/pipeline");
   if (leadId) revalidatePath(`/pipeline/${leadId}`);
 }
 
@@ -157,6 +187,7 @@ export async function completeReviewAction(formData: FormData) {
   const decision = cleanText(formData.get("decision"));
   const notes = cleanText(formData.get("notes"));
   if (!reviewId) throw new Error("reviewId is required");
+  if (!leadId) throw new Error("leadId is required");
   if (decision !== "approved" && decision !== "rejected" && decision !== "handled") {
     throw new Error("Unsupported review decision");
   }
@@ -175,6 +206,12 @@ export async function completeReviewAction(formData: FormData) {
     .eq("id", reviewId);
   if (error) throw new Error(error.message);
 
+  if (decision === "approved") {
+    await approveCrmLeadForOutreach(leadId);
+  } else {
+    await updateCrmLeadStatus(leadId, "archived");
+  }
+
   await logCrmAction({
     actor,
     actionType: "manual_review_completed",
@@ -183,7 +220,106 @@ export async function completeReviewAction(formData: FormData) {
     detail: { decision, notes }
   });
   revalidatePath("/review");
-  if (leadId) revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${leadId}`);
+}
+
+export async function approveEmailDraftAction(formData: FormData) {
+  const draftId = cleanText(formData.get("draftId"));
+  const leadId = cleanText(formData.get("leadId"));
+  if (!draftId) throw new Error("draftId is required");
+  if (!leadId) throw new Error("leadId is required");
+
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+
+  const { error } = await supabase
+    .from("email_drafts")
+    .update({
+      approval_status: "approved",
+      validation_passed: true,
+      approved_at: new Date().toISOString(),
+      approved_by: actor.displayName,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", draftId)
+    .eq("lead_id", leadId);
+
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "email_draft_approved",
+    leadId,
+    detail: { draft_id: draftId }
+  });
+
+  revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/pipeline");
+}
+
+export async function rejectEmailDraftAction(formData: FormData) {
+  const draftId = cleanText(formData.get("draftId"));
+  const leadId = cleanText(formData.get("leadId"));
+  const reason = cleanText(formData.get("reason"));
+  if (!draftId) throw new Error("draftId is required");
+  if (!leadId) throw new Error("leadId is required");
+
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+
+  const { data: draft, error: draftLoadError } = await supabase
+    .from("email_drafts")
+    .select("queue_id")
+    .eq("id", draftId)
+    .eq("lead_id", leadId)
+    .maybeSingle();
+  if (draftLoadError) throw new Error(draftLoadError.message);
+
+  const { error } = await supabase
+    .from("email_drafts")
+    .update({
+      approval_status: "rejected",
+      block_reason: reason ?? "draft_rejected_by_founder",
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", draftId)
+    .eq("lead_id", leadId);
+
+  if (error) throw new Error(error.message);
+
+  if (draft?.queue_id) {
+    const { error: queueError } = await supabase
+      .from("outreach_queue")
+      .update({
+        status: "blocked",
+        pause_reason: "draft_rejected_by_founder",
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", draft.queue_id);
+    if (queueError) throw new Error(queueError.message);
+
+    const { error: blockError } = await supabase.from("send_blocks").insert({
+      queue_id: draft.queue_id,
+      lead_id: leadId,
+      reason: reason ?? "draft_rejected_by_founder",
+      raw_payload: { source: "crm", draft_id: draftId },
+      created_at: new Date().toISOString()
+    });
+    if (blockError) throw new Error(blockError.message);
+  }
+
+  await updateCrmLeadStatus(leadId, "blocked");
+
+  await logCrmAction({
+    actor,
+    actionType: "email_draft_rejected",
+    leadId,
+    detail: { draft_id: draftId, reason }
+  });
+
+  revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/pipeline");
 }
 
 export async function saveFilterAction(formData: FormData) {
@@ -246,34 +382,45 @@ export async function toggleGlobalPauseAction() {
   await logCrmAction({ 
     actor, 
     actionType: newPausedState ? "global_pause_enabled" : "global_pause_disabled", 
-    leadId: "system", 
+    leadId: null,
     detail: { paused: newPausedState } 
   });
   
   // Revalidate layout to update the initial state
   revalidatePath("/", "layout");
+  revalidatePath("/pipeline");
+  revalidatePath("/settings");
 }
 
 export async function bulkApproveLeadsAction(leadIds: string[]) {
   if (!leadIds || leadIds.length === 0) return;
   const actor = await requireAppActor();
-  const supabase = createSupabaseServiceClient();
+  const uniqueLeadIds = [...new Set(leadIds.filter(Boolean))];
 
-  const { error } = await supabase
-    .from("leads")
-    .update({ status: "approved" })
-    .in("id", leadIds);
+  const results = await Promise.allSettled(uniqueLeadIds.map((leadId) => approveCrmLeadForOutreach(leadId)));
 
-  if (error) throw new Error(error.message);
+  const failed = results
+    .map((result, index) => ({ result, leadId: uniqueLeadIds[index] }))
+    .filter((item) => item.result.status === "rejected");
 
   await logCrmAction({
     actor,
     actionType: "bulk_approved",
-    leadId: "system",
-    detail: { count: leadIds.length, leadIds }
+    leadId: null,
+    detail: {
+      count: uniqueLeadIds.length,
+      success_count: uniqueLeadIds.length - failed.length,
+      failed_count: failed.length,
+      failed_lead_ids: failed.map((item) => item.leadId)
+    }
   });
 
+  if (failed.length > 0) {
+    throw new Error(`${failed.length} lead(s) failed approval. Check CRM action log/workflow events.`);
+  }
+
   revalidatePath("/pipeline");
+  revalidatePath("/review");
 }
 
 export async function bulkChangeLeadStatusAction(leadIds: string[], status: "paused" | "unsubscribed" | "archived") {
@@ -283,23 +430,34 @@ export async function bulkChangeLeadStatusAction(leadIds: string[], status: "pau
   }
 
   const actor = await requireAppActor();
-  const supabase = createSupabaseServiceClient();
+  const uniqueLeadIds = [...new Set(leadIds.filter(Boolean))];
 
-  const { error } = await supabase
-    .from("leads")
-    .update({ status })
-    .in("id", leadIds);
+  const results = await Promise.allSettled(uniqueLeadIds.map((leadId) => updateCrmLeadStatus(leadId, status)));
 
-  if (error) throw new Error(error.message);
+  const failed = results
+    .map((result, index) => ({ result, leadId: uniqueLeadIds[index] }))
+    .filter((item) => item.result.status === "rejected");
 
   await logCrmAction({
     actor,
     actionType: "bulk_status_change",
-    leadId: "system",
-    detail: { count: leadIds.length, status, leadIds }
+    leadId: null,
+    detail: {
+      count: uniqueLeadIds.length,
+      status,
+      success_count: uniqueLeadIds.length - failed.length,
+      failed_count: failed.length,
+      failed_lead_ids: failed.map((item) => item.leadId)
+    }
   });
 
+  if (failed.length > 0) {
+    throw new Error(`${failed.length} lead(s) failed status update. Check CRM action log/workflow events.`);
+  }
+
   revalidatePath("/pipeline");
+  revalidatePath("/review");
+  revalidatePath("/inbox");
 }
 
 export async function updateLeadFieldAction(leadId: string, field: string, value: string) {
