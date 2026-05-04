@@ -1,3 +1,5 @@
+import type { LeadLifecycleStatus } from "@/lib/crm/status-contract";
+
 export type CrmMetric = {
   label: string;
   value: number | string;
@@ -10,7 +12,7 @@ export type PipelineRow = {
   niche: string | null;
   city: string | null;
   country: string | null;
-  status: string;
+  status: LeadLifecycleStatus | string;
   score: number | null;
   band: string | null;
   effectiveBand: string | null;

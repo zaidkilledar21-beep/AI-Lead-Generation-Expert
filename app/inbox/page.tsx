@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { getInboxThreads, getLeadDetail, getSettingsData } from "@/lib/crm/queries";
 import { InboxView } from "@/components/crm/inbox-view";
+import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
 
 export default async function InboxPage({
   searchParams
@@ -16,8 +17,8 @@ export default async function InboxPage({
   const filtered = threads.filter((thread) => {
     if (tab === "all") return true;
     if (tab === "unhandled") return thread.isUnhandled;
-    if (tab === "positive") return ["interested", "pricing_request", "call_request", "positive_interest"].includes(thread.intent ?? "");
-    if (tab === "objections") return ["not_interested", "unsubscribe", "opt_out", "objection", "wrong_person"].includes(thread.intent ?? "");
+    if (tab === "positive") return (POSITIVE_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "");
+    if (tab === "objections") return (OBJECTION_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "");
     if (tab === "ooo") return thread.intent === "out_of_office";
     if (tab === "bounced") return ["bounce", "bounce_or_noise"].includes(thread.intent ?? "");
     if (tab === "review") return thread.requiresHumanReview;
