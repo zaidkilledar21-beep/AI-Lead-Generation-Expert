@@ -24,45 +24,8 @@ function relationOne<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
-export async function getCrmHomeMetrics() {
-  const supabase = createOptionalSupabaseServiceClient();
-  if (!supabase) {
-    return [
-      { label: "Pipeline", value: 0 },
-      { label: "Priority Leads", value: 0 },
-      { label: "Unhandled Replies", value: 0 },
-      { label: "Open Reviews", value: 0 }
-    ];
-  }
-
-  const [{ count: pipeline }, { count: priority }, { count: replies }, { count: reviews }] = await Promise.all([
-    supabase.from("leads").select("*", { count: "exact", head: true }),
-    supabase.from("lead_scores").select("*", { count: "exact", head: true }).in("band", ["A", "B"]),
-    supabase.from("reply_events").select("*", { count: "exact", head: true }).is("handled_at", null),
-    supabase.from("manual_review_queue").select("*", { count: "exact", head: true }).eq("review_status", "pending")
-  ]);
-
-  return [
-    { label: "Pipeline", value: pipeline ?? 0 },
-    { label: "Priority Leads", value: priority ?? 0 },
-    { label: "Unhandled Replies", value: replies ?? 0 },
-    { label: "Open Reviews", value: reviews ?? 0 }
-  ];
-}
-
-export async function getPipelineRows(limit = 250) {
-  const supabase = createOptionalSupabaseServiceClient();
-  if (!supabase) return [];
-
-  const { data, error } = await supabase
-    .from("pipeline_view")
-    .select("*")
-    .order("last_activity_at", { ascending: false })
-    .limit(limit);
-
-  if (error || !data) return [];
-
-  return (data as Array<Record<string, any>>).map((row) => ({
+function mapPipelineRow(row: Record<string, any>) {
+  return {
     id: row.id,
     businessName: row.business_name,
     niche: row.niche,
@@ -97,7 +60,58 @@ export async function getPipelineRows(limit = 250) {
     hasUnhandledReply: Boolean(row.has_unhandled_reply),
     hasPendingReview: Boolean(row.has_pending_review),
     pendingReviewSince: row.pending_review_since ?? null
-  }));
+  };
+}
+
+export async function getCrmHomeMetrics() {
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) {
+    return [
+      { label: "Pipeline", value: 0 },
+      { label: "Priority Leads", value: 0 },
+      { label: "Unhandled Replies", value: 0 },
+      { label: "Open Reviews", value: 0 }
+    ];
+  }
+
+  const [{ count: pipeline }, { count: priority }, { count: replies }, { count: reviews }] = await Promise.all([
+    supabase.from("leads").select("*", { count: "exact", head: true }),
+    supabase.from("lead_scores").select("*", { count: "exact", head: true }).in("band", ["A", "B"]),
+    supabase.from("reply_events").select("*", { count: "exact", head: true }).eq("requires_human_review", true),
+    supabase.from("manual_review_queue").select("*", { count: "exact", head: true }).eq("review_status", "pending")
+  ]);
+
+  return [
+    { label: "Pipeline", value: pipeline ?? 0 },
+    { label: "Priority Leads", value: priority ?? 0 },
+    { label: "Unhandled Replies", value: replies ?? 0 },
+    { label: "Open Reviews", value: reviews ?? 0 }
+  ];
+}
+
+export async function getPipelineRows(limit = 250) {
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("pipeline_view")
+    .select("*")
+    .order("last_activity_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data) return [];
+
+  return (data as Array<Record<string, any>>).map(mapPipelineRow);
+}
+
+async function getPipelineRowById(leadId: string) {
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.from("pipeline_view").select("*").eq("id", leadId).maybeSingle();
+  if (error || !data) return null;
+
+  return mapPipelineRow(data as Record<string, any>);
 }
 
 export async function getCampaignRows() {
@@ -197,12 +211,11 @@ export async function getLeadDetail(leadId: string) {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return null;
 
-  const rows = await getPipelineRows(500);
-  const pipelineRow = rows.find((row) => row.id === leadId) ?? null;
+  const pipelineRow = await getPipelineRowById(leadId);
   const { data: lead } = await supabase.from("leads").select("*").eq("id", leadId).maybeSingle();
   if (!lead) return null;
 
-  const [{ data: enrichment }, { data: evidence }, { data: hypothesis }, { data: actions }, { data: replies }, { data: drafts }, { data: notes }, { data: reviews }] = await Promise.all([
+  const [{ data: enrichment }, { data: evidence }, { data: hypothesis }, { data: actions }, { data: replies }, { data: drafts }, { data: notes }, { data: reviews }, { data: outreachEvents }] = await Promise.all([
     supabase.from("lead_enrichment").select("*").eq("lead_id", leadId).order("last_enriched_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("score_evidence").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }),
     supabase.from("automation_hypotheses").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -210,7 +223,8 @@ export async function getLeadDetail(leadId: string) {
     supabase.from("reply_events").select("*").eq("lead_id", leadId).order("reply_received_at", { ascending: false }).limit(50),
     supabase.from("email_drafts").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
     supabase.from("lead_notes").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
-    supabase.from("manual_review_queue").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50)
+    supabase.from("manual_review_queue").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("outreach_events").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50)
   ]);
 
   const timeline = [
@@ -218,7 +232,7 @@ export async function getLeadDetail(leadId: string) {
       id: `action-${item.id}`,
       type: "action",
       label: item.action_type,
-      detail: `${item.performed_by} updated this record`,
+      detail: item.action_detail?.body ?? item.action_detail?.subject ?? `${item.performed_by} updated this record`,
       at: item.performed_at ?? null
     })),
     ...asArray(replies as Array<Record<string, any>>).map((item) => ({
@@ -230,9 +244,20 @@ export async function getLeadDetail(leadId: string) {
     })),
     ...asArray(drafts as Array<Record<string, any>>).map((item) => ({
       id: `draft-${item.id}`,
-      type: "draft",
+      type: item.sent ? "sent" : "draft",
       label: item.approval_status ?? "draft",
       detail: item.subject ?? item.subject_line ?? "Email draft created",
+      at: item.sent_at ?? item.created_at ?? null
+    })),
+    ...asArray(outreachEvents as Array<Record<string, any>>).map((item) => ({
+      id: `outreach-${item.id}`,
+      type: item.event_type === "email_sent" ? "sent" : "outreach",
+      label: item.event_type,
+      detail:
+        item.metadata?.subject ??
+        item.metadata?.gmail_message_id ??
+        item.metadata?.provider_message_id ??
+        item.event_type,
       at: item.created_at ?? null
     })),
     ...asArray(notes as Array<Record<string, any>>).map((item) => ({
@@ -519,20 +544,57 @@ export async function getThreadHistory(leadId: string) {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return [];
 
-  const [{ data: actions }, { data: replies }] = await Promise.all([
+  const [{ data: actions }, { data: replies }, { data: sentDrafts }, { data: sentEvents }] = await Promise.all([
     supabase.from("crm_action_log").select("*").eq("lead_id", leadId).order("performed_at", { ascending: true }),
-    supabase.from("reply_events").select("*").eq("lead_id", leadId).order("reply_received_at", { ascending: true })
+    supabase.from("reply_events").select("*").eq("lead_id", leadId).order("reply_received_at", { ascending: true }),
+    supabase.from("email_drafts").select("*").eq("lead_id", leadId).eq("sent", true).order("sent_at", { ascending: true }),
+    supabase
+      .from("outreach_events")
+      .select("*")
+      .eq("lead_id", leadId)
+      .eq("event_type", "email_sent")
+      .order("created_at", { ascending: true })
   ]);
 
+  const sentDraftMessageIds = new Set(
+    asArray(sentDrafts as Array<Record<string, any>>)
+      .map((item) => item.provider_message_id)
+      .filter(Boolean)
+  );
+
   const history = [
-    ...asArray(actions as Array<Record<string, any>>).map((item) => ({
-      id: `action-${item.id}`,
+    ...asArray(actions as Array<Record<string, any>>).map((item) => {
+      const actionDetail = item.action_detail ?? {};
+      return {
+        id: `action-${item.id}`,
+        type: "action",
+        label: item.action_type,
+        body: actionDetail.body ?? actionDetail.subject ?? item.action_type,
+        at: item.performed_at ?? null,
+        sender: item.performed_by
+      };
+    }),
+    ...asArray(sentDrafts as Array<Record<string, any>>).map((item) => ({
+      id: `draft-sent-${item.id}`,
       type: "sent",
-      label: item.action_type,
-      body: item.detail?.body || item.detail?.subject || item.action_type,
-      at: item.performed_at ?? null,
-      sender: item.performed_by
+      label: "email_sent",
+      body: item.body ?? item.subject ?? item.subject_line ?? "Email sent",
+      at: item.sent_at ?? item.created_at,
+      sender: item.assigned_inbox ?? "You"
     })),
+    ...asArray(sentEvents as Array<Record<string, any>>)
+      .filter((item) => {
+        const messageId = item.metadata?.provider_message_id ?? item.metadata?.gmail_message_id;
+        return !messageId || !sentDraftMessageIds.has(messageId);
+      })
+      .map((item) => ({
+        id: `outreach-sent-${item.id}`,
+        type: "sent",
+        label: "email_sent",
+        body: item.metadata?.body ?? item.metadata?.subject ?? "Email sent",
+        at: item.created_at ?? null,
+        sender: item.metadata?.inbox ?? "You"
+      })),
     ...asArray(replies as Array<Record<string, any>>).map((item) => ({
       id: `reply-${item.id}`,
       type: "received",

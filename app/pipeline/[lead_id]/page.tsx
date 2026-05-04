@@ -5,7 +5,16 @@ import { Button } from "@/components/ui/button";
 import { ScoreVisualizer } from "@/components/crm/score-visualizer";
 import { StickyBottomBar } from "@/components/crm/sticky-bottom-bar";
 import { InlineEditableField } from "@/components/crm/inline-editable-field";
-import { approveLeadAction, assignLeadAction, changeLeadStatusAction, closeLeadAction, overrideBandAction, updateLeadNotesAction } from "@/lib/crm/actions";
+import {
+  approveEmailDraftAction,
+  approveLeadAction,
+  assignLeadAction,
+  changeLeadStatusAction,
+  closeLeadAction,
+  overrideBandAction,
+  rejectEmailDraftAction,
+  updateLeadNotesAction
+} from "@/lib/crm/actions";
 import { getLeadDetail } from "@/lib/crm/queries";
 import { Mail, MessageSquare, Briefcase, Activity, CheckCircle, Search, ThumbsDown } from "lucide-react";
 
@@ -217,7 +226,25 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
               {lead.drafts.map((draft: any) => (
                 <div className="record-card" key={draft.id}>
                   <strong>{draft.subject ?? draft.subject_line ?? "Draft"}</strong>
-                  <div className="muted">{draft.approval_status ?? "pending"}</div>
+                  <div className="button-row mt-2">
+                    <Badge tone="info">{draft.approval_status ?? "pending"}</Badge>
+                    {draft.sent ? <Badge tone="success">Sent</Badge> : null}
+                  </div>
+                  {!draft.sent && ["pending", null, undefined].includes(draft.approval_status) ? (
+                    <div className="button-row mt-3">
+                      <form action={approveEmailDraftAction}>
+                        <input type="hidden" name="draftId" value={draft.id} />
+                        <input type="hidden" name="leadId" value={lead.id} />
+                        <Button type="submit" variant="secondary">Approve draft</Button>
+                      </form>
+                      <form action={rejectEmailDraftAction} className="flex flex-col gap-2">
+                        <input type="hidden" name="draftId" value={draft.id} />
+                        <input type="hidden" name="leadId" value={lead.id} />
+                        <input name="reason" placeholder="Rejection reason" className="bg-black/20 border border-white/10 rounded-lg p-2 text-white/90 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all" />
+                        <Button type="submit" variant="danger">Reject draft</Button>
+                      </form>
+                    </div>
+                  ) : null}
                 </div>
               ))}
               {lead.reviews.map((review: any) => (

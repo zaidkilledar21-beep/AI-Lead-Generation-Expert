@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { markReplyHandledAction, assignLeadAction, closeLeadAction } from "@/lib/crm/actions";
+import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
 
 interface InboxThread {
   id: string;
@@ -60,7 +61,9 @@ export function InboxView({
     if (!leadDetails?.timeline) return [];
     return [...leadDetails.timeline]
       .filter((item) => 
-        item.type === "reply" || 
+        item.type === "reply" ||
+        item.type === "sent" ||
+        item.type === "outreach" ||
         (item.type === "action" && (item.label.includes("sent") || item.label.includes("outreach")))
       )
       .reverse();
@@ -82,8 +85,8 @@ export function InboxView({
               
               // Intent color mapping
               let intentTone: "info" | "success" | "warning" | "danger" | "muted" = "info";
-              if (["interested", "call_request", "positive_interest"].includes(thread.intent ?? "")) intentTone = "success";
-              if (["not_interested", "unsubscribe", "opt_out", "objection", "wrong_person"].includes(thread.intent ?? "")) intentTone = "danger";
+              if ((POSITIVE_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "")) intentTone = "success";
+              if ((OBJECTION_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "")) intentTone = "danger";
               if (thread.intent === "out_of_office") intentTone = "warning";
               if (["bounce", "bounce_or_noise"].includes(thread.intent ?? "")) intentTone = "muted";
 
@@ -169,6 +172,7 @@ export function InboxView({
                 <div className="flex items-center gap-2">
                   <form action={closeLeadAction} className="flex items-center">
                     <input type="hidden" name="leadId" value={selected.leadId} />
+                    <input type="hidden" name="replyEventId" value={selected.id} />
                     <input type="hidden" name="outcome" value="won" />
                     <button type="submit" className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase rounded-lg border border-emerald-500/20 transition-all active:scale-95">
                       Mark Won
@@ -176,6 +180,7 @@ export function InboxView({
                   </form>
                   <form action={closeLeadAction} className="flex items-center">
                     <input type="hidden" name="leadId" value={selected.leadId} />
+                    <input type="hidden" name="replyEventId" value={selected.id} />
                     <input type="hidden" name="outcome" value="lost" />
                     <button type="submit" className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-bold uppercase rounded-lg border border-rose-500/20 transition-all active:scale-95">
                       Mark Lost

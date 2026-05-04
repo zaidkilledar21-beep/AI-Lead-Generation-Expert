@@ -1,4 +1,5 @@
 import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
+import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
 
 type PipelineLead = {
   id: string;
@@ -473,9 +474,9 @@ export async function getInboxSnapshot() {
     tabs: {
       all: replies.length,
       unhandled: replies.filter((reply) => reply.unhandled).length,
-      positive: replies.filter((reply) => reply.intent === "positive_interest").length,
+      positive: replies.filter((reply) => (POSITIVE_REPLY_INTENTS as readonly string[]).includes(reply.intent)).length,
       neutral: replies.filter((reply) => reply.intent === "neutral_question").length,
-      objections: replies.filter((reply) => reply.intent === "objection").length,
+      objections: replies.filter((reply) => (OBJECTION_REPLY_INTENTS as readonly string[]).includes(reply.intent)).length,
       bounced: replies.filter((reply) => reply.intent === "bounce").length
     }
   };
@@ -483,7 +484,9 @@ export async function getInboxSnapshot() {
 
 export async function getReviewDashboard() {
   const [manualItems, inbox] = await Promise.all([getManualReviewItems(), getInboxSnapshot()]);
-  const positiveReplies = inbox.replies.filter((reply) => reply.intent === "positive_interest" && reply.unhandled);
+  const positiveReplies = inbox.replies.filter(
+    (reply) => (POSITIVE_REPLY_INTENTS as readonly string[]).includes(reply.intent) && reply.unhandled
+  );
 
   return {
     urgent: [
@@ -506,7 +509,9 @@ export async function getReviewDashboard() {
 export async function getAnalyticsDashboard() {
   const [pipeline, campaigns, inbox] = await Promise.all([getPipelineSnapshot(), getCampaignDashboard(), getInboxSnapshot()]);
   const emailsSent = campaigns.recentRuns.reduce((sum, run) => sum + run.promoted, 0);
-  const positiveReplies = inbox.replies.filter((reply) => reply.intent === "positive_interest").length;
+  const positiveReplies = inbox.replies.filter((reply) =>
+    (POSITIVE_REPLY_INTENTS as readonly string[]).includes(reply.intent)
+  ).length;
 
   return {
     kpis: [

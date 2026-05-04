@@ -1,5 +1,6 @@
 import { requireAppActor } from "@/lib/app/auth";
 import { logCrmAction } from "@/lib/app/audit";
+import { approveCrmLeadForOutreach, updateCrmLeadStatus } from "@/lib/app/leads";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export async function completeManualReview(
@@ -24,6 +25,12 @@ export async function completeManualReview(
     .single();
 
   if (error) throw new Error(error.message);
+
+  if (reviewStatus === "approved") {
+    await approveCrmLeadForOutreach(data.lead_id);
+  } else {
+    await updateCrmLeadStatus(data.lead_id, "archived");
+  }
 
   await logCrmAction({
     actor,

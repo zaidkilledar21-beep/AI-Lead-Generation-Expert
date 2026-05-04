@@ -5,6 +5,7 @@ import { Badge, bandTone } from "@/components/ui/badge";
 import { ScoreBar } from "@/components/ui/score-bar";
 import { approveLeadAction, changeLeadStatusAction, bulkApproveLeadsAction, bulkChangeLeadStatusAction } from "@/lib/crm/actions";
 import { useLeadSelection } from "@/lib/hooks/use-lead-selection";
+import { isTerminalLeadStatus } from "@/lib/crm/status-contract";
 import { useTransition } from "react";
 
 export function PipelineListView({ filtered }: Readonly<{ filtered: any[] }>) {
@@ -92,8 +93,14 @@ export function PipelineListView({ filtered }: Readonly<{ filtered: any[] }>) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row, i) => (
-              <motion.tr 
+            {filtered.map((row, i) => {
+              const isTerminal = isTerminalLeadStatus(row.status);
+              const canApprove = !isTerminal && !row.approvedForOutreach && row.status !== "replied_interested";
+              const canPause = !isTerminal && row.status !== "replied_interested";
+              const canArchive = !isTerminal;
+
+              return (
+              <motion.tr
                 key={row.id}
                 className={`border-b hover:bg-white/[0.02] transition-colors group ${isSelected(row.id) ? "bg-brand/5 border-brand/20" : "border-white/5"}`}
                 initial={{ opacity: 0, y: 10 }}
@@ -140,34 +147,41 @@ export function PipelineListView({ filtered }: Readonly<{ filtered: any[] }>) {
                   <div className="flex flex-col gap-2">
                     {row.approvedForOutreach ? (
                       <Badge tone="success">Approved</Badge>
-                    ) : (
+                    ) : canApprove ? (
                       <form action={approveLeadAction}>
                         <input type="hidden" name="leadId" value={row.id} />
                         <button className="px-3 py-1.5 text-xs font-medium bg-brand hover:bg-brand-light text-white rounded-lg transition-colors shadow-lg shadow-brand/20" type="submit">
                           Approve
                         </button>
                       </form>
+                    ) : (
+                      <Badge tone="muted">No approval action</Badge>
                     )}
                     <div className="flex gap-2">
-                      <form action={changeLeadStatusAction}>
-                        <input type="hidden" name="leadId" value={row.id} />
-                        <input type="hidden" name="status" value="paused" />
-                        <button className="px-3 py-1.5 text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 rounded-lg transition-colors border border-white/10" type="submit">
-                          Pause
-                        </button>
-                      </form>
-                      <form action={changeLeadStatusAction}>
-                        <input type="hidden" name="leadId" value={row.id} />
-                        <input type="hidden" name="status" value="archived" />
-                        <button className="px-3 py-1.5 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/20" type="submit">
-                          Archive
-                        </button>
-                      </form>
+                      {canPause ? (
+                        <form action={changeLeadStatusAction}>
+                          <input type="hidden" name="leadId" value={row.id} />
+                          <input type="hidden" name="status" value="paused" />
+                          <button className="px-3 py-1.5 text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 rounded-lg transition-colors border border-white/10" type="submit">
+                            Pause
+                          </button>
+                        </form>
+                      ) : null}
+                      {canArchive ? (
+                        <form action={changeLeadStatusAction}>
+                          <input type="hidden" name="leadId" value={row.id} />
+                          <input type="hidden" name="status" value="archived" />
+                          <button className="px-3 py-1.5 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/20" type="submit">
+                            Archive
+                          </button>
+                        </form>
+                      ) : null}
                     </div>
                   </div>
                 </td>
               </motion.tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
