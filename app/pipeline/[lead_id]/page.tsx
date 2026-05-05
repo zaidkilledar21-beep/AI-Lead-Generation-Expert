@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/crm/page-header";
 import { Badge, bandTone } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
+import { CrmSelect } from "@/components/ui/crm-select";
 import { ScoreVisualizer } from "@/components/crm/score-visualizer";
 import { StickyBottomBar } from "@/components/crm/sticky-bottom-bar";
 import { InlineEditableField } from "@/components/crm/inline-editable-field";
@@ -32,8 +33,8 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
         description={[lead.niche, lead.city, lead.country].filter(Boolean).join(" / ") || "Lead record"}
         actions={
           <div className="button-row">
-            <a className="ui-button ui-button-secondary" href={lead.website ?? "#"} target="_blank">Website</a>
-            <a className="ui-button ui-button-secondary" href={lead.googleMapsUrl ?? "#"} target="_blank">Google Maps</a>
+            <LinkButton variant="secondary" href={lead.website ?? "#"} className={!lead.website ? "pointer-events-none opacity-50" : ""}>Website</LinkButton>
+            <LinkButton variant="secondary" href={lead.googleMapsUrl ?? "#"} className={!lead.googleMapsUrl ? "pointer-events-none opacity-50" : ""}>Google Maps</LinkButton>
             {lead.approvedForOutreach ? (
               <Badge tone="success">Approved for outreach</Badge>
             ) : (
@@ -92,7 +93,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
             ) : (
               <div className="lg:col-span-3">
                 <strong className="block text-white/90 mb-2">{pendingReview?.reason ?? "Manual review required"}</strong>
-                <a className="ui-button ui-button-secondary" href="/review">Open Review Queue</a>
+                <LinkButton variant="secondary" href="/review">Open Review Queue</LinkButton>
               </div>
             )}
           </div>
@@ -220,9 +221,11 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                 <input type="hidden" name="leadId" value={lead.id} />
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-white/60">Band</span>
-                  <select name="band" defaultValue={lead.effectiveBand ?? "B"} className="bg-black/20 border border-white/10 rounded-lg p-2 text-white/90 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all">
-                    {["A", "B", "C", "D"].map((band) => <option key={band} value={band}>{band}</option>)}
-                  </select>
+                  <CrmSelect
+                    name="band"
+                    defaultValue={lead.effectiveBand ?? "B"}
+                    options={["A", "B", "C", "D"].map((band) => ({ value: band, label: `Band ${band}` }))}
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-white/60">Reason</span>
@@ -243,7 +246,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                   <Button type="submit" variant="danger">Archive</Button>
                 </form>
               </div>
-              <div className="button-row top-gap">
+              <div className="button-row mt-4">
                 <form action={closeLeadAction}>
                   <input type="hidden" name="leadId" value={lead.id} />
                   <input type="hidden" name="outcome" value="won" />
@@ -319,7 +322,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                 <label>Founder notes<textarea name="notes" rows={8} defaultValue={lead.notes ?? ""} /></label>
                 <Button type="submit">Save notes</Button>
               </form>
-              <div className="stack-list top-gap">
+              <div className="stack-list mt-4">
                 {lead.notesHistory.map((note: any) => (
                   <div className="record-card" key={note.id}>
                     <div className="muted">{note.created_by} - {new Date(note.created_at).toLocaleString()}</div>
@@ -341,7 +344,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
           ) : (
             <form action={approveLeadAction} className="flex-1">
               <input type="hidden" name="leadId" value={lead.id} />
-              <button type="submit" className="w-full px-4 py-2 bg-brand hover:bg-brand-light text-white font-medium rounded-xl transition-all shadow-lg shadow-brand/20">
+              <button type="submit" className="ui-button ui-button-primary w-full shadow-lg shadow-brand/20">
                 Approve for Outreach
               </button>
             </form>
@@ -350,14 +353,14 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
             <form action={changeLeadStatusAction}>
               <input type="hidden" name="leadId" value={lead.id} />
               <input type="hidden" name="status" value="paused" />
-              <button type="submit" className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all border border-white/10">
+              <button type="submit" className="ui-button ui-button-secondary">
                 Pause
               </button>
             </form>
             <form action={changeLeadStatusAction}>
               <input type="hidden" name="leadId" value={lead.id} />
               <input type="hidden" name="status" value="archived" />
-              <button type="submit" className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-xl transition-all border border-red-500/20">
+              <button type="submit" className="ui-button ui-button-danger">
                 Archive
               </button>
             </form>

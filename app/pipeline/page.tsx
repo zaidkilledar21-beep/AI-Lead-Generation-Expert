@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
+import { CrmDateField } from "@/components/ui/crm-date-field";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { MetricCard } from "@/components/ui/metric-card";
 import { deleteFilterAction, saveFilterAction } from "@/lib/crm/actions";
@@ -359,12 +360,12 @@ export default async function PipelinePage({
 
             <div className="field-group">
               <label htmlFor="filter-created-from" className="field-label">Created from</label>
-              <input id="filter-created-from" className="field" name="created_from" type="date" defaultValue={resolvedParams.created_from ?? ""} />
+              <CrmDateField name="created_from" defaultValue={resolvedParams.created_from ?? ""} placeholder="Created from" />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-created-to" className="field-label">Created to</label>
-              <input id="filter-created-to" className="field" name="created_to" type="date" defaultValue={resolvedParams.created_to ?? ""} />
+              <CrmDateField name="created_to" defaultValue={resolvedParams.created_to ?? ""} placeholder="Created to" />
             </div>
 
             <div className="field-group">

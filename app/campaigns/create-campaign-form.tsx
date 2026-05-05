@@ -6,6 +6,8 @@ import { createCampaign } from "./actions";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, ChevronLeft, CheckCircle2, Rocket, Target, Settings, Info, AlertCircle } from "lucide-react";
 import { z } from "zod";
+import { Button } from "@/components/ui/button";
+import { CrmDateField } from "@/components/ui/crm-date-field";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { toBandSequenceOptions, toInboxOptions } from "./select-options";
 
@@ -380,7 +382,7 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Next scheduled run</span>
-                    <input name="next_run_at" type="datetime-local" className="field" />
+                    <CrmDateField name="next_run_at" type="datetime-local" placeholder="Select date and time" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Max leads per run</span>
@@ -512,23 +514,24 @@ export function CreateCampaignForm({
           </AnimatePresence>
 
           <div className="flex items-center justify-between mt-12 pt-6 border-t border-white/10">
-            <button 
-              type="button" 
+            <Button
+              type="button"
+              variant="secondary"
               onClick={handlePrev}
               disabled={currentStep === 1}
-              className="ui-button ui-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              className="disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ChevronLeft className="w-4 h-4" /> Back
-            </button>
+            </Button>
             
             {currentStep < STEPS.length && (
-              <button 
-                type="button" 
+              <Button
+                type="button"
                 onClick={handleNext}
-                className="ui-button bg-white text-black hover:bg-gray-200 shadow-lg"
+                className="shadow-lg shadow-brand/20"
               >
                 Continue <ChevronRight className="w-4 h-4" />
-              </button>
+              </Button>
             )}
           </div>
         </form>

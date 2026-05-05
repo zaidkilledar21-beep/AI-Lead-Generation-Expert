@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { CrmDateField } from "@/components/ui/crm-date-field";
+import { CrmSelect } from "@/components/ui/crm-select";
 
 export function AnalyticsFilters({
   from,
@@ -44,37 +46,42 @@ export function AnalyticsFilters({
   };
 
   return (
-    <form className="flex items-center gap-4" onSubmit={handleSubmit}>
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Custom Range</span>
-        <input 
-          type="date" 
-          name="from" 
-          defaultValue={from} 
-          className="field text-xs py-1 px-2 h-8 w-32"
+    <form className="flex flex-wrap items-end gap-4" onSubmit={handleSubmit}>
+      <div className="flex flex-wrap items-end gap-3">
+        <span className="field-label mb-3">Custom Range</span>
+        <CrmDateField
+          name="from"
+          defaultValue={from}
+          placeholder="Start date"
+          className="w-48"
           onChange={handleAutoSubmit}
         />
         <span className="text-white/20">to</span>
-        <input 
-          type="date" 
-          name="to" 
-          defaultValue={to} 
-          className="field text-xs py-1 px-2 h-8 w-32"
+        <CrmDateField
+          name="to"
+          defaultValue={to}
+          placeholder="End date"
+          className="w-48"
           onChange={handleAutoSubmit}
         />
       </div>
-      <div className="w-[1px] h-4 bg-white/10" />
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Presets</span>
-        <select 
-          className="field text-xs py-1 px-2 h-8" 
+      <div className="hidden h-10 w-px bg-white/10 md:block" />
+      <div className="flex flex-wrap items-end gap-3">
+        <span className="field-label mb-3">Presets</span>
+        <CrmSelect
           name="days" 
           defaultValue={days > 90 ? "all" : String(days)}
-          onChange={handleAutoSubmit}
-        >
-          {[7, 14, 30, 60, 90].map((value) => <option key={value} value={value}>{value} days</option>)}
-          <option value="all">All time</option>
-        </select>
+          className="w-40"
+          options={[
+            ...[7, 14, 30, 60, 90].map((value) => ({ value: String(value), label: `${value} days` })),
+            { value: "all", label: "All time" }
+          ]}
+          onValueChange={(value) => {
+            const params = new URLSearchParams();
+            params.set("days", value);
+            router.push(`/analytics?${params.toString()}`);
+          }}
+        />
       </div>
     </form>
   );

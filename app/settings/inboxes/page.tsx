@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/crm/page-header";
+import { CrmSelect } from "@/components/ui/crm-select";
 import { createInboxAction, updateInboxActiveAction, updateInboxDailyLimitAction } from "../actions";
 import { getSettingsData } from "@/lib/crm/queries";
 
@@ -18,11 +19,15 @@ export default async function InboxesSettingsPage() {
             </label>
             <label>
               <span>Provider</span>
-              <select name="provider" defaultValue="gmail">
-                <option value="gmail">Gmail</option>
-                <option value="outlook">Outlook</option>
-                <option value="smtp">SMTP</option>
-              </select>
+              <CrmSelect
+                name="provider"
+                defaultValue="gmail"
+                options={[
+                  { value: "gmail", label: "Gmail" },
+                  { value: "outlook", label: "Outlook" },
+                  { value: "smtp", label: "SMTP" }
+                ]}
+              />
             </label>
             <label>
               <span>Daily limit</span>
@@ -30,11 +35,15 @@ export default async function InboxesSettingsPage() {
             </label>
             <label>
               <span>Warmup stage</span>
-              <select name="warmupStage" defaultValue="new">
-                <option value="new">New</option>
-                <option value="warming">Warming</option>
-                <option value="ready">Ready</option>
-              </select>
+              <CrmSelect
+                name="warmupStage"
+                defaultValue="new"
+                options={[
+                  { value: "new", label: "New" },
+                  { value: "warming", label: "Warming" },
+                  { value: "ready", label: "Ready" }
+                ]}
+              />
             </label>
             <div className="self-end">
               <button className="ui-button ui-button-primary" type="submit">Add inbox</button>

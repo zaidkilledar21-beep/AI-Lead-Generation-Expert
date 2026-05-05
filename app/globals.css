@@ -213,6 +213,19 @@ select option {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
+}
+
+.inline-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.compact-input {
+  max-width: 112px;
+  min-width: 88px;
 }
 
 .page-actions {
