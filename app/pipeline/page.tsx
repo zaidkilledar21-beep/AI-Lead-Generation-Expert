@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { deleteFilterAction, saveFilterAction } from "@/lib/crm/actions";
-import { getCrmHomeMetrics, getPipelineRows, getSavedFilters } from "@/lib/crm/queries";
+import { getCrmHomeMetrics, getPipelineRows, getSavedFilters, getSettingsData } from "@/lib/crm/queries";
 import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS, formatStatusLabel } from "@/lib/crm/status-contract";
 import { KanbanBoard } from "@/components/crm/kanban-board";
 import { PipelineListView } from "@/components/crm/pipeline-list-view";
@@ -37,6 +37,12 @@ function matchesFilter(row: Awaited<ReturnType<typeof getPipelineRows>>[number],
 
   const replyFilter = searchParams.reply;
   const reviewFilter = searchParams.review;
+  const minScore = searchParams.min_score ? Number(searchParams.min_score) : null;
+  const maxScore = searchParams.max_score ? Number(searchParams.max_score) : null;
+  const createdFrom = searchParams.created_from ? new Date(searchParams.created_from).getTime() : null;
+  const createdTo = searchParams.created_to ? new Date(`${searchParams.created_to}T23:59:59`).getTime() : null;
+  const createdAt = row.createdAt ? new Date(row.createdAt).getTime() : null;
+  const score = row.score ?? null;
 
   return (
     matchesSearch &&
@@ -46,6 +52,10 @@ function matchesFilter(row: Awaited<ReturnType<typeof getPipelineRows>>[number],
     (!searchParams.country || row.country === searchParams.country) &&
     (!searchParams.niche || row.niche === searchParams.niche) &&
     (!searchParams.assigned || (searchParams.assigned === "unassigned" ? !row.assignedTo : row.assignedTo === searchParams.assigned)) &&
+    (!Number.isFinite(minScore) || score === null || score >= Number(minScore)) &&
+    (!Number.isFinite(maxScore) || score === null || score <= Number(maxScore)) &&
+    (!createdFrom || (createdAt !== null && createdAt >= createdFrom)) &&
+    (!createdTo || (createdAt !== null && createdAt <= createdTo)) &&
     (!replyFilter ||
       (replyFilter === "has_reply" && row.replyCount > 0) ||
       (replyFilter === "no_reply" && row.replyCount === 0) ||
@@ -55,6 +65,28 @@ function matchesFilter(row: Awaited<ReturnType<typeof getPipelineRows>>[number],
       (reviewFilter === "pending" && row.hasPendingReview) ||
       (reviewFilter === "reviewed" && !row.hasPendingReview))
   );
+}
+
+function sortRows(rows: Awaited<ReturnType<typeof getPipelineRows>>, searchParams: Record<string, string | undefined>) {
+  const sort = searchParams.sort ?? "activity";
+  const dir = searchParams.dir === "asc" ? 1 : -1;
+  const valueFor = (row: Awaited<ReturnType<typeof getPipelineRows>>[number]) => {
+    if (sort === "business") return row.businessName ?? "";
+    if (sort === "score") return row.score ?? -1;
+    if (sort === "status") return row.status ?? "";
+    if (sort === "campaign") return row.campaignName ?? "";
+    if (sort === "reply") return row.latestReplyIntent ?? "";
+    if (sort === "owner") return row.assignedTo ?? "";
+    if (sort === "created") return row.createdAt ? new Date(row.createdAt).getTime() : 0;
+    return row.lastActivityAt ? new Date(row.lastActivityAt).getTime() : 0;
+  };
+
+  return [...rows].sort((a, b) => {
+    const av = valueFor(a);
+    const bv = valueFor(b);
+    if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+    return String(av).localeCompare(String(bv)) * dir;
+  });
 }
 
 function summarizeRows(rows: Awaited<ReturnType<typeof getPipelineRows>>) {
@@ -90,8 +122,8 @@ export default async function PipelinePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }>) {
   const resolvedParams = await searchParams;
-  const [metrics, rows, savedFilters] = await Promise.all([getCrmHomeMetrics(), getPipelineRows(500), getSavedFilters("pipeline")]);
-  const filtered = rows.filter((row) => matchesFilter(row, resolvedParams));
+  const [metrics, rows, savedFilters, settings] = await Promise.all([getCrmHomeMetrics(), getPipelineRows(500), getSavedFilters("pipeline"), getSettingsData()]);
+  const filtered = sortRows(rows.filter((row) => matchesFilter(row, resolvedParams)), resolvedParams);
   const summary = summarizeRows(filtered);
   const campaigns = [...new Map(rows.filter((row) => row.campaignId).map((row) => [row.campaignId, row])).values()];
   const countries = [...new Set(rows.map((row) => row.country).filter(Boolean))].sort((a, b) => a.localeCompare(b));
@@ -296,12 +328,53 @@ export default async function PipelinePage({
               <div className="relative group">
                 <select id="filter-owner" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="assigned" defaultValue={resolvedParams.assigned ?? ""}>
                   <option value="">All Owners</option>
-                  <option value="Uz">Uz</option>
-                  <option value="Ziki">Ziki</option>
+                  {settings.profiles.map((profile) => <option key={profile.user_id} value={profile.display_name}>{profile.display_name}</option>)}
                   <option value="unassigned">Unassigned</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
               </div>
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="filter-min-score" className="field-label">Min score</label>
+              <input id="filter-min-score" className="field" name="min_score" type="number" min="0" max="100" defaultValue={resolvedParams.min_score ?? ""} />
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="filter-max-score" className="field-label">Max score</label>
+              <input id="filter-max-score" className="field" name="max_score" type="number" min="0" max="100" defaultValue={resolvedParams.max_score ?? ""} />
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="filter-created-from" className="field-label">Created from</label>
+              <input id="filter-created-from" className="field" name="created_from" type="date" defaultValue={resolvedParams.created_from ?? ""} />
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="filter-created-to" className="field-label">Created to</label>
+              <input id="filter-created-to" className="field" name="created_to" type="date" defaultValue={resolvedParams.created_to ?? ""} />
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="filter-sort" className="field-label">Sort</label>
+              <select id="filter-sort" className="field" name="sort" defaultValue={resolvedParams.sort ?? "activity"}>
+                <option value="activity">Last activity</option>
+                <option value="business">Business</option>
+                <option value="score">Score</option>
+                <option value="status">Status</option>
+                <option value="campaign">Campaign</option>
+                <option value="reply">Reply</option>
+                <option value="owner">Owner</option>
+                <option value="created">Created</option>
+              </select>
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="filter-dir" className="field-label">Direction</label>
+              <select id="filter-dir" className="field" name="dir" defaultValue={resolvedParams.dir ?? "desc"}>
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+              </select>
             </div>
 
             <input type="hidden" name="view" value={view} />
@@ -361,7 +434,7 @@ export default async function PipelinePage({
       {view === "board" ? (
         <KanbanBoard columns={boardColumns} leads={filtered} />
       ) : (
-        <PipelineListView filtered={filtered} />
+        <PipelineListView filtered={filtered} profiles={settings.profiles} />
       )}
     </>
   );

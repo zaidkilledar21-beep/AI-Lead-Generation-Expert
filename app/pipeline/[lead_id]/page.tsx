@@ -22,6 +22,8 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
   const { lead_id } = await params;
   const lead = await getLeadDetail(lead_id);
   if (!lead) notFound();
+  const pendingDraft = lead.drafts.find((draft: any) => !draft.sent && (draft.approval_status ?? "pending") === "pending") ?? null;
+  const pendingReview = lead.reviews.find((review: any) => review.review_status === "pending") ?? null;
 
   return (
     <>
@@ -43,6 +45,59 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
           </div>
         }
       />
+
+      {pendingDraft || pendingReview ? (
+        <section className="panel mt-6 border border-amber-500/20 bg-amber-500/[0.03]">
+          <div className="panel-header">
+            <div>
+              <h2>Founder review required</h2>
+              <p className="muted">
+                {pendingDraft ? "A pending email draft needs approval before WF-06 can send it." : "A manual review item is blocking outreach progression."}
+              </p>
+            </div>
+            {pendingDraft ? <Badge tone="warning">Draft pending</Badge> : <Badge tone="warning">Manual review</Badge>}
+          </div>
+          <div className="panel-body grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {pendingDraft ? (
+              <>
+                <div className="lg:col-span-2">
+                  <div className="metric-label">Subject</div>
+                  <strong className="block text-white/90 mb-3">{pendingDraft.subject ?? pendingDraft.subject_line ?? "Email draft"}</strong>
+                  <div className="metric-label">Body preview</div>
+                  <div className="bg-black/30 border border-white/10 rounded-lg p-4 text-sm text-white/70 whitespace-pre-wrap max-h-80 overflow-y-auto">
+                    {pendingDraft.body ?? pendingDraft.message_body ?? "No draft body stored."}
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div><span className="metric-label">Step</span><strong>{pendingDraft.step_number ?? "--"}</strong></div>
+                  <div><span className="metric-label">Validation</span><strong>{pendingDraft.validation_passed ? "Passed" : "Needs review"}</strong></div>
+                  <div><span className="metric-label">Word count</span><strong>{pendingDraft.word_count ?? "--"}</strong></div>
+                  <div><span className="metric-label">Warnings</span><strong>{Array.isArray(pendingDraft.generation_warnings) ? pendingDraft.generation_warnings.join(", ") : "None"}</strong></div>
+                  <div className="button-row">
+                    <form action={approveEmailDraftAction}>
+                      <input type="hidden" name="draftId" value={pendingDraft.id} />
+                      <input type="hidden" name="leadId" value={lead.id} />
+                      <Button type="submit">Approve draft</Button>
+                    </form>
+                    <form action={rejectEmailDraftAction} className="flex flex-col gap-2">
+                      <input type="hidden" name="draftId" value={pendingDraft.id} />
+                      <input type="hidden" name="leadId" value={lead.id} />
+                      <input name="reason" placeholder="Rejection reason" className="bg-black/20 border border-white/10 rounded-lg p-2 text-white/90 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all" />
+                      <Button type="submit" variant="danger">Reject draft</Button>
+                    </form>
+                  </div>
+                  <Button type="button" variant="secondary" disabled>Edit draft coming soon</Button>
+                </div>
+              </>
+            ) : (
+              <div className="lg:col-span-3">
+                <strong className="block text-white/90 mb-2">{pendingReview?.reason ?? "Manual review required"}</strong>
+                <a className="ui-button ui-button-secondary" href="/review">Open Review Queue</a>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start mt-6">
         <section className="xl:col-span-7 flex flex-col gap-6">

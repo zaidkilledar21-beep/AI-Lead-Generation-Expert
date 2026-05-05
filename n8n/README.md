@@ -99,6 +99,16 @@ Set the same `N8N_API_KEY` in Vercel. Keep `GLOBAL_OUTREACH_PAUSED=true` and `ap
 
 `WF-01` and `WF-10` call the deployed Vercel app through `APP_BASE_URL`. `WF-04` through `WF-08` should be exported from the live n8n instance after confirming they call the live Supabase RPC endpoints. The checked-in table/schema migration supports those RPC contracts, but do not treat placeholder JSON exports as production-ready if they only contain source-query nodes and sticky notes.
 
+### Lifecycle Contract Checks
+
+Before importing or updating workflow JSONs, verify that `WF-04` through `WF-08` keep the CRM lifecycle contract:
+
+- Lead approval uses `approved_for_outreach`, `approved_by`, and `approved_at`; workflows must not write `leads.status = "approved"`.
+- Manual review completion uses `review_status = "approved"` or `review_status = "rejected"`; workflows must not write `manual_review_queue.review_status = "handled"`.
+- Sending remains scheduler-owned; workflows must not invent `outreach_queue.status = "in_sequence"` or `email_drafts.approval_status = "sent"`.
+- Replies are persisted in `reply_events`; workflow telemetry is persisted in `workflow_events`.
+- CRM-facing status changes should continue through the dashboard/RPC contract where available, especially `dashboard_update_lead_status`.
+
 ## Files
 
 - `workflows/WF-00-error-logger.md`

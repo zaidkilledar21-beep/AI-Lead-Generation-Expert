@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAppActor } from "@/lib/app/auth";
 import { logCrmAction } from "@/lib/app/audit";
 import { approveCrmLeadForOutreach, updateCrmLeadStatus, type DashboardLeadStatus } from "@/lib/app/leads";
+import { MANUAL_BOARD_MOVE_STATUSES, type ManualBoardMoveStatus } from "@/lib/crm/status-contract";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 function cleanText(value: FormDataEntryValue | null) {
@@ -188,7 +189,7 @@ export async function completeReviewAction(formData: FormData) {
   const notes = cleanText(formData.get("notes"));
   if (!reviewId) throw new Error("reviewId is required");
   if (!leadId) throw new Error("leadId is required");
-  if (decision !== "approved" && decision !== "rejected" && decision !== "handled") {
+  if (decision !== "approved" && decision !== "rejected") {
     throw new Error("Unsupported review decision");
   }
 
@@ -222,6 +223,29 @@ export async function completeReviewAction(formData: FormData) {
   revalidatePath("/review");
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
+}
+
+export async function completeReviewQueueItemAction(formData: FormData) {
+  const source = cleanText(formData.get("source"));
+  const decision = cleanText(formData.get("decision"));
+
+  if (source === "manual_review") {
+    return completeReviewAction(formData);
+  }
+
+  if (source === "email_draft") {
+    if (decision === "approved") return approveEmailDraftAction(formData);
+    if (decision === "rejected") return rejectEmailDraftAction(formData);
+    throw new Error("Unsupported draft review decision");
+  }
+
+  if (source === "reply_event") {
+    if (decision === "handled") return markReplyHandledAction(formData);
+    if (decision === "won" || decision === "lost") return closeLeadAction(formData);
+    throw new Error("Unsupported reply review decision");
+  }
+
+  throw new Error("Unsupported review item source");
 }
 
 export async function approveEmailDraftAction(formData: FormData) {
@@ -347,6 +371,7 @@ export async function saveFilterAction(formData: FormData) {
 export async function deleteFilterAction(formData: FormData) {
   const id = cleanText(formData.get("id"));
   if (!id) throw new Error("Saved filter id is required");
+  await requireAppActor();
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase.from("saved_filters").delete().eq("id", id);
   if (error) throw new Error(error.message);
@@ -458,6 +483,56 @@ export async function bulkChangeLeadStatusAction(leadIds: string[], status: "pau
   revalidatePath("/pipeline");
   revalidatePath("/review");
   revalidatePath("/inbox");
+}
+
+export async function bulkAssignLeadsAction(leadIds: string[], assignedTo: string | null) {
+  if (!leadIds || leadIds.length === 0) return;
+
+  const actor = await requireAppActor();
+  const uniqueLeadIds = [...new Set(leadIds.filter(Boolean))];
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase.from("leads").update({ assigned_to: assignedTo }).in("id", uniqueLeadIds);
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "assigned_to_founder",
+    leadId: null,
+    detail: {
+      event: "bulk_assigned",
+      count: uniqueLeadIds.length,
+      assigned_to: assignedTo,
+      lead_ids: uniqueLeadIds
+    }
+  });
+
+  revalidatePath("/pipeline");
+  revalidatePath("/review");
+}
+
+export async function moveLeadOnBoardAction(leadId: string, status: ManualBoardMoveStatus) {
+  if (!leadId) throw new Error("leadId is required");
+  if (!(MANUAL_BOARD_MOVE_STATUSES as readonly string[]).includes(status)) {
+    throw new Error("Unsupported board transition");
+  }
+
+  await updateCrmLeadStatus(leadId, status);
+
+  if (status === "closed_won" || status === "closed_lost") {
+    const actor = await requireAppActor();
+    const supabase = createSupabaseServiceClient();
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        closed_at: new Date().toISOString(),
+        closed_by: actor.displayName
+      })
+      .eq("id", leadId);
+    if (error) throw new Error(error.message);
+  }
+
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${leadId}`);
 }
 
 export async function updateLeadFieldAction(leadId: string, field: string, value: string) {

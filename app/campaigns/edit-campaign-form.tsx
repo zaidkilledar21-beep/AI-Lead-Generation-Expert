@@ -42,6 +42,7 @@ type EditableCampaign = {
   max_details_calls_per_day: number;
   max_total_places_calls_per_day: number;
 };
+type CampaignOption = { id: string; name?: string; band?: string; email_address?: string };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -52,7 +53,15 @@ function SubmitButton() {
   );
 }
 
-export function EditCampaignForm({ campaign }: Readonly<{ campaign: EditableCampaign }>) {
+export function EditCampaignForm({
+  campaign,
+  sequences = [],
+  inboxes = []
+}: Readonly<{
+  campaign: EditableCampaign;
+  sequences?: CampaignOption[];
+  inboxes?: CampaignOption[];
+}>) {
   const [state, action] = useFormState(updateCampaign.bind(null, campaign.id), { error: null as string | null });
 
   return (
@@ -181,19 +190,31 @@ export function EditCampaignForm({ campaign }: Readonly<{ campaign: EditableCamp
         </label>
         <label>
           <span>Sequence for Band A</span>
-          <input name="sequence_band_a" defaultValue={campaign.sequence_band_a ?? ""} />
+          <select name="sequence_band_a" defaultValue={campaign.sequence_band_a ?? ""}>
+            <option value="">Default workflow routing</option>
+            {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
+          </select>
         </label>
         <label>
           <span>Sequence for Band B</span>
-          <input name="sequence_band_b" defaultValue={campaign.sequence_band_b ?? ""} />
+          <select name="sequence_band_b" defaultValue={campaign.sequence_band_b ?? ""}>
+            <option value="">Default workflow routing</option>
+            {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
+          </select>
         </label>
         <label>
           <span>Sequence for Band C</span>
-          <input name="sequence_band_c" defaultValue={campaign.sequence_band_c ?? ""} />
+          <select name="sequence_band_c" defaultValue={campaign.sequence_band_c ?? ""}>
+            <option value="">Default workflow routing</option>
+            {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
+          </select>
         </label>
         <label>
           <span>Assigned inbox</span>
-          <input name="assigned_inbox_id" defaultValue={campaign.assigned_inbox_id ?? ""} />
+          <select name="assigned_inbox_id" defaultValue={campaign.assigned_inbox_id ?? ""}>
+            <option value="">No fixed inbox</option>
+            {inboxes.map((inbox) => <option key={inbox.id} value={inbox.id}>{inbox.email_address ?? inbox.id}</option>)}
+          </select>
         </label>
         <label className="form-span-2">
           <span>Tags</span>

@@ -69,10 +69,11 @@ export function AnalyticsFilters({
         <select 
           className="field text-xs py-1 px-2 h-8" 
           name="days" 
-          defaultValue={String(days)} 
+          defaultValue={days > 90 ? "all" : String(days)}
           onChange={handleAutoSubmit}
         >
           {[7, 14, 30, 60, 90].map((value) => <option key={value} value={value}>{value} days</option>)}
+          <option value="all">All time</option>
         </select>
       </div>
     </form>

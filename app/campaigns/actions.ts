@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { assertCampaignConfigInput, discoveryLimits, type CampaignConfigInput } from "@/lib/contracts";
-import { createCrmCampaign, markCampaignManualRunRequested, updateCrmCampaign, updateCrmCampaignStatus } from "@/lib/app/campaigns";
+import { createCrmCampaign, duplicateCrmCampaign, markCampaignManualRunRequested, updateCrmCampaign, updateCrmCampaignStatus } from "@/lib/app/campaigns";
 import { runLeadDiscovery } from "@/lib/workflows/lead-discovery";
 
 function parseCsv(value: FormDataEntryValue | null) {
@@ -100,6 +100,11 @@ export async function updateCampaign(campaignId: string, _: unknown, formData: F
 
 export async function updateCampaignStatus(campaignId: string, status: "active" | "paused" | "archived") {
   await updateCrmCampaignStatus(campaignId, status);
+  revalidatePath("/campaigns");
+}
+
+export async function duplicateCampaignAction(campaignId: string) {
+  await duplicateCrmCampaign(campaignId);
   revalidatePath("/campaigns");
 }
 
