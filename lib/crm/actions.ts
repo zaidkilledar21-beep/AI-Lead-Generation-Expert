@@ -281,6 +281,97 @@ export async function approveEmailDraftAction(formData: FormData) {
 
   revalidatePath(`/pipeline/${leadId}`);
   revalidatePath("/pipeline");
+  revalidatePath("/review");
+}
+
+export async function updateEmailDraftAction(formData: FormData) {
+  const draftId = cleanText(formData.get("draftId"));
+  const leadId = cleanText(formData.get("leadId"));
+  const subject = cleanText(formData.get("subject"));
+  const body = cleanText(formData.get("body"));
+  if (!draftId) throw new Error("draftId is required");
+  if (!leadId) throw new Error("leadId is required");
+  if (!subject) throw new Error("Subject is required");
+  if (!body) throw new Error("Body is required");
+
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("email_drafts")
+    .update({
+      subject,
+      subject_line: subject,
+      body,
+      message_body: body,
+      validation_passed: true,
+      approval_status: "pending",
+      edited_by_founder: actor.displayName,
+      edited_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", draftId)
+    .eq("lead_id", leadId)
+    .eq("sent", false);
+
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "email_draft_edited",
+    leadId,
+    detail: { draft_id: draftId, subject_length: subject.length, body_length: body.length }
+  });
+
+  revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/review");
+}
+
+export async function regenerateEmailDraftAction(formData: FormData) {
+  const draftId = cleanText(formData.get("draftId"));
+  const leadId = cleanText(formData.get("leadId"));
+  const reason = cleanText(formData.get("reason"));
+  if (!draftId) throw new Error("draftId is required");
+  if (!leadId) throw new Error("leadId is required");
+
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+  const requestedAt = new Date().toISOString();
+  const { error } = await supabase
+    .from("email_drafts")
+    .update({
+      approval_status: "regeneration_requested",
+      block_reason: reason ?? "regeneration_requested_by_founder",
+      updated_at: requestedAt
+    })
+    .eq("id", draftId)
+    .eq("lead_id", leadId)
+    .eq("sent", false);
+
+  if (error) throw new Error(error.message);
+
+  const { error: workflowError } = await supabase.from("workflow_events").insert({
+    workflow_name: "WF-05 Draft Generation",
+    lead_id: leadId,
+    event_type: "draft_regeneration_requested",
+    status: "started",
+    payload: {
+      draft_id: draftId,
+      requested_by: actor.displayName,
+      reason,
+      requested_at: requestedAt
+    }
+  });
+  if (workflowError) throw new Error(workflowError.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "email_draft_regeneration_requested",
+    leadId,
+    detail: { draft_id: draftId, reason }
+  });
+
+  revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/review");
 }
 
 export async function rejectEmailDraftAction(formData: FormData) {
@@ -345,6 +436,7 @@ export async function rejectEmailDraftAction(formData: FormData) {
 
   revalidatePath(`/pipeline/${leadId}`);
   revalidatePath("/pipeline");
+  revalidatePath("/review");
 }
 
 export async function saveFilterAction(formData: FormData) {

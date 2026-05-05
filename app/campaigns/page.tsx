@@ -66,9 +66,7 @@ export default async function CampaignsPage({
               defaultValue={source}
               options={[
                 { value: "all", label: "All sources" },
-                { value: "google_maps", label: "Google Maps" },
-                { value: "google_search", label: "Google Search" },
-                { value: "directory", label: "Directory" },
+                { value: "google_places", label: "Google Places" },
                 { value: "manual_import", label: "Manual Import" }
               ]}
             />

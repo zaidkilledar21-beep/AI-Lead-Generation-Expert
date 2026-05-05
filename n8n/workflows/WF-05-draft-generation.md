@@ -18,6 +18,17 @@ order by q.next_send_at asc
 limit 25;
 ```
 
+Regeneration source query:
+
+```sql
+select d.*
+from email_drafts d
+where d.approval_status = 'regeneration_requested'
+  and coalesce(d.sent, false) = false
+order by d.updated_at asc
+limit 25;
+```
+
 Node Skeleton:
 
 1. Schedule Trigger
@@ -74,6 +85,7 @@ Node Skeleton:
      - Band A Step 1: `pending`
      - Band B if configured: `pending`
      - Otherwise: `auto_approved`
+   - If regenerating, replace subject/body on the same draft or create a superseding pending draft and clear the old `regeneration_requested` item.
 
 10. If pending
    - Upsert `manual_review_queue`.
@@ -84,3 +96,4 @@ Success criteria:
 - No email is sent by this workflow.
 - All drafts are stored before sending.
 - Blocked drafts are auditable.
+- Founder regeneration requests are persisted as `approval_status = regeneration_requested`; they are not represented as sent.

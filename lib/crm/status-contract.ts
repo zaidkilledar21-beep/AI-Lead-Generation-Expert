@@ -25,7 +25,7 @@ export type LeadLifecycleStatus = typeof LEAD_STATUSES[number];
 
 export const QUEUE_STATUSES = ["queued", "drafted", "paused", "blocked", "replied", "completed"] as const;
 
-export const DRAFT_APPROVAL_STATUSES = ["pending", "approved", "auto_approved", "rejected", "blocked"] as const;
+export const DRAFT_APPROVAL_STATUSES = ["pending", "approved", "auto_approved", "rejected", "blocked", "regeneration_requested"] as const;
 
 export const MANUAL_REVIEW_STATUSES = ["pending", "approved", "rejected"] as const;
 

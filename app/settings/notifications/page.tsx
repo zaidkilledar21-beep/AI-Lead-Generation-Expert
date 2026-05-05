@@ -1,9 +1,9 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { sendTestNotificationAction, updateFounderProfileAction } from "../actions";
-import { getSettingsData } from "@/lib/crm/queries";
+import { getLatestNotificationEvent, getSettingsData } from "@/lib/crm/queries";
 
 export default async function NotificationsSettingsPage() {
-  const settings = await getSettingsData();
+  const [settings, latestNotification] = await Promise.all([getSettingsData(), getLatestNotificationEvent()]);
   const profile = settings.profiles[0] ?? null;
   const preferences = (profile?.notification_preferences ?? {}) as Record<string, boolean>;
 
@@ -57,6 +57,21 @@ export default async function NotificationsSettingsPage() {
           <form action={sendTestNotificationAction} className="mt-4">
             <button className="ui-button ui-button-secondary" type="submit">Queue test notification check</button>
           </form>
+          <div className="record-card mt-4">
+            <div className="metric-label">Latest test notification</div>
+            {latestNotification ? (
+              <>
+                <strong>{String(latestNotification.status ?? "queued")}</strong>
+                <p className="muted">
+                  Queued {latestNotification.created_at ? new Date(String(latestNotification.created_at)).toLocaleString() : "recently"}
+                  {latestNotification.recipient ? ` for ${String(latestNotification.recipient)}` : ""}
+                </p>
+                {latestNotification.error_message ? <p className="ui-badge ui-badge-danger">{String(latestNotification.error_message)}</p> : null}
+              </>
+            ) : (
+              <p className="muted">No test notification has been queued yet.</p>
+            )}
+          </div>
         </div>
       </section>
     </>

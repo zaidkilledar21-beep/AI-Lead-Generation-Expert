@@ -5,7 +5,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export async function completeManualReview(
   manualReviewId: string,
-  reviewStatus: "approved" | "rejected" | "handled",
+  reviewStatus: "approved" | "rejected",
   reviewNotes?: string
 ) {
   const actor = await requireAppActor();

@@ -106,6 +106,39 @@ export async function updateFounderProfileAction(formData: FormData) {
 }
 
 export async function sendTestNotificationAction() {
-  await requireAppActor();
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+  const requestedAt = new Date().toISOString();
+  const { data: profile } = await supabase
+    .from("founder_profiles")
+    .select("display_name,email,telegram_chat_id")
+    .eq("user_id", actor.userId)
+    .maybeSingle();
+
+  const payload = {
+    kind: "test_notification",
+    message: "Test notification requested from CRM settings",
+    requested_by: profile?.display_name ?? actor.displayName ?? actor.userId,
+    requested_at: requestedAt
+  };
+
+  const recipient = profile?.telegram_chat_id ?? profile?.email ?? actor.email ?? null;
+  const { error } = await supabase.from("notification_events").insert({
+    event_type: "test_notification",
+    channel: profile?.telegram_chat_id ? "telegram" : "email",
+    recipient,
+    payload,
+    status: "queued"
+  });
+  if (error) throw new Error(error.message);
+
+  const { error: workflowError } = await supabase.from("workflow_events").insert({
+    workflow_name: "WF-08 Weekly Report",
+    event_type: "test_notification_queued",
+    status: "started",
+    payload
+  });
+  if (workflowError) throw new Error(workflowError.message);
+
   revalidatePath("/settings/notifications");
 }

@@ -25,7 +25,7 @@ export type CampaignConfigInput = {
   exclude_cities: string[];
   language_of_business: string[];
   max_leads_per_run: number;
-  lead_source: "google_maps" | "google_search" | "directory" | "manual_import";
+  lead_source: "google_places" | "manual_import";
   min_google_rating: number;
   min_review_count: number;
   exclude_chains: boolean;

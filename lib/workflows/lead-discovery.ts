@@ -428,7 +428,7 @@ function buildCandidateFromDetails(
     city: cityFromAddress(details.formattedAddress, campaign.target_cities[0] ?? campaign.region),
     country: countryFromAddress(details.formattedAddress, campaign.target_countries[0] ?? campaign.region),
     niche: campaign.primary_niche ?? campaign.niche,
-    source: (campaign.lead_source as "google_places" | "manual_import") || "google_places",
+    source: "google_places",
     google_place_id: details.id,
     google_maps_url: details.googleMapsUri ?? null,
     phone: details.nationalPhoneNumber ?? null,
@@ -713,7 +713,7 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
 
   const { data: run, error: runError } = await supabase
     .from("discovery_runs")
-    .insert({ campaign_id: campaign.id, trigger_type: input.dry_run ? "manual" : "schedule", source: campaign.lead_source })
+    .insert({ campaign_id: campaign.id, trigger_type: input.dry_run ? "manual" : "schedule", source: "google_places" })
     .select("id")
     .single();
 

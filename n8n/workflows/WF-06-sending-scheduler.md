@@ -43,6 +43,7 @@ Node Skeleton:
    - Lead email present.
    - Lead status not blocked.
    - No reply exists.
+   - `app_settings.global_outreach.paused` is not true.
    - No unresolved send block.
    - Inbox daily limit still available.
 
@@ -85,3 +86,4 @@ Success criteria:
 - Daily send limits are enforced.
 - One email at a time.
 - Follow-ups never send after a reply.
+- Only WF-06 sends outreach; CRM pages only approve, reject, pause, and edit drafts.

@@ -6,7 +6,8 @@
         "rule": {
           "interval": [
             {
-              "triggerAtHour": 9
+              "field": "minutes",
+              "minutesInterval": 30
             }
           ]
         }
@@ -14,43 +15,153 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -400,
-        0
+        -544,
+        -64
       ],
-      "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+      "id": "fa1a41ea-17c9-4a4b-a253-d2cbab4acd6b",
       "name": "Schedule Trigger"
     },
     {
       "parameters": {
         "operation": "getAll",
         "tableId": "outreach_queue",
-        "limit": 50,
-        "filterType": "string",
-        "filterString": "status=eq.queued"
+        "limit": 25,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "queued"
+            },
+            {
+              "keyName": "next_send_at",
+              "condition": "lte",
+              "keyValue": "=={{ $now.toISO() }}"
+            }
+          ]
+        }
       },
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        -120,
-        0
+        -336,
+        -64
       ],
-      "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
-      "name": "Supabase Source Query"
+      "id": "d80d8929-dde5-4366-8232-1805ad39e952",
+      "name": "Select Due Outreach Queue",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
     },
     {
       "parameters": {
-        "content": "Native draft generation is still needed. Load context, call DeepSeek, validate, then insert email_drafts or send_blocks.",
-        "height": 220,
-        "width": 420
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/load_draft_context",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_queue_id\": \"{{$json.id}}\"\n}",
+        "options": {}
       },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
       "position": [
-        -400,
-        -260
+        -128,
+        -64
       ],
-      "id": "d4052f77-b043-57fc-9a20-fbd7b83f5908",
-      "name": "WF-05 Draft Generation Notes"
+      "id": "c28c6175-a3e5-4db0-b2cc-f3798b994d42",
+      "name": "Load Draft Context",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "deepSeekApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ \n  JSON.stringify({\n    model: \"deepseek-chat\",\n    response_format: {\n      type: \"json_object\"\n    },\n    messages: [\n      {\n        role: \"system\",\n        content: \"You generate safe cold outreach email drafts for an automation agency. Return JSON only. Never send emails. Never invent facts. Only use evidence provided in the context. If evidence is insufficient, return valid=false with a block_reason.\"\n      },\n      {\n        role: \"user\",\n        content: $json.prompt\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        288,
+        -64
+      ],
+      "id": "db591b8c-2a73-41c2-89b7-586728e0d77a",
+      "name": "DeepSeek Draft JSON",
+      "credentials": {
+        "deepSeekApi": {
+          "id": "aNfM8oqYzENtLlRm",
+          "name": "DeepSeek account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $(\"Load Draft Context\").first().json;\nconst deepseek = $input.first().json;\n\nlet draft;\n\ntry {\n  const content = deepseek.choices?.[0]?.message?.content;\n\n  if (typeof content === \"string\") {\n    draft = JSON.parse(content);\n  } else if (typeof content === \"object\" && content !== null) {\n    draft = content;\n  } else {\n    draft = {\n      valid: false,\n      block_reason: \"deepseek_response_missing_content\"\n    };\n  }\n} catch (error) {\n  draft = {\n    valid: false,\n    block_reason: \"deepseek_response_not_valid_json\"\n  };\n}\n\nconst evidence = context.evidence || [];\nconst step = context.step || {};\nconst score = context.score || {};\nconst lead = context.lead || {};\nconst queue = context.queue || {};\n\nconst errors = [];\n\nif (!Array.isArray(evidence) || evidence.length === 0) {\n  errors.push(\"missing_score_evidence\");\n}\n\nif (!draft.subject || String(draft.subject).trim().length === 0) {\n  errors.push(\"missing_subject\");\n}\n\nif (!draft.body || String(draft.body).trim().length === 0) {\n  errors.push(\"missing_body\");\n}\n\nif (draft.subject && String(draft.subject).length > 70) {\n  errors.push(\"subject_too_long\");\n}\n\nif (draft.body && String(draft.body).split(/\\s+/).filter(Boolean).length > 160) {\n  errors.push(\"body_too_long\");\n}\n\nif (!draft.observation_used || String(draft.observation_used).trim().length < 10) {\n  errors.push(\"missing_observation\");\n}\n\nif (!draft.automation_idea || String(draft.automation_idea).trim().length < 10) {\n  errors.push(\"missing_automation_idea\");\n}\n\nif (!draft.cta || String(draft.cta).trim().length < 5) {\n  errors.push(\"missing_cta\");\n}\n\nconst forbidden = [\n  \"guaranteed\",\n  \"i noticed your business is struggling\",\n  \"you are losing customers\",\n  \"we can 10x\",\n  \"limited time offer\",\n  \"act now\",\n  \"free money\",\n  \"risk-free\"\n];\n\nconst combined = `${draft.subject || \"\"} ${draft.body || \"\"}`.toLowerCase();\n\nfor (const phrase of forbidden) {\n  if (combined.includes(phrase)) {\n    errors.push(`forbidden_phrase:${phrase}`);\n  }\n}\n\nconst hasLink = /https?:\\/\\//i.test(draft.body || \"\");\n\nconst stepAllowsLink =\n  step.allow_link === true ||\n  step.requires_link === true ||\n  step.include_link === true;\n\nif (hasLink && !stepAllowsLink) {\n  errors.push(\"link_not_allowed_for_step\");\n}\n\nconst isValid = draft.valid === true && errors.length === 0;\n\nreturn [\n  {\n    json: {\n      queue_id: queue.id,\n      lead_id: lead.id || queue.lead_id,\n      band: score.band,\n      step_number: queue.current_step,\n      draft,\n      validation_errors: errors,\n      is_valid: isValid,\n      approval_status:\n        isValid && score.band === \"A\" && queue.current_step === 1\n          ? \"pending\"\n          : isValid\n            ? \"auto_approved\"\n            : \"blocked\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        -64
+      ],
+      "id": "1dd031fd-16ad-4d31-81af-5d470c9e3f0d",
+      "name": "Validate Draft"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/persist_draft_or_block",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{\n  JSON.stringify({\n    p_queue_id: $json.queue_id,\n    p_lead_id: $json.lead_id,\n    p_is_valid: Boolean($json.is_valid),\n    p_subject: $json.draft?.subject || null,\n    p_body: $json.draft?.body || null,\n    p_channel: $json.draft?.channel || \"email\",\n    p_approval_status: $json.approval_status || ($json.is_valid ? \"auto_approved\" : \"blocked\"),\n    p_block_reason: Array.isArray($json.validation_errors) && $json.validation_errors.length > 0\n      ? $json.validation_errors.join(\", \")\n      : ($json.draft?.block_reason || null),\n    p_raw_draft: $json.draft || {}\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        704,
+        -64
+      ],
+      "id": "c871fa48-8154-43c0-ad76-76f3c221af76",
+      "name": "Persistent Draft or Block",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const context = $json || {};\n\nconst prompt = `\nCreate an outreach draft using this context:\n\n${JSON.stringify(context, null, 2)}\n\nReturn this exact JSON shape:\n{\n  \"valid\": true,\n  \"channel\": \"email\",\n  \"subject\": \"\",\n  \"body\": \"\",\n  \"observation_used\": \"\",\n  \"automation_idea\": \"\",\n  \"cta\": \"\",\n  \"risk_notes\": [],\n  \"block_reason\": null\n}\n\nRules:\n- Plain text only.\n- No false claims.\n- Do not invent company facts, metrics, tools, problems, names, clients, locations, or technologies.\n- Use only evidence present in the context.\n- Mention one real observation from the context if available.\n- Mention one specific automation idea tied to the observation.\n- Include one soft CTA.\n- No aggressive sales language.\n- No fake familiarity.\n- No fake case studies.\n- Body under 160 words.\n- Subject under 70 characters.\n- Do not include links unless the outreach step explicitly requires one.\n- If context or evidence is insufficient, return valid=false and explain block_reason.\n`.trim();\n\nreturn {\n  json: {\n    ...context,\n    prompt\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -64
+      ],
+      "id": "1c30d296-8802-4871-a7ac-6e44d0c7d0d3",
+      "name": "Build Draft Prompt"
     }
   ],
   "pinData": {},
@@ -59,7 +170,62 @@
       "main": [
         [
           {
-            "node": "Supabase Source Query",
+            "node": "Select Due Outreach Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Due Outreach Queue": {
+      "main": [
+        [
+          {
+            "node": "Load Draft Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Draft Context": {
+      "main": [
+        [
+          {
+            "node": "Build Draft Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Draft JSON": {
+      "main": [
+        [
+          {
+            "node": "Validate Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Draft": {
+      "main": [
+        [
+          {
+            "node": "Persistent Draft or Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Draft Prompt": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Draft JSON",
             "type": "main",
             "index": 0
           }
@@ -67,12 +233,20 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner"
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "0GodX1BE3sfkBkyP",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "versionId": "587d664f-a44b-5dd4-bd3e-2e6c9d7e2a18",
-  "id": "64550672-f6e3-5efa-aff5-98dc8872c148",
+  "versionId": "84277c23-1dfd-4c03-8768-cb660b7abded",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6d48232f5798c49b6b2edf42231411358c3fe95a04dfbd8d339a054335e6191c"
+  },
+  "id": "rMifTUDQ6CVYr3dI",
   "tags": []
 }

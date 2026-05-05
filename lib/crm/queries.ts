@@ -145,7 +145,7 @@ export async function getCampaignRows() {
       languageOfBusiness: campaign.language_of_business ?? [],
       nicheKeywords: campaign.niche_keywords ?? [],
       maxLeadsPerRun: campaign.max_leads_per_run ?? 100,
-      leadSource: campaign.lead_source ?? "google_maps",
+      leadSource: campaign.lead_source === "google_maps" ? "google_places" : (campaign.lead_source ?? "google_places"),
       runFrequency: campaign.run_frequency ?? "manual",
       nextRunAt: campaign.next_run_at ?? null,
       lastRunAt: campaign.last_run_at ?? null,
@@ -559,6 +559,22 @@ export async function getSettingsData() {
       messages
     }
   };
+}
+
+export async function getLatestNotificationEvent() {
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("notification_events")
+    .select("*")
+    .eq("event_type", "test_notification")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as Record<string, unknown>;
 }
 
 export async function getAnalyticsData(rangeDays = 30, from?: string, to?: string) {
