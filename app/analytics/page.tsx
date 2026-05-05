@@ -2,14 +2,14 @@ import { PageHeader } from "@/components/crm/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { getAnalyticsData } from "@/lib/crm/queries";
 import { AnalyticsFilters } from "@/components/crm/analytics-filters";
-import { DailyRollupChart, SequenceFunnelChart, ReplyBreakdownDonut, NichePerformanceBar } from "@/components/crm/analytics-charts";
+import { CountryPerformanceBar, DailyRollupChart, SequenceFunnelChart, ReplyBreakdownDonut, NichePerformanceBar } from "@/components/crm/analytics-charts";
 
 export default async function AnalyticsPage({
   searchParams
 }: Readonly<{
   searchParams?: { days?: string; from?: string; to?: string };
 }>) {
-  const days = Math.max(7, Math.min(90, Number(searchParams?.days ?? "30") || 30));
+  const days = searchParams?.days === "all" ? 3650 : Math.max(7, Math.min(90, Number(searchParams?.days ?? "30") || 30));
   const from = searchParams?.from;
   const to = searchParams?.to;
 
@@ -76,6 +76,35 @@ export default async function AnalyticsPage({
         </section>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <section className="panel glass-panel">
+          <div className="panel-header"><h2>Performance by Country</h2></div>
+          <CountryPerformanceBar data={analytics.performanceByCountry} />
+        </section>
+        <section className="panel glass-panel">
+          <div className="panel-header"><h2>Weekly snapshot</h2></div>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead><tr><th>Week</th><th>Leads</th><th>Emails</th><th>Replies</th><th>Positive</th></tr></thead>
+              <tbody>
+                {analytics.weeklySnapshot.map((week) => (
+                  <tr key={week.week}>
+                    <td className="mono">{week.week}</td>
+                    <td className="mono">{week.leads}</td>
+                    <td className="mono">{week.emails}</td>
+                    <td className="mono">{week.replies}</td>
+                    <td className="mono">{week.positive}</td>
+                  </tr>
+                ))}
+                {analytics.weeklySnapshot.length === 0 ? (
+                  <tr><td colSpan={5} className="muted text-center">No weekly activity in this range.</td></tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
       <section className="panel glass-panel mt-6">
         <div className="panel-header"><h2>Campaign performance</h2></div>
         <div className="table-wrap">
@@ -100,6 +129,9 @@ export default async function AnalyticsPage({
                   <td className="mono font-bold text-emerald-400">{campaign.reply_rate ?? 0}%</td>
                 </tr>
               ))}
+              {analytics.campaigns.length === 0 ? (
+                <tr><td colSpan={8} className="muted text-center">No campaign analytics are available yet.</td></tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -123,6 +155,9 @@ export default async function AnalyticsPage({
                     <td className="mono text-xs text-emerald-400">{row.positive_replies ?? 0}</td>
                   </tr>
                 ))}
+                {analytics.daily.length === 0 ? (
+                  <tr><td colSpan={6} className="muted text-center">No daily rollup rows for this range.</td></tr>
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -144,6 +179,9 @@ export default async function AnalyticsPage({
                     <td className="mono text-xs font-bold text-emerald-400">{step.reply_rate ?? 0}%</td>
                   </tr>
                 ))}
+                {analytics.sequenceFunnel.length === 0 ? (
+                  <tr><td colSpan={6} className="muted text-center">No sequence steps have sent yet.</td></tr>
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -152,4 +190,3 @@ export default async function AnalyticsPage({
     </>
   );
 }
-

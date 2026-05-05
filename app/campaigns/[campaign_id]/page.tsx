@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { triggerCampaignManualRun, updateCampaignStatus } from "../actions";
 import { EditCampaignForm } from "../edit-campaign-form";
-import { getCampaignDetailData } from "@/lib/crm/queries";
+import { getCampaignDetailData, getSettingsData } from "@/lib/crm/queries";
 
 export default async function CampaignDetailPage({
   params,
@@ -13,7 +13,10 @@ export default async function CampaignDetailPage({
   params: { campaign_id: string };
   searchParams?: { tab?: string };
 }>) {
-  const detail = await getCampaignDetailData(params.campaign_id);
+  const [detail, settings] = await Promise.all([
+    getCampaignDetailData(params.campaign_id),
+    getSettingsData()
+  ]);
   if (!detail) notFound();
   const tab = searchParams?.tab ?? "overview";
 
@@ -123,7 +126,7 @@ export default async function CampaignDetailPage({
         <section className="panel">
           <div className="panel-header"><h2>Edit campaign</h2></div>
           <div className="panel-body">
-            <EditCampaignForm campaign={detail.campaign as any} />
+            <EditCampaignForm campaign={detail.campaign as any} sequences={settings.sequences as any} inboxes={settings.inboxes as any} />
           </div>
         </section>
       ) : null}

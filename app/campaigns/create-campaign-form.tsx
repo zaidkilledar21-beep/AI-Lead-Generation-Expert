@@ -44,7 +44,15 @@ const previewSchema = z.object({
 
 type PreviewData = z.infer<typeof previewSchema>;
 
-export function CreateCampaignForm() {
+type CampaignOption = { id: string; name?: string; band?: string; email_address?: string };
+
+export function CreateCampaignForm({
+  sequences = [],
+  inboxes = []
+}: Readonly<{
+  sequences?: CampaignOption[];
+  inboxes?: CampaignOption[];
+}>) {
   const [state, action] = useFormState(createCampaign, { error: null as string | null });
   const [currentStep, setCurrentStep] = useState(1);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
@@ -165,7 +173,12 @@ export function CreateCampaignForm() {
                   </label>
                   <label className="field-group">
                     <span className="field-label">Assigned inbox</span>
-                    <input name="assigned_inbox_id" placeholder="Inbox UUID or leave blank" className="field" />
+                    <select name="assigned_inbox_id" defaultValue="" className="field cursor-pointer">
+                      <option value="">No fixed inbox</option>
+                      {inboxes.map((inbox) => (
+                        <option key={inbox.id} value={inbox.id}>{inbox.email_address ?? inbox.id}</option>
+                      ))}
+                    </select>
                   </label>
                   <label className="field-group">
                     <span className="field-label">Internal tags</span>
@@ -246,7 +259,10 @@ export function CreateCampaignForm() {
                   </label>
                   <label className="field-group">
                     <span className="field-label">Sequence for Band A</span>
-                    <input name="sequence_band_a" placeholder="UUID or leave blank" className="field" />
+                    <select name="sequence_band_a" defaultValue="" className="field cursor-pointer">
+                      <option value="">Default workflow routing</option>
+                      {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
+                    </select>
                   </label>
                   <label className="field-group">
                     <span className="field-label">Min score for Band B</span>
@@ -254,11 +270,17 @@ export function CreateCampaignForm() {
                   </label>
                   <label className="field-group">
                     <span className="field-label">Sequence for Band B</span>
-                    <input name="sequence_band_b" placeholder="UUID or leave blank" className="field" />
+                    <select name="sequence_band_b" defaultValue="" className="field cursor-pointer">
+                      <option value="">Default workflow routing</option>
+                      {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
+                    </select>
                   </label>
                   <label className="field-group">
                     <span className="field-label">Sequence for Band C</span>
-                    <input name="sequence_band_c" placeholder="UUID or leave blank" className="field" />
+                    <select name="sequence_band_c" defaultValue="" className="field cursor-pointer">
+                      <option value="">Default workflow routing</option>
+                      {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
+                    </select>
                   </label>
                   <label className="field-group">
                     <span className="field-label">Confidence required</span>

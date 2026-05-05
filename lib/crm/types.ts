@@ -131,6 +131,21 @@ export interface NicheData {
   positive: number;
 }
 
+export interface CountryData {
+  country: string;
+  leads: number;
+  replies: number;
+  positive: number;
+}
+
+export interface WeeklySnapshot {
+  week: string;
+  leads: number;
+  emails: number;
+  replies: number;
+  positive: number;
+}
+
 export interface LeadProfile {
   user_id: string;
   display_name: string;

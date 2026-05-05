@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/crm/page-header";
-import { updateFounderProfileAction } from "../actions";
+import { sendTestNotificationAction, updateFounderProfileAction } from "../actions";
 import { getSettingsData } from "@/lib/crm/queries";
 
 export default async function NotificationsSettingsPage() {
@@ -41,8 +41,21 @@ export default async function NotificationsSettingsPage() {
                 <input name="weeklyReport" type="checkbox" value="true" defaultChecked={preferences.weekly_report ?? true} />
                 <span>Weekly report</span>
               </label>
+              <label className="checkbox-row">
+                <input name="draftApprovals" type="checkbox" value="true" defaultChecked={preferences.draft_approvals ?? true} />
+                <span>Draft approvals</span>
+              </label>
+              <label className="checkbox-row">
+                <input name="sendFailures" type="checkbox" value="true" defaultChecked={preferences.send_failures ?? true} />
+                <span>Send failures</span>
+              </label>
             </div>
-            <button className="ui-button ui-button-primary" type="submit">Save notification settings</button>
+            <div className="button-row">
+              <button className="ui-button ui-button-primary" type="submit">Save notification settings</button>
+            </div>
+          </form>
+          <form action={sendTestNotificationAction} className="mt-4">
+            <button className="ui-button ui-button-secondary" type="submit">Queue test notification check</button>
           </form>
         </div>
       </section>

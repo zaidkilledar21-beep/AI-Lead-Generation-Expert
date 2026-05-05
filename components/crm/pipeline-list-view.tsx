@@ -3,12 +3,42 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge, bandTone } from "@/components/ui/badge";
 import { ScoreBar } from "@/components/ui/score-bar";
-import { approveLeadAction, changeLeadStatusAction, bulkApproveLeadsAction, bulkChangeLeadStatusAction } from "@/lib/crm/actions";
+import { approveLeadAction, changeLeadStatusAction, bulkApproveLeadsAction, bulkAssignLeadsAction, bulkChangeLeadStatusAction } from "@/lib/crm/actions";
 import { useLeadSelection } from "@/lib/hooks/use-lead-selection";
 import { isTerminalLeadStatus } from "@/lib/crm/status-contract";
 import { useTransition } from "react";
 
-export function PipelineListView({ filtered }: Readonly<{ filtered: any[] }>) {
+type FounderProfile = {
+  user_id: string;
+  display_name: string;
+};
+
+function exportRows(rows: any[]) {
+  const headers = ["Business", "Email", "Phone", "Status", "Band", "Score", "Campaign", "Owner", "Country", "City"];
+  const csvRows = rows.map((row) => [
+    row.businessName,
+    row.email,
+    row.phone,
+    row.status,
+    row.effectiveBand,
+    row.score,
+    row.campaignName,
+    row.assignedTo,
+    row.country,
+    row.city
+  ]);
+  const escape = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+  const csv = [headers, ...csvRows].map((row) => row.map(escape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `synqro-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: any[]; profiles: FounderProfile[] }>) {
   const { selectedArray, toggleSelection, toggleAll, clearSelection, isSelected, isAllSelected, count } = useLeadSelection(filtered);
   const [isPending, startTransition] = useTransition();
 
@@ -25,6 +55,15 @@ export function PipelineListView({ filtered }: Readonly<{ filtered: any[] }>) {
       clearSelection();
     });
   };
+
+  const handleBulkAssign = (assignedTo: string) => {
+    startTransition(async () => {
+      await bulkAssignLeadsAction(selectedArray, assignedTo || null);
+      clearSelection();
+    });
+  };
+
+  const selectedRows = filtered.filter((row) => selectedArray.includes(row.id));
 
   return (
     <section className="glass-panel overflow-hidden relative">
@@ -62,6 +101,27 @@ export function PipelineListView({ filtered }: Readonly<{ filtered: any[] }>) {
               >
                 Archive Selected
               </button>
+              <select
+                disabled={isPending}
+                defaultValue=""
+                onChange={(event) => {
+                  handleBulkAssign(event.target.value);
+                  event.currentTarget.value = "";
+                }}
+                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white/80 disabled:opacity-50"
+              >
+                <option value="">Assign selected...</option>
+                <option value="">Unassigned</option>
+                {profiles.map((profile) => (
+                  <option key={profile.user_id} value={profile.display_name}>{profile.display_name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => exportRows(selectedRows)}
+                className="px-4 py-2 text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 rounded-lg transition-colors border border-white/10"
+              >
+                Export CSV
+              </button>
             </div>
           </motion.div>
         )}
@@ -93,6 +153,13 @@ export function PipelineListView({ filtered }: Readonly<{ filtered: any[] }>) {
             </tr>
           </thead>
           <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="p-10 text-center text-white/40">
+                  No leads match the current filters.
+                </td>
+              </tr>
+            ) : null}
             {filtered.map((row, i) => {
               const isTerminal = isTerminalLeadStatus(row.status);
               const canApprove = !isTerminal && !row.approvedForOutreach && row.status !== "replied_interested";

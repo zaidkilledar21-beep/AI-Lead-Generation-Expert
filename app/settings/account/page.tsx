@@ -30,6 +30,8 @@ export default async function AccountSettingsPage() {
             <input type="hidden" name="positiveReplies" value="true" />
             <input type="hidden" name="reviewBacklog" value="true" />
             <input type="hidden" name="weeklyReport" value="true" />
+            <input type="hidden" name="draftApprovals" value="true" />
+            <input type="hidden" name="sendFailures" value="true" />
             <button className="ui-button ui-button-primary" type="submit">Save profile</button>
           </form>
         </div>

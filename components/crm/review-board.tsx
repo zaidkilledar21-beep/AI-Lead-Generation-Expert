@@ -4,11 +4,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-// Assuming completeReviewAction can be imported directly in a client component in Next 14+
-import { completeReviewAction } from "@/lib/crm/actions";
+import { completeReviewQueueItemAction } from "@/lib/crm/actions";
 
 interface ReviewItem {
   id: string;
+  source: "manual_review" | "email_draft" | "reply_event";
+  sourceId: string;
+  draftId?: string;
+  replyEventId?: string;
   leadId: string;
   businessName: string;
   reason: string;
@@ -17,6 +20,13 @@ interface ReviewItem {
   city?: string;
   country?: string;
   leadStatus?: string;
+  band?: string | null;
+  score?: number | null;
+  campaignName?: string | null;
+  replyExcerpt?: string | null;
+  draftSubject?: string | null;
+  draftPreview?: string | null;
+  intent?: string | null;
 }
 
 function decisionVariant(decision: string) {
@@ -29,6 +39,12 @@ const reviewDecisions = [
   { value: "approved", label: "Approve for outreach" },
   { value: "rejected", label: "Reject / archive" }
 ] as const;
+
+function sourceLabel(source: ReviewItem["source"]) {
+  if (source === "email_draft") return "Draft approval";
+  if (source === "reply_event") return "Reply review";
+  return "Manual review";
+}
 
 export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
   const [selectedId, setSelectedId] = useState<string | null>(items[0]?.id || null);
@@ -77,6 +93,9 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                           {item.priority}
                         </Badge>
                       </div>
+                      <div className="mb-2">
+                        <Badge tone="info">{sourceLabel(item.source)}</Badge>
+                      </div>
                       <p className="text-sm text-zinc-400 line-clamp-2 mb-2">{item.reason}</p>
                       <div className="text-xs font-mono text-zinc-500">
                         {item.createdAt ? new Date(item.createdAt).toLocaleString() : "--"}
@@ -111,10 +130,28 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       <Badge tone={selected.priority === "urgent" || selected.priority === "high" ? "danger" : "warning"}>
                         {selected.priority}
                       </Badge>
+                      <Badge tone="info">{sourceLabel(selected.source)}</Badge>
                       {selected.leadStatus ? <Badge tone="muted">{selected.leadStatus}</Badge> : null}
+                      {selected.band ? <Badge tone="muted">Band {selected.band}</Badge> : null}
                     </div>
                     <div className="text-zinc-300 mb-4 bg-black/20 p-4 rounded-lg border border-white/5">
                       {selected.reason}
+                    </div>
+                    {selected.draftSubject ? (
+                      <div className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5">
+                        <strong className="block text-zinc-200 mb-2">{selected.draftSubject}</strong>
+                        <p className="line-clamp-4 whitespace-pre-wrap">{selected.draftPreview ?? "No draft body stored."}</p>
+                      </div>
+                    ) : null}
+                    {selected.replyExcerpt ? (
+                      <div className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5">
+                        <strong className="block text-zinc-200 mb-2">{selected.intent ?? "Reply"}</strong>
+                        <p className="line-clamp-4 whitespace-pre-wrap">{selected.replyExcerpt}</p>
+                      </div>
+                    ) : null}
+                    <div className="grid grid-cols-2 gap-3 text-sm text-zinc-500 mb-4">
+                      <div>Score: <span className="text-zinc-300">{selected.score ?? "--"}</span></div>
+                      <div>Campaign: <span className="text-zinc-300">{selected.campaignName ?? "--"}</span></div>
                     </div>
                     <div className="text-sm text-zinc-500 flex items-center gap-2">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -123,9 +160,10 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                    {reviewDecisions.map((decision) => (
-                      <form action={completeReviewAction} key={decision.value} className="flex-1">
-                        <input type="hidden" name="reviewId" value={selected.id} />
+                    {selected.source === "manual_review" ? reviewDecisions.map((decision) => (
+                      <form action={completeReviewQueueItemAction} key={decision.value} className="flex-1">
+                        <input type="hidden" name="source" value={selected.source} />
+                        <input type="hidden" name="reviewId" value={selected.sourceId} />
                         <input type="hidden" name="leadId" value={selected.leadId} />
                         <input type="hidden" name="decision" value={decision.value} />
                         <Button 
@@ -136,8 +174,59 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                           {decision.label}
                         </Button>
                       </form>
-                    ))}
+                    )) : null}
+                    {selected.source === "email_draft" ? (
+                      <>
+                        <form action={completeReviewQueueItemAction} className="flex-1">
+                          <input type="hidden" name="source" value={selected.source} />
+                          <input type="hidden" name="draftId" value={selected.sourceId} />
+                          <input type="hidden" name="leadId" value={selected.leadId} />
+                          <input type="hidden" name="decision" value="approved" />
+                          <Button type="submit" className="w-full shadow-lg">Approve draft</Button>
+                        </form>
+                        <form action={completeReviewQueueItemAction} className="flex-1">
+                          <input type="hidden" name="source" value={selected.source} />
+                          <input type="hidden" name="draftId" value={selected.sourceId} />
+                          <input type="hidden" name="leadId" value={selected.leadId} />
+                          <input type="hidden" name="decision" value="rejected" />
+                          <input type="hidden" name="reason" value="Rejected from review queue" />
+                          <Button type="submit" variant="danger" className="w-full shadow-lg">Reject draft</Button>
+                        </form>
+                      </>
+                    ) : null}
+                    {selected.source === "reply_event" ? (
+                      <>
+                        <form action={completeReviewQueueItemAction} className="flex-1">
+                          <input type="hidden" name="source" value={selected.source} />
+                          <input type="hidden" name="replyEventId" value={selected.sourceId} />
+                          <input type="hidden" name="leadId" value={selected.leadId} />
+                          <input type="hidden" name="decision" value="handled" />
+                          <Button type="submit" variant="secondary" className="w-full shadow-lg">Mark handled</Button>
+                        </form>
+                        <form action={completeReviewQueueItemAction} className="flex-1">
+                          <input type="hidden" name="source" value={selected.source} />
+                          <input type="hidden" name="replyEventId" value={selected.sourceId} />
+                          <input type="hidden" name="leadId" value={selected.leadId} />
+                          <input type="hidden" name="outcome" value="won" />
+                          <input type="hidden" name="decision" value="won" />
+                          <Button type="submit" className="w-full shadow-lg">Mark won</Button>
+                        </form>
+                        <form action={completeReviewQueueItemAction} className="flex-1">
+                          <input type="hidden" name="source" value={selected.source} />
+                          <input type="hidden" name="replyEventId" value={selected.sourceId} />
+                          <input type="hidden" name="leadId" value={selected.leadId} />
+                          <input type="hidden" name="outcome" value="lost" />
+                          <input type="hidden" name="decision" value="lost" />
+                          <Button type="submit" variant="danger" className="w-full shadow-lg">Mark lost</Button>
+                        </form>
+                      </>
+                    ) : null}
                   </div>
+                  {selected.source === "reply_event" ? (
+                    <a className="ui-button ui-button-secondary w-full text-center mt-2" href={`/inbox?tab=review&thread=${selected.sourceId}`}>
+                      Open inbox thread
+                    </a>
+                  ) : null}
                   
                   <a className="ui-button ui-button-secondary w-full text-center mt-2" href={`/pipeline/${selected.leadId}`}>
                     Open full lead record

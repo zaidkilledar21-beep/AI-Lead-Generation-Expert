@@ -1,5 +1,6 @@
 import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
-import type { AnalyticsCampaign, AnalyticsDaily, AnalyticsSequenceStep, IntentData, NicheData, LeadProfile } from "@/lib/crm/types";
+import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
+import type { AnalyticsCampaign, AnalyticsDaily, AnalyticsSequenceStep, CountryData, IntentData, NicheData, LeadProfile, WeeklySnapshot } from "@/lib/crm/types";
 
 /** Safely coerce an `unknown` DB value to string. Objects would produce `[object Object]` via String(), so we guard against that. */
 function toStr(value: unknown, fallback = ""): string {
@@ -74,18 +75,19 @@ export async function getCrmHomeMetrics() {
     ];
   }
 
-  const [{ count: pipeline }, { count: priority }, { count: replies }, { count: reviews }] = await Promise.all([
+  const [{ count: pipeline }, { count: priority }, { count: replies }, { count: manualReviews }, { count: draftReviews }] = await Promise.all([
     supabase.from("leads").select("*", { count: "exact", head: true }),
     supabase.from("lead_scores").select("*", { count: "exact", head: true }).in("band", ["A", "B"]),
     supabase.from("reply_events").select("*", { count: "exact", head: true }).eq("requires_human_review", true),
-    supabase.from("manual_review_queue").select("*", { count: "exact", head: true }).eq("review_status", "pending")
+    supabase.from("manual_review_queue").select("*", { count: "exact", head: true }).eq("review_status", "pending"),
+    supabase.from("email_drafts").select("*", { count: "exact", head: true }).eq("approval_status", "pending").eq("sent", false)
   ]);
 
   return [
     { label: "Pipeline", value: pipeline ?? 0 },
     { label: "Priority Leads", value: priority ?? 0 },
     { label: "Unhandled Replies", value: replies ?? 0 },
-    { label: "Open Reviews", value: reviews ?? 0 }
+    { label: "Open Reviews", value: (manualReviews ?? 0) + (draftReviews ?? 0) }
   ];
 }
 
@@ -336,29 +338,118 @@ export async function getReviewItems() {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return [];
 
-  const { data } = await supabase
-    .from("manual_review_queue")
-    .select("*,leads(business_name,niche,country,city,status)")
-    .eq("review_status", "pending")
-    .order("created_at", { ascending: true });
+  const [pipelineRows, { data: manualReviews }, { data: drafts }, { data: replies }] = await Promise.all([
+    getPipelineRows(500),
+    supabase
+      .from("manual_review_queue")
+      .select("*,leads(business_name,niche,country,city,status)")
+      .eq("review_status", "pending")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("email_drafts")
+      .select("*,leads(business_name,niche,country,city,status)")
+      .eq("approval_status", "pending")
+      .eq("sent", false)
+      .order("created_at", { ascending: true })
+      .limit(100),
+    supabase
+      .from("inbox_reply_view")
+      .select("*")
+      .is("handled_at", null)
+      .order("reply_received_at", { ascending: true })
+      .limit(100)
+  ]);
 
-  return asArray(data as Array<Record<string, any>>).map((item) => {
+  const pipelineByLeadId = new Map(pipelineRows.map((row) => [row.id, row]));
+  const importantReplyIntents = new Set([
+    ...POSITIVE_REPLY_INTENTS,
+    ...OBJECTION_REPLY_INTENTS,
+    "ambiguous",
+    "manual_review_required"
+  ]);
+
+  const manualItems = asArray(manualReviews as Array<Record<string, any>>).map((item) => {
     const lead = relationOne<Record<string, any>>(item.leads);
+    const pipeline = pipelineByLeadId.get(item.lead_id);
     return {
-      id: item.id,
+      id: `manual-${item.id}`,
+      source: "manual_review" as const,
+      sourceId: item.id,
       leadId: item.lead_id,
       businessName: lead?.business_name ?? "Unknown lead",
-      niche: lead?.niche ?? null,
-      country: lead?.country ?? null,
-      city: lead?.city ?? null,
+      niche: lead?.niche ?? pipeline?.niche ?? null,
+      country: lead?.country ?? pipeline?.country ?? null,
+      city: lead?.city ?? pipeline?.city ?? null,
       leadStatus: lead?.status ?? null,
       reason: item.reason ?? "Manual review required",
       priority: item.priority ?? "normal",
       reviewStatus: item.review_status,
       notes: item.review_notes ?? null,
+      band: pipeline?.effectiveBand ?? null,
+      score: pipeline?.score ?? null,
+      campaignName: pipeline?.campaignName ?? null,
       createdAt: item.created_at ?? null
     };
   });
+
+  const draftItems = asArray(drafts as Array<Record<string, any>>).map((item) => {
+    const lead = relationOne<Record<string, any>>(item.leads);
+    const pipeline = pipelineByLeadId.get(item.lead_id);
+    return {
+      id: `draft-${item.id}`,
+      source: "email_draft" as const,
+      sourceId: item.id,
+      draftId: item.id,
+      leadId: item.lead_id,
+      businessName: lead?.business_name ?? pipeline?.businessName ?? "Unknown lead",
+      niche: lead?.niche ?? pipeline?.niche ?? null,
+      country: lead?.country ?? pipeline?.country ?? null,
+      city: lead?.city ?? pipeline?.city ?? null,
+      leadStatus: lead?.status ?? pipeline?.status ?? null,
+      reason: "Draft approval pending",
+      priority: pipeline?.effectiveBand === "A" ? "high" : "normal",
+      reviewStatus: item.approval_status ?? "pending",
+      notes: item.block_reason ?? null,
+      band: pipeline?.effectiveBand ?? null,
+      score: pipeline?.score ?? null,
+      campaignName: pipeline?.campaignName ?? null,
+      draftSubject: item.subject ?? item.subject_line ?? "Email draft",
+      draftPreview: item.body ?? item.message_body ?? null,
+      createdAt: item.created_at ?? null
+    };
+  });
+
+  const replyItems = asArray(replies as Array<Record<string, any>>)
+    .filter((item) => Boolean(item.requires_human_review) || importantReplyIntents.has(item.intent_classification ?? ""))
+    .map((item) => {
+      const pipeline = pipelineByLeadId.get(item.lead_id);
+      return {
+        id: `reply-${item.id}`,
+        source: "reply_event" as const,
+        sourceId: item.id,
+        replyEventId: item.id,
+        leadId: item.lead_id,
+        businessName: item.business_name ?? pipeline?.businessName ?? "Unknown lead",
+        niche: pipeline?.niche ?? null,
+        country: pipeline?.country ?? null,
+        city: pipeline?.city ?? null,
+        leadStatus: pipeline?.status ?? null,
+        reason: item.summary ?? item.suggested_next_action ?? "Reply needs founder review",
+        priority: (POSITIVE_REPLY_INTENTS as readonly string[]).includes(item.intent_classification ?? "") ? "urgent" : "high",
+        reviewStatus: "pending",
+        notes: item.suggested_next_action ?? null,
+        band: item.band ?? pipeline?.effectiveBand ?? null,
+        score: pipeline?.score ?? null,
+        campaignName: item.campaign_name ?? pipeline?.campaignName ?? null,
+        replyExcerpt: item.reply_excerpt ?? item.reply_body ?? null,
+        intent: item.intent_classification ?? null,
+        createdAt: item.reply_received_at ?? null
+      };
+    });
+
+  return [...manualItems, ...draftItems, ...replyItems].sort(
+    (a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime()
+  );
 }
 
 export async function getInboxThreads() {
@@ -436,7 +527,7 @@ export async function getSettingsData() {
 export async function getAnalyticsData(rangeDays = 30, from?: string, to?: string) {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) {
-    return { metrics: [], campaigns: [] as AnalyticsCampaign[], daily: [] as AnalyticsDaily[], sequenceFunnel: [] as AnalyticsSequenceStep[], comparison: null, replyIntentBreakdown: [] as IntentData[], performanceByNiche: [] as NicheData[] };
+    return { metrics: [], campaigns: [] as AnalyticsCampaign[], daily: [] as AnalyticsDaily[], sequenceFunnel: [] as AnalyticsSequenceStep[], comparison: null, replyIntentBreakdown: [] as IntentData[], performanceByNiche: [] as NicheData[], performanceByCountry: [] as CountryData[], weeklySnapshot: [] as WeeklySnapshot[] };
   }
 
   const end = to ? new Date(to) : new Date();
@@ -454,13 +545,14 @@ export async function getAnalyticsData(rangeDays = 30, from?: string, to?: strin
   const prevSince = prevStart.toISOString().slice(0, 10);
   const prevUntil = prevEnd.toISOString().slice(0, 10);
 
-  const [homeMetrics, campaigns, daily, prevDaily, sequenceFunnel, replies] = await Promise.all([
+  const [homeMetrics, campaigns, daily, prevDaily, sequenceFunnel, replies, pipelineRows] = await Promise.all([
     getCrmHomeMetrics(),
     supabase.from("campaign_analytics").select("*").order("reply_rate", { ascending: false }),
     supabase.from("analytics_daily_rollup").select("*").gte("metric_date", since).lte("metric_date", until).order("metric_date"),
     supabase.from("analytics_daily_rollup").select("*").gte("metric_date", prevSince).lte("metric_date", prevUntil).order("metric_date"),
     supabase.from("sequence_step_funnel").select("*").order("band").order("step_number"),
-    supabase.from("reply_events").select("intent_classification").gte("reply_received_at", since).lte("reply_received_at", until)
+    supabase.from("reply_events").select("intent_classification").gte("reply_received_at", since).lte("reply_received_at", until),
+    getPipelineRows(1000)
   ]);
 
   const currentStats = asArray(daily.data as any[]).reduce((acc, curr) => ({
@@ -498,6 +590,29 @@ export async function getAnalyticsData(rangeDays = 30, from?: string, to?: strin
   }, {} as Record<string, any>);
 
   const performanceByNiche = Object.values(nicheMap).sort((a: any, b: any) => b.leads - a.leads);
+  const countryMap = (pipelineRows as Array<Record<string, any>>).reduce((acc, curr) => {
+    const key = curr.country || "Unknown";
+    if (!acc[key]) acc[key] = { country: key, leads: 0, replies: 0, positive: 0 };
+    acc[key].leads += 1;
+    acc[key].replies += Number(curr.replyCount || 0);
+    if ((POSITIVE_REPLY_INTENTS as readonly string[]).includes(curr.latestReplyIntent ?? "")) acc[key].positive += 1;
+    return acc;
+  }, {} as Record<string, CountryData>);
+  const performanceByCountry = Object.values(countryMap).sort((a, b) => b.leads - a.leads);
+
+  const weeklyMap = asArray(daily.data as Array<Record<string, any>>).reduce((acc, curr) => {
+    const date = new Date(curr.metric_date);
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - date.getDay());
+    const key = weekStart.toISOString().slice(0, 10);
+    if (!acc[key]) acc[key] = { week: key, leads: 0, emails: 0, replies: 0, positive: 0 };
+    acc[key].leads += Number(curr.leads_discovered || 0);
+    acc[key].emails += Number(curr.emails_sent || 0);
+    acc[key].replies += Number(curr.replies || 0);
+    acc[key].positive += Number(curr.positive_replies || 0);
+    return acc;
+  }, {} as Record<string, WeeklySnapshot>);
+  const weeklySnapshot = Object.values(weeklyMap).sort((a, b) => a.week.localeCompare(b.week));
 
   return {
     metrics: homeMetrics,
@@ -537,6 +652,8 @@ export async function getAnalyticsData(rangeDays = 30, from?: string, to?: strin
     },
     replyIntentBreakdown: replyIntentBreakdown as IntentData[],
     performanceByNiche: performanceByNiche as NicheData[],
+    performanceByCountry,
+    weeklySnapshot,
   };
 }
 

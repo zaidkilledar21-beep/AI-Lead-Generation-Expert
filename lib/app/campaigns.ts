@@ -92,6 +92,48 @@ export async function updateCrmCampaignStatus(campaignId: string, status: Campai
   });
 }
 
+export async function duplicateCrmCampaign(campaignId: string) {
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+  const { data: campaign, error: loadError } = await supabase.from("campaigns").select("*").eq("id", campaignId).maybeSingle();
+  if (loadError) throw new Error(loadError.message);
+  if (!campaign) throw new Error("Campaign not found");
+
+  const {
+    id: _id,
+    created_at: _createdAt,
+    updated_at: _updatedAt,
+    last_run_at: _lastRunAt,
+    next_run_at: _nextRunAt,
+    last_manual_run_requested_at: _manualRunAt,
+    last_manual_run_requested_by: _manualRunBy,
+    ...copy
+  } = campaign as Record<string, unknown>;
+
+  const { data, error } = await supabase
+    .from("campaigns")
+    .insert({
+      ...copy,
+      name: `${String(campaign.name ?? "Campaign")} Copy`,
+      status: "draft",
+      created_by: actor.userId,
+      next_run_at: null
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "campaign_created",
+    campaignId: data.id,
+    detail: { copied_from: campaignId, name: campaign.name }
+  });
+
+  return data.id as string;
+}
+
 export async function markCampaignManualRunRequested(campaignId: string) {
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();

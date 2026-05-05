@@ -16,7 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import { GlassTooltip } from "@/components/ui/glass-tooltip";
-import type { IntentData, NicheData, AnalyticsDaily, AnalyticsSequenceStep } from "@/lib/crm/types";
+import type { CountryData, IntentData, NicheData, AnalyticsDaily, AnalyticsSequenceStep } from "@/lib/crm/types";
 
 const COLORS = ["#8251EE", "#10B981", "#F59E0B", "#EF4444", "#3B82F6", "#EC4899"];
 
@@ -54,6 +54,8 @@ export const DailyRollupChart = memo(function DailyRollupChart({ data }: Readonl
     // Sort chronologically and return
     return [...rollup].sort((a, b) => new Date(a.metric_date).getTime() - new Date(b.metric_date).getTime());
   }, [data]);
+
+  if (aggregatedData.length === 0) return <EmptyChart label="No daily rollup data for this range." />;
 
   return (
     <div className="h-[300px] w-full mt-4">
@@ -117,6 +119,8 @@ export const SequenceFunnelChart = memo(function SequenceFunnelChart({ data }: R
     sequence_name: d.sequence_name,
   })), [data]);
 
+  if (chartData.length === 0) return <EmptyChart label="No sequence funnel data yet." />;
+
   return (
     <div className="h-[300px] w-full mt-4">
       <ResponsiveContainer width="100%" height="100%">
@@ -139,6 +143,8 @@ export const ReplyBreakdownDonut = memo(function ReplyBreakdownDonut({ data }: R
     () => data.map((entry, i) => ({ ...entry, fill: COLORS[i % COLORS.length] })),
     [data]
   );
+
+  if (coloredData.length === 0) return <EmptyChart label="No replies in this range." />;
 
   return (
     <div className="h-[300px] w-full mt-4">
@@ -174,6 +180,8 @@ export const NichePerformanceBar = memo(function NichePerformanceBar({ data }: R
     positive: d.positive,
   })), [data]);
 
+  if (chartData.length === 0) return <EmptyChart label="No niche performance data yet." />;
+
   return (
     <div className="h-[300px] w-full mt-4">
       <ResponsiveContainer width="100%" height="100%">
@@ -198,4 +206,37 @@ export const NichePerformanceBar = memo(function NichePerformanceBar({ data }: R
   );
 });
 
+function EmptyChart({ label }: Readonly<{ label: string }>) {
+  return (
+    <div className="h-[300px] w-full mt-4 rounded-xl border border-dashed border-white/10 flex items-center justify-center text-sm text-white/35">
+      {label}
+    </div>
+  );
+}
+
+export const CountryPerformanceBar = memo(function CountryPerformanceBar({ data }: Readonly<{ data: CountryData[] }>) {
+  const chartData = useMemo(() => data.slice(0, 8).map((item) => ({
+    name: item.country,
+    leads: item.leads,
+    replies: item.replies,
+    positive: item.positive
+  })), [data]);
+
+  if (chartData.length === 0) return <EmptyChart label="No country performance data yet." />;
+
+  return (
+    <div className="h-[300px] w-full mt-4">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart layout="vertical" data={chartData} margin={{ top: 10, right: 30, left: 40, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" horizontal={true} vertical={false} />
+          <XAxis type="number" stroke="#A1A1AA" fontSize={10} tickLine={false} axisLine={false} />
+          <YAxis type="category" dataKey="name" stroke="#A1A1AA" fontSize={10} tickLine={false} axisLine={false} width={80} />
+          <Tooltip content={<GlassTooltip />} cursor={{ fill: '#27272A', opacity: 0.4 }} />
+          <Bar dataKey="leads" name="Leads" fill="#3B82F6" radius={[0, 4, 4, 0]} animationDuration={1500} barSize={12} />
+          <Bar dataKey="replies" name="Replies" fill="#10B981" radius={[0, 4, 4, 0]} animationDuration={1500} barSize={12} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+});
 

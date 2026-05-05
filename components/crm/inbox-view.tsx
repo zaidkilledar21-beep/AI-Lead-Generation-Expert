@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { markReplyHandledAction, assignLeadAction, closeLeadAction } from "@/lib/crm/actions";
@@ -20,6 +20,11 @@ interface InboxThread {
   summary: string | null;
   suggestedNextAction: string | null;
   aiDraftReply: string | null;
+  campaignName?: string | null;
+  band?: string | null;
+  confidence?: string | null;
+  sentCount?: number;
+  lastSentAt?: string | null;
   leadAssignedTo?: string | null;
   replyAssignedTo?: string | null;
 }
@@ -48,15 +53,24 @@ export function InboxView({
   filtered, 
   selected, 
   tab,
+  query = "",
+  sort = "newest",
   leadDetails,
   profiles = []
 }: Readonly<{ 
   filtered: InboxThread[]; 
   selected: InboxThread | null; 
   tab: string;
+  query?: string;
+  sort?: string;
   leadDetails?: LeadDetails | null;
   profiles?: LeadProfile[];
 }>) {
+  const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+  }, []);
   const messages = useMemo(() => {
     if (!leadDetails?.timeline) return [];
     return [...leadDetails.timeline]
@@ -67,7 +81,21 @@ export function InboxView({
         (item.type === "action" && (item.label.includes("sent") || item.label.includes("outreach")))
       )
       .reverse();
-  }, [leadDetails?.timeline]);
+  }, [leadDetails]);
+
+  const listHref = (threadId: string) => {
+    const params = new URLSearchParams({ tab, thread: threadId });
+    if (query) params.set("q", query);
+    if (sort !== "newest") params.set("sort", sort);
+    return `/inbox?${params.toString()}`;
+  };
+
+  const copyDraft = async () => {
+    if (!selected?.aiDraftReply) return;
+    await navigator.clipboard.writeText(selected.aiDraftReply);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[75vh] min-h-[600px] mt-6">
@@ -90,10 +118,16 @@ export function InboxView({
               if (thread.intent === "out_of_office") intentTone = "warning";
               if (["bounce", "bounce_or_noise"].includes(thread.intent ?? "")) intentTone = "muted";
 
-              // Sentiment indicator
               let sentimentColor = "bg-white/20";
               if (thread.sentiment === "positive") sentimentColor = "bg-emerald-500";
               else if (thread.sentiment === "negative") sentimentColor = "bg-rose-500";
+
+              const relativeTime = thread.receivedAt && now
+                ? new Intl.RelativeTimeFormat(undefined, { numeric: "auto" }).format(
+                    Math.round((new Date(thread.receivedAt).getTime() - now) / 86400000),
+                    "day"
+                  )
+                : (thread.receivedAt ? new Date(thread.receivedAt).toLocaleDateString() : "--");
 
               const assignedInitials = thread.leadAssignedTo 
                 ? thread.leadAssignedTo.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -101,7 +135,7 @@ export function InboxView({
 
               return (
                 <motion.a
-                  href={`/inbox?tab=${tab}&thread=${thread.id}`}
+                  href={listHref(thread.id)}
                   key={thread.id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -124,18 +158,22 @@ export function InboxView({
                         </div>
                       )}
                       <span className="text-[10px] font-mono text-white/40 whitespace-nowrap">
-                        {thread.receivedAt ? new Date(thread.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--"}
+                        {relativeTime}
                       </span>
                     </div>
                   </div>
                   <div className="text-xs text-white/40 truncate mb-3 pl-4">
                     {thread.fromEmail ?? "Unknown sender"}
                   </div>
+                  <div className="text-xs text-white/55 line-clamp-2 mb-3 pl-4">
+                    {thread.excerpt || thread.summary || "No reply excerpt stored."}
+                  </div>
                   <div className="flex justify-between items-center pl-4">
                     <div className="flex gap-1.5">
                       <Badge tone={intentTone} className="text-[10px] px-1.5 py-0 uppercase tracking-tighter">
                         {thread.intent?.replaceAll("_", " ") ?? "unclassified"}
                       </Badge>
+                      {thread.band ? <Badge tone="muted" className="text-[10px] px-1.5 py-0">{thread.band}</Badge> : null}
                     </div>
                     {thread.isUnhandled ? (
                       <div className="flex items-center gap-1">
@@ -164,7 +202,16 @@ export function InboxView({
                 </div>
                 <div>
                   <h2 className="font-medium text-white/90 leading-tight">{selected.businessName}</h2>
-                  <p className="text-xs text-white/40">{selected.fromEmail}</p>
+                  <p className="text-xs text-white/40">
+                    {selected.fromEmail}
+                    {selected.campaignName ? ` · ${selected.campaignName}` : ""}
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-white/35">
+                    <span>{selected.sentCount ?? 0} sent</span>
+                    <span>{selected.lastSentAt ? `last sent ${new Date(selected.lastSentAt).toLocaleDateString()}` : "no sent history"}</span>
+                    {selected.confidence ? <span>confidence {selected.confidence}</span> : null}
+                    <a href={`/pipeline/${selected.leadId}`} className="text-brand hover:text-brand-light">Open lead</a>
+                  </div>
                 </div>
               </div>
               
@@ -253,7 +300,7 @@ export function InboxView({
                     <span className="text-xs font-bold text-brand uppercase tracking-wider">AI Summary</span>
                   </div>
                   <div className="text-sm text-brand-light/70 italic leading-relaxed">
-                    "{selected.summary || "Analyzing thread context..."}"
+                    {selected.summary || "Analyzing thread context..."}
                   </div>
                 </div>
                 
@@ -281,7 +328,14 @@ export function InboxView({
                     </div>
                     <h3 className="font-medium text-brand">AI Draft Reply</h3>
                   </div>
-                  <button className="text-[10px] font-bold text-brand uppercase hover:underline">Copy to clipboard</button>
+                  <button
+                    type="button"
+                    onClick={copyDraft}
+                    disabled={!selected.aiDraftReply}
+                    className="text-[10px] font-bold text-brand uppercase hover:underline disabled:text-white/20 disabled:no-underline"
+                  >
+                    {copied ? "Copied" : "Copy to clipboard"}
+                  </button>
                 </div>
                 <div className="prose prose-invert max-w-none text-brand/80 whitespace-pre-wrap text-sm leading-relaxed">
                   {selected.aiDraftReply ?? "Generating response based on founder profile..."}

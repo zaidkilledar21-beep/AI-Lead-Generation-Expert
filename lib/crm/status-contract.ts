@@ -48,6 +48,13 @@ export const POSITIVE_REPLY_INTENTS = [
   "high_intent"
 ] as const;
 
+export const NEUTRAL_REPLY_INTENTS = [
+  "question",
+  "neutral_question",
+  "ambiguous",
+  "out_of_office"
+] as const;
+
 export const NEGATIVE_REPLY_INTENTS = [
   "not_interested",
   "negative",
@@ -63,6 +70,18 @@ export const OBJECTION_REPLY_INTENTS = [
   "ambiguous",
   "manual_review_required"
 ] as const;
+
+export const MANUAL_BOARD_MOVE_STATUSES = [
+  "paused",
+  "archived",
+  "review_pending",
+  "pending_approval",
+  "closed_won",
+  "closed_lost",
+  "not_interested"
+] as const;
+
+export type ManualBoardMoveStatus = typeof MANUAL_BOARD_MOVE_STATUSES[number];
 
 export const LEAD_STATUS_LABELS: Record<LeadLifecycleStatus, string> = {
   new: "New",
