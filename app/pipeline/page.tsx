@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
+import { CrmSelect } from "@/components/ui/crm-select";
 import { MetricCard } from "@/components/ui/metric-card";
 import { deleteFilterAction, saveFilterAction } from "@/lib/crm/actions";
 import { getCrmHomeMetrics, getPipelineRows, getSavedFilters, getSettingsData } from "@/lib/crm/queries";
@@ -21,8 +22,7 @@ import {
   User, 
   Save, 
   XCircle,
-  Hash,
-  ChevronDown
+  Hash
 } from "lucide-react";
 
 function matchesFilter(row: Awaited<ReturnType<typeof getPipelineRows>>[number], searchParams: Record<string, string | undefined>) {
@@ -129,6 +129,21 @@ export default async function PipelinePage({
   const countries = [...new Set(rows.map((row) => row.country).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const niches = [...new Set(rows.map((row) => row.niche).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const view = resolvedParams.view === "board" ? "board" : "list";
+  const campaignOptions = campaigns.map((row) => ({
+    value: row.campaignId ?? "",
+    label: row.campaignName ?? "Unnamed campaign",
+    description: row.campaignNiche ?? undefined
+  }));
+  const nicheOptions = niches.map((niche) => ({ value: niche, label: niche }));
+  const countryOptions = countries.map((country) => ({ value: country, label: country }));
+  const ownerOptions = [
+    ...settings.profiles.map((profile) => ({ value: profile.display_name, label: profile.display_name })),
+    { value: "unassigned", label: "Unassigned" }
+  ];
+  const statusOptions = [...new Set(rows.map((row) => row.status))].map((status) => ({
+    value: status,
+    label: formatStatusLabel(status)
+  }));
 
   return (
     <>
@@ -228,111 +243,108 @@ export default async function PipelinePage({
               <label htmlFor="filter-band" className="field-label flex items-center gap-2">
                 <Tag className="w-3 h-3" /> Lead Band
               </label>
-              <div className="relative group">
-                <select id="filter-band" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="band" defaultValue={resolvedParams.band ?? ""}>
-                  <option value="">All Bands</option>
-                  {["A", "B", "C", "D"].map((band) => <option key={band} value={band}>Band {band}</option>)}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
-              </div>
+              <CrmSelect
+                name="band"
+                defaultValue={resolvedParams.band ?? ""}
+                placeholder="All Bands"
+                options={["A", "B", "C", "D"].map((band) => ({ value: band, label: `Band ${band}` }))}
+              />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-status" className="field-label flex items-center gap-2">
                 <CheckCircle className="w-3 h-3" /> Lifecycle Status
               </label>
-              <div className="relative group">
-                <select id="filter-status" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="status" defaultValue={resolvedParams.status ?? ""}>
-                  <option value="">All Statuses</option>
-                  {[...new Set(rows.map((row) => row.status))].map((status) => (
-                    <option key={status} value={status}>{formatStatusLabel(status)}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
-              </div>
+              <CrmSelect
+                name="status"
+                defaultValue={resolvedParams.status ?? ""}
+                placeholder="All Statuses"
+                options={statusOptions}
+              />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-campaign" className="field-label flex items-center gap-2">
                 <Briefcase className="w-3 h-3" /> Active Campaign
               </label>
-              <div className="relative group">
-                <select id="filter-campaign" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="campaign" defaultValue={resolvedParams.campaign ?? ""}>
-                  <option value="">All Campaigns</option>
-                  {campaigns.map((row) => <option key={row.campaignId} value={row.campaignId ?? ""}>{row.campaignName}</option>)}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
-              </div>
+              <CrmSelect
+                name="campaign"
+                defaultValue={resolvedParams.campaign ?? ""}
+                placeholder="All Campaigns"
+                emptyState="No campaigns are available in the current pipeline set."
+                options={campaignOptions}
+              />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-niche" className="field-label flex items-center gap-2">
                 <Hash className="w-3 h-3" /> Market Niche
               </label>
-              <div className="relative group">
-                <select id="filter-niche" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="niche" defaultValue={resolvedParams.niche ?? ""}>
-                  <option value="">All Niches</option>
-                  {niches.map((niche) => <option key={niche} value={niche}>{niche}</option>)}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
-              </div>
+              <CrmSelect
+                name="niche"
+                defaultValue={resolvedParams.niche ?? ""}
+                placeholder="All Niches"
+                emptyState="No niches available in the current pipeline set."
+                options={nicheOptions}
+              />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-country" className="field-label flex items-center gap-2">
                 <Globe className="w-3 h-3" /> Geography
               </label>
-              <div className="relative group">
-                <select id="filter-country" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="country" defaultValue={resolvedParams.country ?? ""}>
-                  <option value="">All Countries</option>
-                  {countries.map((country) => <option key={country} value={country}>{country}</option>)}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
-              </div>
+              <CrmSelect
+                name="country"
+                defaultValue={resolvedParams.country ?? ""}
+                placeholder="All Countries"
+                emptyState="No countries available in the current pipeline set."
+                options={countryOptions}
+              />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-reply" className="field-label flex items-center gap-2">
                 <MessageSquare className="w-3 h-3" /> Reply Intent
               </label>
-              <div className="relative group">
-                <select id="filter-reply" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="reply" defaultValue={resolvedParams.reply ?? ""}>
-                  <option value="">Any Intent</option>
-                  <option value="no_reply">No Reply</option>
-                  <option value="has_reply">Has Reply</option>
-                  <option value="positive">Positive Interest</option>
-                  <option value="objection">Objection / Review</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
-              </div>
+              <CrmSelect
+                name="reply"
+                defaultValue={resolvedParams.reply ?? ""}
+                placeholder="Any Intent"
+                options={[
+                  { value: "no_reply", label: "No Reply" },
+                  { value: "has_reply", label: "Has Reply" },
+                  { value: "positive", label: "Positive Interest" },
+                  { value: "objection", label: "Objection / Review" }
+                ]}
+              />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-review" className="field-label flex items-center gap-2">
                 <User className="w-3 h-3" /> Review State
               </label>
-              <div className="relative group">
-                <select id="filter-review" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="review" defaultValue={resolvedParams.review ?? ""}>
-                  <option value="">All States</option>
-                  <option value="pending">Pending</option>
-                  <option value="reviewed">Reviewed</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
-              </div>
+              <CrmSelect
+                name="review"
+                defaultValue={resolvedParams.review ?? ""}
+                placeholder="All States"
+                options={[
+                  { value: "pending", label: "Pending" },
+                  { value: "reviewed", label: "Reviewed" }
+                ]}
+              />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-owner" className="field-label flex items-center gap-2">
                 <User className="w-3 h-3" /> Assigned Owner
               </label>
-              <div className="relative group">
-                <select id="filter-owner" className="field w-full appearance-none bg-black/40 border-white/10 focus:border-brand/50 rounded-lg px-4 py-2.5 text-sm transition-all cursor-pointer" name="assigned" defaultValue={resolvedParams.assigned ?? ""}>
-                  <option value="">All Owners</option>
-                  {settings.profiles.map((profile) => <option key={profile.user_id} value={profile.display_name}>{profile.display_name}</option>)}
-                  <option value="unassigned">Unassigned</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none group-hover:text-white/50 transition-colors" />
-              </div>
+              <CrmSelect
+                name="assigned"
+                defaultValue={resolvedParams.assigned ?? ""}
+                placeholder="All Owners"
+                emptyState="No founder profiles configured."
+                options={ownerOptions}
+              />
             </div>
 
             <div className="field-group">
@@ -357,24 +369,32 @@ export default async function PipelinePage({
 
             <div className="field-group">
               <label htmlFor="filter-sort" className="field-label">Sort</label>
-              <select id="filter-sort" className="field" name="sort" defaultValue={resolvedParams.sort ?? "activity"}>
-                <option value="activity">Last activity</option>
-                <option value="business">Business</option>
-                <option value="score">Score</option>
-                <option value="status">Status</option>
-                <option value="campaign">Campaign</option>
-                <option value="reply">Reply</option>
-                <option value="owner">Owner</option>
-                <option value="created">Created</option>
-              </select>
+              <CrmSelect
+                name="sort"
+                defaultValue={resolvedParams.sort ?? "activity"}
+                options={[
+                  { value: "activity", label: "Last activity" },
+                  { value: "business", label: "Business" },
+                  { value: "score", label: "Score" },
+                  { value: "status", label: "Status" },
+                  { value: "campaign", label: "Campaign" },
+                  { value: "reply", label: "Reply" },
+                  { value: "owner", label: "Owner" },
+                  { value: "created", label: "Created" }
+                ]}
+              />
             </div>
 
             <div className="field-group">
               <label htmlFor="filter-dir" className="field-label">Direction</label>
-              <select id="filter-dir" className="field" name="dir" defaultValue={resolvedParams.dir ?? "desc"}>
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
-              </select>
+              <CrmSelect
+                name="dir"
+                defaultValue={resolvedParams.dir ?? "desc"}
+                options={[
+                  { value: "desc", label: "Descending" },
+                  { value: "asc", label: "Ascending" }
+                ]}
+              />
             </div>
 
             <input type="hidden" name="view" value={view} />

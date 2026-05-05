@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAppActor } from "@/lib/app/auth";
 import { logCrmAction } from "@/lib/app/audit";
 import { approveCrmLeadForOutreach, updateCrmLeadStatus, type DashboardLeadStatus } from "@/lib/app/leads";
+import { updateGlobalOutreachSettings } from "@/lib/app/settings";
 import { MANUAL_BOARD_MOVE_STATUSES, type ManualBoardMoveStatus } from "@/lib/crm/status-contract";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -240,7 +241,7 @@ export async function completeReviewQueueItemAction(formData: FormData) {
   }
 
   if (source === "reply_event") {
-    if (decision === "handled") return markReplyHandledAction(formData);
+    if (decision === "mark_reply_handled") return markReplyHandledAction(formData);
     if (decision === "won" || decision === "lost") return closeLeadAction(formData);
     throw new Error("Unsupported reply review decision");
   }
@@ -379,39 +380,17 @@ export async function deleteFilterAction(formData: FormData) {
 }
 
 export async function toggleGlobalPauseAction() {
-  const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
-  
-  // Get current state
   const { data: current } = await supabase
     .from("app_settings")
     .select("value")
     .eq("key", "global_outreach")
     .maybeSingle();
-    
   const value = current?.value as { paused?: boolean } | null;
   const isCurrentlyPaused = value?.paused ?? true;
   const newPausedState = !isCurrentlyPaused;
-  
-  // Upsert the new state
-  const { error } = await supabase
-    .from("app_settings")
-    .upsert({
-      key: "global_outreach",
-      value: { paused: newPausedState },
-      updated_at: new Date().toISOString()
-    }, { onConflict: "key" });
-    
-  if (error) throw new Error(error.message);
-  
-  await logCrmAction({ 
-    actor, 
-    actionType: newPausedState ? "global_pause_enabled" : "global_pause_disabled", 
-    leadId: null,
-    detail: { paused: newPausedState } 
-  });
-  
-  // Revalidate layout to update the initial state
+
+  await updateGlobalOutreachSettings({ paused: newPausedState });
   revalidatePath("/", "layout");
   revalidatePath("/pipeline");
   revalidatePath("/settings");

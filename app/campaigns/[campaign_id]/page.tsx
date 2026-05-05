@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/crm/page-header";
+import { SettingsDiagnosticsCard } from "@/components/crm/settings-diagnostics-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { triggerCampaignManualRun, updateCampaignStatus } from "../actions";
@@ -36,6 +37,7 @@ export default async function CampaignDetailPage({
           </div>
         }
       />
+      <SettingsDiagnosticsCard diagnostics={settings.diagnostics} title="Campaign edit dependencies" />
 
       <section className="metric-grid">
         <div className="metric-card"><div className="metric-label">Status</div><div className="metric-value"><Badge>{detail.campaign.status}</Badge></div></div>
@@ -126,7 +128,12 @@ export default async function CampaignDetailPage({
         <section className="panel">
           <div className="panel-header"><h2>Edit campaign</h2></div>
           <div className="panel-body">
-            <EditCampaignForm campaign={detail.campaign as any} sequences={settings.sequences as any} inboxes={settings.inboxes as any} />
+            <EditCampaignForm
+              campaign={detail.campaign as any}
+              sequences={settings.sequences as any}
+              inboxes={settings.inboxes as any}
+              profiles={settings.profiles as any}
+            />
           </div>
         </section>
       ) : null}

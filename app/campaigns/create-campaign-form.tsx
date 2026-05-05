@@ -6,6 +6,8 @@ import { createCampaign } from "./actions";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, ChevronLeft, CheckCircle2, Rocket, Target, Settings, Info, AlertCircle } from "lucide-react";
 import { z } from "zod";
+import { CrmSelect } from "@/components/ui/crm-select";
+import { toBandSequenceOptions, toInboxOptions } from "./select-options";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -44,20 +46,26 @@ const previewSchema = z.object({
 
 type PreviewData = z.infer<typeof previewSchema>;
 
-type CampaignOption = { id: string; name?: string; band?: string; email_address?: string };
-
 export function CreateCampaignForm({
   sequences = [],
-  inboxes = []
+  inboxes = [],
+  profiles = []
 }: Readonly<{
-  sequences?: CampaignOption[];
-  inboxes?: CampaignOption[];
+  sequences?: Array<{ id: string; name?: string | null; band?: string | null; active?: boolean }>;
+  inboxes?: Array<{ id: string; email_address?: string | null; provider?: string | null; active?: boolean }>;
+  profiles?: Array<{ user_id: string }>;
 }>) {
   const [state, action] = useFormState(createCampaign, { error: null as string | null });
   const [currentStep, setCurrentStep] = useState(1);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const activeInboxes = inboxes.filter((inbox) => inbox.active === true);
+  const activeSequences = sequences.filter((sequence) => sequence.active === true);
+  const inboxOptions = toInboxOptions(activeInboxes);
+  const bandAOptions = toBandSequenceOptions(activeSequences, "A");
+  const bandBOptions = toBandSequenceOptions(activeSequences, "B");
+  const bandCOptions = toBandSequenceOptions(activeSequences, "C");
   
   // Basic validation before advancing
   const handleNext = () => {
@@ -161,11 +169,15 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Status</span>
-                    <select name="status" defaultValue="draft" className="field cursor-pointer">
-                      <option value="draft">Draft</option>
-                      <option value="active">Active</option>
-                      <option value="paused">Paused</option>
-                    </select>
+                    <CrmSelect
+                      name="status"
+                      defaultValue="draft"
+                      options={[
+                        { value: "draft", label: "Draft", description: "Save configuration without running discovery." },
+                        { value: "active", label: "Active", description: "Allow discovery once the campaign is launched." },
+                        { value: "paused", label: "Paused", description: "Keep the configuration but block execution." }
+                      ]}
+                    />
                   </label>
                   <label className="field-group col-span-2 md:col-span-1 lg:col-span-2">
                     <span className="field-label">Description</span>
@@ -173,12 +185,14 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Assigned inbox</span>
-                    <select name="assigned_inbox_id" defaultValue="" className="field cursor-pointer">
-                      <option value="">No fixed inbox</option>
-                      {inboxes.map((inbox) => (
-                        <option key={inbox.id} value={inbox.id}>{inbox.email_address ?? inbox.id}</option>
-                      ))}
-                    </select>
+                    <CrmSelect
+                      name="assigned_inbox_id"
+                      defaultValue=""
+                      placeholder="No fixed inbox"
+                      emptyState="No sender inboxes configured."
+                      options={inboxOptions}
+                    />
+                    {inboxOptions.length === 0 ? <p className="text-xs text-white/45">No sender inboxes configured. Add and activate one in Settings before locking campaign delivery.</p> : null}
                   </label>
                   <label className="field-group">
                     <span className="field-label">Internal tags</span>
@@ -210,12 +224,16 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Lead source</span>
-                    <select name="lead_source" defaultValue="google_maps" className="field cursor-pointer">
-                      <option value="google_maps">Google Maps</option>
-                      <option value="google_search">Google Search</option>
-                      <option value="directory">Directory</option>
-                      <option value="manual_import">Manual Import</option>
-                    </select>
+                    <CrmSelect
+                      name="lead_source"
+                      defaultValue="google_maps"
+                      options={[
+                        { value: "google_maps", label: "Google Maps", description: "Primary source for local business discovery." },
+                        { value: "google_search", label: "Google Search", description: "Broader search-driven discovery." },
+                        { value: "directory", label: "Directory", description: "Use approved directory sources only." },
+                        { value: "manual_import", label: "Manual Import", description: "Reserved for uploaded or hand-curated leads." }
+                      ]}
+                    />
                   </label>
                   <label className="field-group col-span-2 md:col-span-1 lg:col-span-2">
                     <span className="field-label">Niche keywords</span>
@@ -259,10 +277,14 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Sequence for Band A</span>
-                    <select name="sequence_band_a" defaultValue="" className="field cursor-pointer">
-                      <option value="">Default workflow routing</option>
-                      {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
-                    </select>
+                    <CrmSelect
+                      name="sequence_band_a"
+                      defaultValue=""
+                      placeholder="Default workflow routing"
+                      emptyState="No active Band A sequences found."
+                      options={bandAOptions}
+                    />
+                    {bandAOptions.length === 0 ? <p className="text-xs text-white/45">No active sequences found. Activate at least one outreach sequence to assign Band A routing.</p> : null}
                   </label>
                   <label className="field-group">
                     <span className="field-label">Min score for Band B</span>
@@ -270,25 +292,37 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Sequence for Band B</span>
-                    <select name="sequence_band_b" defaultValue="" className="field cursor-pointer">
-                      <option value="">Default workflow routing</option>
-                      {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
-                    </select>
+                    <CrmSelect
+                      name="sequence_band_b"
+                      defaultValue=""
+                      placeholder="Default workflow routing"
+                      emptyState="No active Band B sequences found."
+                      options={bandBOptions}
+                    />
+                    {bandBOptions.length === 0 ? <p className="text-xs text-white/45">No active sequences found. Activate at least one outreach sequence to assign Band B routing.</p> : null}
                   </label>
                   <label className="field-group">
                     <span className="field-label">Sequence for Band C</span>
-                    <select name="sequence_band_c" defaultValue="" className="field cursor-pointer">
-                      <option value="">Default workflow routing</option>
-                      {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
-                    </select>
+                    <CrmSelect
+                      name="sequence_band_c"
+                      defaultValue=""
+                      placeholder="Default workflow routing"
+                      emptyState="No active Band C sequences found."
+                      options={bandCOptions}
+                    />
+                    {bandCOptions.length === 0 ? <p className="text-xs text-white/45">No active sequences found. Activate at least one outreach sequence to assign Band C routing.</p> : null}
                   </label>
                   <label className="field-group">
                     <span className="field-label">Confidence required</span>
-                    <select name="confidence_required" defaultValue="medium" className="field cursor-pointer">
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                    </select>
+                    <CrmSelect
+                      name="confidence_required"
+                      defaultValue="medium"
+                      options={[
+                        { value: "low", label: "Low", description: "Allow lower-confidence candidates through scoring." },
+                        { value: "medium", label: "Medium", description: "Balanced default for current workflow." },
+                        { value: "high", label: "High", description: "Only admit stronger confidence signals." }
+                      ]}
+                    />
                   </label>
 
                   <div className="col-span-2 md:col-span-1 lg:col-span-2 mt-4">
@@ -333,12 +367,16 @@ export function CreateCampaignForm({
                 <div className="form-grid mb-8">
                   <label className="field-group">
                     <span className="field-label">Run frequency</span>
-                    <select name="run_frequency" defaultValue="manual" className="field cursor-pointer">
-                      <option value="manual">Manual</option>
-                      <option value="daily">Daily</option>
-                      <option value="every_3_days">Every 3 days</option>
-                      <option value="weekly">Weekly</option>
-                    </select>
+                    <CrmSelect
+                      name="run_frequency"
+                      defaultValue="manual"
+                      options={[
+                        { value: "manual", label: "Manual", description: "Founders trigger discovery explicitly." },
+                        { value: "daily", label: "Daily", description: "Run discovery each day." },
+                        { value: "every_3_days", label: "Every 3 days", description: "Reduce volume and pacing pressure." },
+                        { value: "weekly", label: "Weekly", description: "Low-frequency discovery cycle." }
+                      ]}
+                    />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Next scheduled run</span>
@@ -445,6 +483,12 @@ export function CreateCampaignForm({
                     </p>
                   </div>
                 </div>
+
+                {profiles.length === 0 ? (
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-sm text-white/65">
+                    No founder profiles are configured yet. Inbox assignment and ownership surfaces will remain limited until at least one founder profile exists.
+                  </div>
+                ) : null}
 
                 {state?.error ? (
                   <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg mb-6 flex items-center gap-3">

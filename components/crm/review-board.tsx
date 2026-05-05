@@ -200,7 +200,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                           <input type="hidden" name="source" value={selected.source} />
                           <input type="hidden" name="replyEventId" value={selected.sourceId} />
                           <input type="hidden" name="leadId" value={selected.leadId} />
-                          <input type="hidden" name="decision" value="handled" />
+                          <input type="hidden" name="decision" value="mark_reply_handled" />
                           <Button type="submit" variant="secondary" className="w-full shadow-lg">Mark handled</Button>
                         </form>
                         <form action={completeReviewQueueItemAction} className="flex-1">

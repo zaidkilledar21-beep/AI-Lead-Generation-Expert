@@ -496,10 +496,23 @@ export async function getInboxThreads() {
 export async function getSettingsData() {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) {
-    return { inboxes: [], profiles: [], sequences: [], settings: [], savedFilters: [] };
+    return {
+      inboxes: [],
+      activeInboxes: [],
+      profiles: [],
+      sequences: [],
+      activeSequences: [],
+      settings: [],
+      savedFilters: [],
+      diagnostics: {
+        hasFailures: true,
+        requiresSetup: true,
+        messages: ["Settings data could not be loaded because the Supabase server client is unavailable."]
+      }
+    };
   }
 
-  const [{ data: inboxes }, { data: profiles }, { data: sequences }, { data: settings }, savedFilters] = await Promise.all([
+  const [inboxesResult, profilesResult, sequencesResult, settingsResult, savedFilters] = await Promise.all([
     supabase.from("inboxes").select("*").order("email_address"),
     supabase.from("founder_profiles").select("*").order("display_name"),
     supabase.from("outreach_sequences").select("*,outreach_steps(*)").order("band"),
@@ -507,20 +520,44 @@ export async function getSettingsData() {
     getSavedFilters("pipeline")
   ]);
 
+  const inboxes = asArray(inboxesResult.data as Array<Record<string, unknown>>);
+  const profiles = asArray(profilesResult.data as Array<Record<string, unknown>>).map((p): LeadProfile => ({
+    user_id: toStr(p.user_id ?? p.id),
+    display_name: toStr(p.display_name),
+    timezone: toStrOrNull(p.timezone),
+    telegram_chat_id: toStrOrNull(p.telegram_chat_id),
+    notification_preferences: p.notification_preferences == null
+      ? null
+      : (p.notification_preferences as Record<string, unknown>),
+  }));
+  const sequences = asArray(sequencesResult.data as Array<Record<string, unknown>>);
+  const settings = asArray(settingsResult.data as Array<Record<string, unknown>>);
+  const activeInboxes = inboxes.filter((inbox) => inbox.active === true);
+  const activeSequences = sequences.filter((sequence) => sequence.active === true);
+
+  const messages = [
+    inboxesResult.error ? "Sender inboxes could not be loaded. Check Supabase query access or schema alignment." : null,
+    profilesResult.error ? "Founder profiles could not be loaded. Check Supabase query access or schema alignment." : null,
+    sequencesResult.error ? "Outreach sequences could not be loaded. Check Supabase query access or schema alignment." : null,
+    settingsResult.error ? "Global app settings could not be loaded. Check Supabase query access or schema alignment." : null,
+    !inboxesResult.error && activeInboxes.length === 0 ? "No sender inboxes configured. Add and activate at least one inbox before assigning campaigns or owners." : null,
+    !profilesResult.error && profiles.length === 0 ? "No founder profiles configured. Inbox assignment and owner filters will stay empty until a profile exists." : null,
+    !sequencesResult.error && activeSequences.length === 0 ? "No active outreach sequences found. Activate at least one sequence before assigning Band A/B/C routing." : null
+  ].filter(Boolean) as string[];
+
   return {
-    inboxes: asArray(inboxes as Array<Record<string, unknown>>),
-    profiles: asArray(profiles as Array<Record<string, unknown>>).map((p): LeadProfile => ({
-      user_id: toStr(p.user_id ?? p.id),
-      display_name: toStr(p.display_name),
-      timezone: toStrOrNull(p.timezone),
-      telegram_chat_id: toStrOrNull(p.telegram_chat_id),
-      notification_preferences: p.notification_preferences == null
-        ? null
-        : (p.notification_preferences as Record<string, unknown>),
-    })),
-    sequences: asArray(sequences as Array<Record<string, unknown>>),
-    settings: asArray(settings as Array<Record<string, unknown>>),
-    savedFilters
+    inboxes,
+    activeInboxes,
+    profiles,
+    sequences,
+    activeSequences,
+    settings,
+    savedFilters,
+    diagnostics: {
+      hasFailures: Boolean(inboxesResult.error || profilesResult.error || sequencesResult.error || settingsResult.error),
+      requiresSetup: activeInboxes.length === 0 || profiles.length === 0 || activeSequences.length === 0,
+      messages
+    }
   };
 }
 
