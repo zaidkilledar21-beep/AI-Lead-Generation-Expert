@@ -2,6 +2,7 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import { updateCampaign } from "./actions";
+import { CrmDateField } from "@/components/ui/crm-date-field";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { toBandSequenceOptions, toInboxOptions } from "./select-options";
 
@@ -155,10 +156,11 @@ export function EditCampaignForm({
         </label>
         <label>
           <span>Next scheduled run</span>
-          <input
+          <CrmDateField
             name="next_run_at"
             type="datetime-local"
             defaultValue={campaign.next_run_at ? campaign.next_run_at.slice(0, 16) : ""}
+            placeholder="Select date and time"
           />
         </label>
         <label>
