@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/crm/page-header";
+import { CrmSelect } from "@/components/ui/crm-select";
 import { getInboxThreads, getLeadDetail, getSettingsData } from "@/lib/crm/queries";
 import { InboxView } from "@/components/crm/inbox-view";
 import { NEUTRAL_REPLY_INTENTS, OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
@@ -74,12 +75,17 @@ export default async function InboxPage({
         <form className="p-6 pt-0 flex flex-col md:flex-row gap-3">
           <input type="hidden" name="tab" value={tab} />
           <input name="q" defaultValue={searchParams?.q ?? ""} placeholder="Search sender, business, campaign, summary..." className="field flex-1" />
-          <select name="sort" defaultValue={sort} className="field md:w-44">
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="business">Business A-Z</option>
-            <option value="intent">Intent A-Z</option>
-          </select>
+          <CrmSelect
+            name="sort"
+            defaultValue={sort}
+            className="md:w-56"
+            options={[
+              { value: "newest", label: "Newest first" },
+              { value: "oldest", label: "Oldest first" },
+              { value: "business", label: "Business A-Z" },
+              { value: "intent", label: "Intent A-Z" }
+            ]}
+          />
           <button className="ui-button ui-button-secondary" type="submit">Apply</button>
         </form>
       </section>

@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
+import { CrmSelect } from "@/components/ui/crm-select";
 import { getCampaignRows } from "@/lib/crm/queries";
 import { duplicateCampaignAction, triggerCampaignManualRun, updateCampaignStatus } from "./actions";
 
@@ -45,24 +46,32 @@ export default async function CampaignsPage({
         <form className="panel-body form-grid">
           <label>
             <span>Status</span>
-            <select name="status" defaultValue={status}>
-              <option value="all">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-              <option value="completed">Completed</option>
-              <option value="archived">Archived</option>
-            </select>
+            <CrmSelect
+              name="status"
+              defaultValue={status}
+              options={[
+                { value: "all", label: "All statuses" },
+                { value: "draft", label: "Draft" },
+                { value: "active", label: "Active" },
+                { value: "paused", label: "Paused" },
+                { value: "completed", label: "Completed" },
+                { value: "archived", label: "Archived" }
+              ]}
+            />
           </label>
           <label>
             <span>Source</span>
-            <select name="source" defaultValue={source}>
-              <option value="all">All sources</option>
-              <option value="google_maps">Google Maps</option>
-              <option value="google_search">Google Search</option>
-              <option value="directory">Directory</option>
-              <option value="manual_import">Manual Import</option>
-            </select>
+            <CrmSelect
+              name="source"
+              defaultValue={source}
+              options={[
+                { value: "all", label: "All sources" },
+                { value: "google_maps", label: "Google Maps" },
+                { value: "google_search", label: "Google Search" },
+                { value: "directory", label: "Directory" },
+                { value: "manual_import", label: "Manual Import" }
+              ]}
+            />
           </label>
           <label>
             <span>Search</span>

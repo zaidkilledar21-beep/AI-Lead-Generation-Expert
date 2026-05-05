@@ -1,5 +1,7 @@
 import { PageHeader } from "@/components/crm/page-header";
+import { SettingsDiagnosticsCard } from "@/components/crm/settings-diagnostics-card";
 import { Badge } from "@/components/ui/badge";
+import { CrmSelect } from "@/components/ui/crm-select";
 import { getSettingsData } from "@/lib/crm/queries";
 import { updateGlobalOutreachSettingsAction } from "./actions";
 
@@ -16,6 +18,7 @@ export default async function SettingsIndexPage() {
   return (
     <>
       <PageHeader title="Settings" description="Global CRM workflow controls for the internal founder operating model." />
+      <SettingsDiagnosticsCard diagnostics={settings.diagnostics} />
       <section className="metric-grid">
         <div className="metric-card">
           <div className="metric-label">Global outreach</div>
@@ -38,10 +41,14 @@ export default async function SettingsIndexPage() {
             <div className="form-grid">
               <label>
                 <span>Outreach state</span>
-                <select name="paused" defaultValue={paused ? "true" : "false"}>
-                  <option value="false">Sending allowed</option>
-                  <option value="true">Pause all scheduled sending</option>
-                </select>
+                <CrmSelect
+                  name="paused"
+                  defaultValue={paused ? "true" : "false"}
+                  options={[
+                    { value: "false", label: "Sending allowed", description: "WF-06 may continue scheduler-owned sending." },
+                    { value: "true", label: "Pause all scheduled sending", description: "Keep CRM live while blocking workflow send execution." }
+                  ]}
+                />
               </label>
               <label>
                 <span>Daily cap override</span>

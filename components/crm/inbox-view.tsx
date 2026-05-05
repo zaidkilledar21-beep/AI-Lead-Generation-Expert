@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
+import { CrmSelect } from "@/components/ui/crm-select";
 import { markReplyHandledAction, assignLeadAction, closeLeadAction } from "@/lib/crm/actions";
 import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
 
@@ -68,6 +69,7 @@ export function InboxView({
 }>) {
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState<number | null>(null);
+  const assignFormRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     setNow(Date.now());
   }, []);
@@ -237,19 +239,20 @@ export function InboxView({
 
                 <div className="h-6 w-px bg-white/10" />
 
-                <form action={assignLeadAction} className="flex items-center gap-2">
+                <form ref={assignFormRef} action={assignLeadAction} className="flex items-center gap-2">
                   <input type="hidden" name="leadId" value={selected.leadId} />
-                  <select 
-                    name="assignedTo" 
-                    onChange={(e) => e.target.form?.requestSubmit()}
-                    defaultValue={leadDetails?.assignedTo || ""}
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/70 outline-none focus:border-brand transition-colors cursor-pointer"
-                  >
-                    <option value="" disabled>Assign to...</option>
-                    {profiles.map(p => (
-                      <option key={p.user_id} value={p.display_name}>{p.display_name}</option>
-                    ))}
-                  </select>
+                  <CrmSelect
+                    name="assignedTo"
+                    defaultValue={leadDetails?.assignedTo ?? selected.leadAssignedTo ?? selected.replyAssignedTo ?? ""}
+                    placeholder="Assign to..."
+                    emptyState="No founder profiles configured."
+                    className="min-w-[220px]"
+                    options={profiles.map((profile) => ({
+                      value: profile.display_name,
+                      label: profile.display_name
+                    }))}
+                    onValueChange={() => assignFormRef.current?.requestSubmit()}
+                  />
                 </form>
                 <div className="h-6 w-px bg-white/10" />
                 <Badge tone={selected.isUnhandled ? "warning" : "success"}>

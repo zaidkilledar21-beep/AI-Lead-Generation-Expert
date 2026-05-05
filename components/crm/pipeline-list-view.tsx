@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge, bandTone } from "@/components/ui/badge";
+import { CrmSelect } from "@/components/ui/crm-select";
 import { ScoreBar } from "@/components/ui/score-bar";
 import { approveLeadAction, changeLeadStatusAction, bulkApproveLeadsAction, bulkAssignLeadsAction, bulkChangeLeadStatusAction } from "@/lib/crm/actions";
 import { useLeadSelection } from "@/lib/hooks/use-lead-selection";
@@ -101,21 +102,22 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
               >
                 Archive Selected
               </button>
-              <select
-                disabled={isPending}
+              <CrmSelect
+                name="bulk-assigned-to"
                 defaultValue=""
-                onChange={(event) => {
-                  handleBulkAssign(event.target.value);
-                  event.currentTarget.value = "";
-                }}
-                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white/80 disabled:opacity-50"
-              >
-                <option value="">Assign selected...</option>
-                <option value="">Unassigned</option>
-                {profiles.map((profile) => (
-                  <option key={profile.user_id} value={profile.display_name}>{profile.display_name}</option>
-                ))}
-              </select>
+                disabled={isPending}
+                className="min-w-[210px]"
+                placeholder="Assign selected..."
+                emptyState="No founder profiles configured."
+                options={[
+                  { value: "__unassigned__", label: "Unassigned", description: "Clear current owner assignment." },
+                  ...profiles.map((profile) => ({
+                    value: profile.display_name,
+                    label: profile.display_name
+                  }))
+                ]}
+                onValueChange={(value) => handleBulkAssign(value === "__unassigned__" ? "" : value)}
+              />
               <button
                 onClick={() => exportRows(selectedRows)}
                 className="px-4 py-2 text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 rounded-lg transition-colors border border-white/10"

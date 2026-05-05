@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { setGlobalOutreachPaused, updateInboxDailyLimit } from "@/lib/app/settings";
+import { setGlobalOutreachPaused, updateGlobalOutreachSettings, updateInboxDailyLimit } from "@/lib/app/settings";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { requireAppActor } from "@/lib/app/auth";
 
@@ -26,25 +26,10 @@ export async function updateInboxDailyLimitAction(formData: FormData) {
 }
 
 export async function updateGlobalOutreachSettingsAction(formData: FormData) {
-  const actor = await requireAppActor();
-  const supabase = createSupabaseServiceClient();
   const paused = cleanText(formData.get("paused")) === "true";
   const dailyCap = Number(formData.get("dailyCap"));
   if (!Number.isInteger(dailyCap) || dailyCap < 0) throw new Error("Daily cap must be a non-negative integer");
-
-  const { error } = await supabase.from("app_settings").upsert(
-    {
-      key: "global_outreach",
-      value: {
-        paused,
-        daily_cap: dailyCap,
-        updated_by: actor.displayName,
-        updated_at: new Date().toISOString()
-      }
-    },
-    { onConflict: "key" }
-  );
-  if (error) throw new Error(error.message);
+  await updateGlobalOutreachSettings({ paused, dailyCap });
 
   revalidatePath("/settings");
   revalidatePath("/", "layout");

@@ -2,6 +2,8 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import { updateCampaign } from "./actions";
+import { CrmSelect } from "@/components/ui/crm-select";
+import { toBandSequenceOptions, toInboxOptions } from "./select-options";
 
 type EditableCampaign = {
   id: string;
@@ -42,7 +44,6 @@ type EditableCampaign = {
   max_details_calls_per_day: number;
   max_total_places_calls_per_day: number;
 };
-type CampaignOption = { id: string; name?: string; band?: string; email_address?: string };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -56,13 +57,25 @@ function SubmitButton() {
 export function EditCampaignForm({
   campaign,
   sequences = [],
-  inboxes = []
+  inboxes = [],
+  profiles = []
 }: Readonly<{
   campaign: EditableCampaign;
-  sequences?: CampaignOption[];
-  inboxes?: CampaignOption[];
+  sequences?: Array<{ id: string; name?: string | null; band?: string | null; active?: boolean }>;
+  inboxes?: Array<{ id: string; email_address?: string | null; provider?: string | null; active?: boolean }>;
+  profiles?: Array<{ user_id: string }>;
 }>) {
   const [state, action] = useFormState(updateCampaign.bind(null, campaign.id), { error: null as string | null });
+  const activeInboxes = inboxes.filter((inbox) => inbox.active === true);
+  const activeSequences = sequences.filter((sequence) => sequence.active === true);
+  const inboxOptions = toInboxOptions(activeInboxes);
+  const bandAOptions = toBandSequenceOptions(activeSequences, "A");
+  const bandBOptions = toBandSequenceOptions(activeSequences, "B");
+  const bandCOptions = toBandSequenceOptions(activeSequences, "C");
+  const selectedInboxLabel = inboxes.find((inbox) => inbox.id === campaign.assigned_inbox_id)?.email_address ?? undefined;
+  const selectedBandALabel = sequences.find((sequence) => sequence.id === campaign.sequence_band_a)?.name ?? undefined;
+  const selectedBandBLabel = sequences.find((sequence) => sequence.id === campaign.sequence_band_b)?.name ?? undefined;
+  const selectedBandCLabel = sequences.find((sequence) => sequence.id === campaign.sequence_band_c)?.name ?? undefined;
 
   return (
     <form action={action} className="form">
@@ -74,13 +87,17 @@ export function EditCampaignForm({
         </label>
         <label>
           <span>Status</span>
-          <select name="status" defaultValue={campaign.status}>
-            <option value="draft">Draft</option>
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
-            <option value="completed">Completed</option>
-            <option value="archived">Archived</option>
-          </select>
+          <CrmSelect
+            name="status"
+            defaultValue={campaign.status}
+            options={[
+              { value: "draft", label: "Draft", description: "Keep configuration editable without execution." },
+              { value: "active", label: "Active", description: "Allow discovery and workflow progression." },
+              { value: "paused", label: "Paused", description: "Preserve campaign but block work." },
+              { value: "completed", label: "Completed", description: "Stop future runs and keep historical context." },
+              { value: "archived", label: "Archived", description: "Retain history outside active operations." }
+            ]}
+          />
         </label>
         <label className="form-span-2">
           <span>Description</span>
@@ -92,12 +109,16 @@ export function EditCampaignForm({
         </label>
         <label>
           <span>Lead source</span>
-          <select name="lead_source" defaultValue={campaign.lead_source}>
-            <option value="google_maps">Google Maps</option>
-            <option value="google_search">Google Search</option>
-            <option value="directory">Directory</option>
-            <option value="manual_import">Manual Import</option>
-          </select>
+          <CrmSelect
+            name="lead_source"
+            defaultValue={campaign.lead_source}
+            options={[
+              { value: "google_maps", label: "Google Maps", description: "Primary local business discovery route." },
+              { value: "google_search", label: "Google Search", description: "Broader web discovery route." },
+              { value: "directory", label: "Directory", description: "Approved directory source." },
+              { value: "manual_import", label: "Manual Import", description: "Hand-curated or uploaded lead source." }
+            ]}
+          />
         </label>
         <label className="form-span-2">
           <span>Niche keywords</span>
@@ -121,12 +142,16 @@ export function EditCampaignForm({
         </label>
         <label>
           <span>Run frequency</span>
-          <select name="run_frequency" defaultValue={campaign.run_frequency}>
-            <option value="manual">Manual</option>
-            <option value="daily">Daily</option>
-            <option value="every_3_days">Every 3 days</option>
-            <option value="weekly">Weekly</option>
-          </select>
+          <CrmSelect
+            name="run_frequency"
+            defaultValue={campaign.run_frequency}
+            options={[
+              { value: "manual", label: "Manual", description: "Founder-triggered discovery only." },
+              { value: "daily", label: "Daily", description: "Run every day." },
+              { value: "every_3_days", label: "Every 3 days", description: "Reduce pace across the week." },
+              { value: "weekly", label: "Weekly", description: "Low-frequency discovery schedule." }
+            ]}
+          />
         </label>
         <label>
           <span>Next scheduled run</span>
@@ -182,39 +207,63 @@ export function EditCampaignForm({
         </label>
         <label>
           <span>Confidence required</span>
-          <select name="confidence_required" defaultValue={campaign.confidence_required}>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
+          <CrmSelect
+            name="confidence_required"
+            defaultValue={campaign.confidence_required}
+            options={[
+              { value: "low", label: "Low", description: "Allow lower-confidence candidates." },
+              { value: "medium", label: "Medium", description: "Balanced default threshold." },
+              { value: "high", label: "High", description: "Restrict to stronger confidence signals." }
+            ]}
+          />
         </label>
         <label>
           <span>Sequence for Band A</span>
-          <select name="sequence_band_a" defaultValue={campaign.sequence_band_a ?? ""}>
-            <option value="">Default workflow routing</option>
-            {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
-          </select>
+          <CrmSelect
+            name="sequence_band_a"
+            defaultValue={campaign.sequence_band_a ?? ""}
+            placeholder="Default workflow routing"
+            emptyState="No active Band A sequences found."
+            options={bandAOptions}
+            fallbackLabel={selectedBandALabel}
+          />
+          {bandAOptions.length === 0 ? <p className="text-xs text-white/45">No active sequences found. Activate at least one sequence to assign Band A routing.</p> : null}
         </label>
         <label>
           <span>Sequence for Band B</span>
-          <select name="sequence_band_b" defaultValue={campaign.sequence_band_b ?? ""}>
-            <option value="">Default workflow routing</option>
-            {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
-          </select>
+          <CrmSelect
+            name="sequence_band_b"
+            defaultValue={campaign.sequence_band_b ?? ""}
+            placeholder="Default workflow routing"
+            emptyState="No active Band B sequences found."
+            options={bandBOptions}
+            fallbackLabel={selectedBandBLabel}
+          />
+          {bandBOptions.length === 0 ? <p className="text-xs text-white/45">No active sequences found. Activate at least one sequence to assign Band B routing.</p> : null}
         </label>
         <label>
           <span>Sequence for Band C</span>
-          <select name="sequence_band_c" defaultValue={campaign.sequence_band_c ?? ""}>
-            <option value="">Default workflow routing</option>
-            {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name ?? sequence.band ?? sequence.id}</option>)}
-          </select>
+          <CrmSelect
+            name="sequence_band_c"
+            defaultValue={campaign.sequence_band_c ?? ""}
+            placeholder="Default workflow routing"
+            emptyState="No active Band C sequences found."
+            options={bandCOptions}
+            fallbackLabel={selectedBandCLabel}
+          />
+          {bandCOptions.length === 0 ? <p className="text-xs text-white/45">No active sequences found. Activate at least one sequence to assign Band C routing.</p> : null}
         </label>
         <label>
           <span>Assigned inbox</span>
-          <select name="assigned_inbox_id" defaultValue={campaign.assigned_inbox_id ?? ""}>
-            <option value="">No fixed inbox</option>
-            {inboxes.map((inbox) => <option key={inbox.id} value={inbox.id}>{inbox.email_address ?? inbox.id}</option>)}
-          </select>
+          <CrmSelect
+            name="assigned_inbox_id"
+            defaultValue={campaign.assigned_inbox_id ?? ""}
+            placeholder="No fixed inbox"
+            emptyState="No sender inboxes configured."
+            options={inboxOptions}
+            fallbackLabel={selectedInboxLabel}
+          />
+          {inboxOptions.length === 0 ? <p className="text-xs text-white/45">No active inboxes are configured. Add and activate one before locking campaign delivery.</p> : null}
         </label>
         <label className="form-span-2">
           <span>Tags</span>
@@ -225,6 +274,11 @@ export function EditCampaignForm({
           <textarea name="notes" rows={4} defaultValue={campaign.notes ?? ""} />
         </label>
       </div>
+      {profiles.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/65">
+          No founder profiles are configured yet. Ownership and inbox assignment workflows will remain limited until at least one founder profile exists.
+        </div>
+      ) : null}
       <div className="toggle-grid">
         <label className="checkbox-row">
           <input name="exclude_chains" type="checkbox" defaultChecked={campaign.exclude_chains} />
