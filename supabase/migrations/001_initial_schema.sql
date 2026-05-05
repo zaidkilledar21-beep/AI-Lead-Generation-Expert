@@ -210,7 +210,7 @@ create table if not exists manual_review_queue (
   priority text,
   assigned_to text,
   review_status text default 'pending' check (
-    review_status in ('pending', 'approved', 'rejected', 'handled')
+    review_status in ('pending', 'approved', 'rejected')
   ),
   review_notes text,
   created_at timestamptz default now(),
@@ -255,7 +255,7 @@ create table if not exists email_drafts (
   validation_failures jsonb,
   generation_warnings jsonb,
   approval_status text default 'pending' check (
-    approval_status in ('pending', 'approved', 'auto_approved', 'rejected', 'blocked')
+    approval_status in ('pending', 'approved', 'auto_approved', 'rejected', 'blocked', 'regeneration_requested')
   ),
   approved_by text,
   approved_at timestamptz,

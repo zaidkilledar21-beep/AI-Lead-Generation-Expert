@@ -14,6 +14,8 @@ export type CrmActionType =
   | "band_overridden"
   | "note_added"
   | "email_draft_approved"
+  | "email_draft_edited"
+  | "email_draft_regeneration_requested"
   | "email_draft_rejected"
   | "manual_review_completed"
   | "campaign_created"

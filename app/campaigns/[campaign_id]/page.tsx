@@ -31,6 +31,7 @@ export default async function CampaignDetailPage({
             <form action={triggerCampaignManualRun.bind(null, detail.campaign.id)}>
               <Button type="submit">Trigger manual run</Button>
             </form>
+            <a className="ui-button ui-button-secondary" href={`/campaigns/${detail.campaign.id}/import`}>Import leads</a>
             <form action={async () => { "use server"; await updateCampaignStatus(detail.campaign.id, detail.campaign.status === "active" ? "paused" : "active"); }}>
               <Button type="submit" variant="secondary">{detail.campaign.status === "active" ? "Pause" : "Resume"}</Button>
             </form>
@@ -38,6 +39,7 @@ export default async function CampaignDetailPage({
         }
       />
       <SettingsDiagnosticsCard diagnostics={settings.diagnostics} title="Campaign edit dependencies" />
+      <p className="muted mt-4">Manual discovery runs through the app workflow runner. Downstream outreach and reply workflows continue in n8n.</p>
 
       <section className="metric-grid">
         <div className="metric-card"><div className="metric-label">Status</div><div className="metric-value"><Badge>{detail.campaign.status}</Badge></div></div>

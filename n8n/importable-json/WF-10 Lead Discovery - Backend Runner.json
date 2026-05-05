@@ -14,63 +14,53 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -400,
+        0,
         0
       ],
-      "id": "50c8be14-b800-557a-a967-9b06971e888d",
-      "name": "Start Daily Discovery"
+      "id": "e94e4ecb-e4bc-4fd1-a49d-0759ca430c2f",
+      "name": "Schedule Trigger"
     },
     {
       "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "return { json: { dry_run: false } };"
+        "mode": "raw",
+        "jsonOutput": "{\n  \n  \"dry_run\": true\n}",
+        "options": {}
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
-        -160,
+        208,
         0
       ],
-      "id": "b268589a-cb9b-5c31-b63f-675565e11d93",
-      "name": "Build Discovery Request"
+      "id": "9e5132a3-fb2e-4d6c-9092-956936a9ae5a",
+      "name": "Set Request Body"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.APP_BASE_URL}}/api/workflows/discovery/run",
+        "url": "https://ai-lead-generation-expert.vercel.app/api/workflows/discovery/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "x-n8n-api-key",
-              "value": "={{$env.N8N_API_KEY || $env.N8N_WORKFLOW_API_KEY}}"
-            },
-            {
-              "name": "content-type",
-              "value": "application/json"
+              "value": ""
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{JSON.stringify($json)}}",
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true,
-              "responseFormat": "json"
-            }
-          }
-        }
+        "jsonBody": "{\n  \"dry_run\": true\n}",
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        80,
+        416,
         0
       ],
-      "id": "a07eb0ae-d288-556e-a4c6-cf7ff67c935f",
-      "name": "POST Discovery Backend"
+      "id": "805d4632-f9f3-48f1-a3e5-5cf28e9e22e8",
+      "name": "POST Discovery Endpoint"
     },
     {
       "parameters": {
@@ -78,13 +68,13 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict",
+            "typeValidation": "loose",
             "version": 3
           },
           "conditions": [
             {
-              "id": "506543e4-6386-58d3-8b7b-c7a1374a515e",
-              "leftValue": "={{ ['failed','quota_exhausted'].includes($json.status) || (($json.errors || []).length > 0) }}",
+              "id": "e2663c4f-0db1-4fc2-82d0-c95e6d242730",
+              "leftValue": "={{ ['failed', 'quota_exhausted', 'partial_failed'].includes($json.status) || (($json.errors || []).length > 0) }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -95,62 +85,83 @@
           ],
           "combinator": "and"
         },
+        "looseTypeValidation": true,
         "options": {}
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        320,
+        624,
         0
       ],
-      "id": "26c98d21-f1eb-5ac6-86c4-f64eafa74886",
-      "name": "Needs Attention?"
+      "id": "eae58abf-cbb6-4479-a263-b75f43e0ced4",
+      "name": "Run Needs Attention?"
     },
     {
       "parameters": {
-        "content": "This workflow intentionally calls the backend endpoint. Do not add native Google Places, dedupe, crawl, enrichment, or scoring helper nodes unless you decide to abandon the backend-heavy path.",
-        "height": 220,
-        "width": 420
+        "sendTo": "uzair@getsynqro.com",
+        "subject": "⚠️ WF-10 Lead Discovery Needs Attention",
+        "emailType": "text",
+        "message": "=WF-10 Lead Discovery needs attention.  Status: {{$json.status || 'unknown'}}  Discovery run: {{$json.discovery_run_id || $json.run_id || 'none'}}  Created: {{$json.created || 0}}  Duplicates: {{$json.duplicates || 0}}  Manual review: {{$json.manual_review || 0}}  First error: {{($json.errors && $json.errors.length > 0) ? $json.errors[0] : 'none'}}  Check the dashboard and workflow_events table for details.",
+        "options": {}
       },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
       "position": [
-        -400,
-        -260
+        832,
+        -96
       ],
-      "id": "8cefc07f-7c8f-555a-b588-21572ea408fd",
-      "name": "WF-10 Backend Heavy Notes"
+      "id": "794558c1-84ce-4260-8b3e-a620231afb0e",
+      "name": "Send a message",
+      "webhookId": "1cf3e9fa-4dbb-47d6-8ae9-769dc550c700",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "0hJ7Y6lvalD2AmMZ",
+          "name": "Gmail account"
+        }
+      }
     }
   ],
   "pinData": {},
   "connections": {
-    "Start Daily Discovery": {
+    "Schedule Trigger": {
       "main": [
         [
           {
-            "node": "Build Discovery Request",
+            "node": "Set Request Body",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Discovery Request": {
+    "Set Request Body": {
       "main": [
         [
           {
-            "node": "POST Discovery Backend",
+            "node": "POST Discovery Endpoint",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "POST Discovery Backend": {
+    "POST Discovery Endpoint": {
       "main": [
         [
           {
-            "node": "Needs Attention?",
+            "node": "Run Needs Attention?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Needs Attention?": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
             "type": "main",
             "index": 0
           }
@@ -158,12 +169,20 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner"
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "0GodX1BE3sfkBkyP",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
   },
-  "versionId": "55243bd9-679b-5271-a42c-c1f09bc29440",
-  "id": "f303b7a4-52bb-51e7-b510-b6a0c5328116",
+  "versionId": "8e17530d-4232-4910-ab36-f2beb66331cf",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6d48232f5798c49b6b2edf42231411358c3fe95a04dfbd8d339a054335e6191c"
+  },
+  "id": "cOEu3bJ5c63HGjol",
   "tags": []
 }

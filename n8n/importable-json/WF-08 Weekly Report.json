@@ -1,12 +1,13 @@
 {
-  "name": "WF-08 Weekly Report",
+  "name": "WF-08 Send Weekly Report",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "triggerAtHour": 9
+              "field": "cronExpression",
+              "expression": "0 0 9 * * 1"
             }
           ]
         }
@@ -14,43 +15,71 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -400,
-        0
+        -480,
+        -16
       ],
-      "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+      "id": "591034ec-4c3f-4b47-934d-e949774d0995",
       "name": "Schedule Trigger"
     },
     {
       "parameters": {
-        "operation": "getAll",
-        "tableId": "leads",
-        "limit": 50,
-        "filterType": "string",
-        "filterString": ""
+        "jsCode": "const metrics = $input.first().json || {};\n\nconst period = metrics.period || {};\nconst leads = metrics.leads || {};\nconst bands = Array.isArray(metrics.bands) ? metrics.bands : [];\nconst outreach = metrics.outreach || {};\nconst draftBreakdown = Array.isArray(metrics.draft_breakdown) ? metrics.draft_breakdown : [];\nconst queueBreakdown = Array.isArray(metrics.queue_breakdown) ? metrics.queue_breakdown : [];\nconst replies = Array.isArray(metrics.reply_breakdown) ? metrics.reply_breakdown : [];\nconst topNiches = Array.isArray(metrics.top_niches) ? metrics.top_niches : [];\nconst topRegions = Array.isArray(metrics.top_regions) ? metrics.top_regions : [];\nconst blockers = metrics.blockers || {};\nconst workflowHealth = Array.isArray(metrics.workflow_health) ? metrics.workflow_health : [];\n\nfunction line(label, value) {\n  return `${label}: ${value ?? 0}`;\n}\n\nfunction listRows(rows, labelKey = \"niche\") {\n  if (!Array.isArray(rows) || rows.length === 0) return \"None\";\n  return rows\n    .map((r, i) => `${i + 1}. ${r[labelKey] || \"Unknown\"} — ${r.count ?? 0}`)\n    .join(\"\\n\");\n}\n\nfunction countFromRows(rows, key, value) {\n  if (!Array.isArray(rows)) return 0;\n  const found = rows.find((r) => r[key] === value);\n  return Number(found?.count || 0);\n}\n\nfunction formatBands(rows) {\n  if (!Array.isArray(rows) || rows.length === 0) {\n    return \"None\";\n  }\n\n  const knownBands = [\"A\", \"B\", \"C\", \"D\"];\n\n  const knownLines = knownBands.map((band) => {\n    const row = rows.find((r) => r.band === band);\n    const count = Number(row?.count || 0);\n    const avgScore = row?.avg_score ?? \"n/a\";\n    return `${band}: ${count} lead(s), avg score ${avgScore}`;\n  });\n\n  const otherLines = rows\n    .filter((r) => !knownBands.includes(r.band))\n    .map((r) => `${r.band || \"unknown\"}: ${r.count ?? 0} lead(s), avg score ${r.avg_score ?? \"n/a\"}`);\n\n  return [...knownLines, ...otherLines].join(\"\\n\");\n}\n\nfunction formatBreakdown(rows, key) {\n  if (!Array.isArray(rows) || rows.length === 0) return \"None\";\n  return rows\n    .map((r) => `- ${r[key] || \"Unknown\"}: ${r.count ?? 0}`)\n    .join(\"\\n\");\n}\n\nfunction formatWorkflowHealth(rows) {\n  if (!Array.isArray(rows) || rows.length === 0) return \"None\";\n  return rows\n    .map((r) => {\n      const lastSeen = r.last_seen_at ? new Date(r.last_seen_at).toISOString() : \"unknown\";\n      return `- ${r.workflow_name || \"Unknown workflow\"} / ${r.status || \"unknown\"}: ${r.count ?? 0}, last seen ${lastSeen}`;\n    })\n    .join(\"\\n\");\n}\n\nconst emailsSent = Number(outreach.sent || 0);\nconst repliesReceived = Number(outreach.replies || 0);\nconst replyRate = emailsSent > 0\n  ? `${((repliesReceived / emailsSent) * 100).toFixed(1)}%`\n  : \"0%\";\n\nconst interestedReplies = countFromRows(replies, \"intent\", \"interested\");\nconst pricingRequests = countFromRows(replies, \"intent\", \"pricing_request\");\nconst callRequests = countFromRows(replies, \"intent\", \"call_request\");\nconst questions = countFromRows(replies, \"intent\", \"question\");\nconst notInterested = countFromRows(replies, \"intent\", \"not_interested\");\nconst unsubscribes = countFromRows(replies, \"intent\", \"unsubscribe\") + countFromRows(replies, \"intent\", \"opt_out\");\nconst ambiguous = countFromRows(replies, \"intent\", \"ambiguous\");\nconst noise = countFromRows(replies, \"intent\", \"bounce_or_noise\");\n\nconst pendingDraftApprovals = Number(blockers.pending_draft_approvals || 0);\nconst pendingManualReviews = Number(blockers.pending_manual_reviews || outreach.manual_review_pending || 0);\nconst blockedQueueItems = Number(blockers.blocked_queue_items || 0);\nconst pausedQueueItems = Number(blockers.paused_queue_items || 0);\nconst unhandledReplies = Number(blockers.unhandled_replies || 0);\n\nconst report = `\nWeekly Automation Report\n\nPeriod:\n${period.start_at || \"Last 7 days\"} → ${period.end_at || \"Now\"}\n\nLead Pipeline:\n${line(\"Leads created\", leads.total_created)}\n${line(\"New leads\", leads.new)}\n${line(\"Enriched leads\", leads.enriched)}\n${line(\"Scored leads\", leads.scored)}\n${line(\"Queued leads\", leads.queued)}\n${line(\"Drafted leads\", leads.drafted)}\n${line(\"In sequence\", leads.in_sequence)}\n${line(\"Replied leads\", leads.replied)}\n${line(\"Blocked or paused leads\", leads.blocked_or_paused)}\n\nBand Breakdown:\n${formatBands(bands)}\n\nOutreach:\n${line(\"Emails sent\", outreach.sent)}\n${line(\"Failed sends\", outreach.failed)}\n${line(\"Replies received\", outreach.replies)}\nReply rate: ${replyRate}\n${line(\"Manual reviews created\", outreach.manual_review_created)}\n${line(\"Manual reviews pending\", outreach.manual_review_pending)}\n\nDraft Breakdown:\n${formatBreakdown(draftBreakdown, \"approval_status\")}\n\nQueue Breakdown:\n${formatBreakdown(queueBreakdown, \"status\")}\n\nReply Breakdown:\nInterested: ${interestedReplies}\nPricing request: ${pricingRequests}\nCall request: ${callRequests}\nQuestions: ${questions}\nNot interested: ${notInterested}\nUnsubscribe / opt-out: ${unsubscribes}\nAmbiguous: ${ambiguous}\nNoise: ${noise}\n\nTop Niches:\n${listRows(topNiches, \"niche\")}\n\nTop Regions:\n${listRows(topRegions, \"region\")}\n\nBlockers:\nGlobal outreach paused: ${blockers.global_outreach_paused === true ? \"YES\" : \"No\"}\nBlocked queue items: ${blockedQueueItems}\nPaused queue items: ${pausedQueueItems}\nPending draft approvals: ${pendingDraftApprovals}\nPending manual reviews: ${pendingManualReviews}\nUnhandled replies: ${unhandledReplies}\n\nWorkflow Health:\n${formatWorkflowHealth(workflowHealth)}\n\nSuggested Next Actions:\n${blockers.global_outreach_paused === true ? \"- Global outreach is paused. Unpause only after reviewing safety settings.\\n\" : \"\"}${pendingManualReviews > 0 ? \"- Clear pending manual reviews so high-value leads do not stall.\\n\" : \"\"}${pendingDraftApprovals > 0 ? \"- Review pending draft approvals before the next sending window.\\n\" : \"\"}${unhandledReplies > 0 ? \"- Review unhandled replies and manually take over interested or ambiguous leads.\\n\" : \"\"}${emailsSent === 0 ? \"- No emails were sent this week. Check approved drafts, inbox capacity, and sending scheduler.\\n\" : \"\"}${blockedQueueItems > 0 ? \"- Review blocked queue items to improve validation and routing rules.\\n\" : \"\"}${pausedQueueItems > 0 ? \"- Review paused queue items before resuming outreach.\\n\" : \"\"}- Review replies and manually take over interested or ambiguous leads.\n\nNo raw reply bodies or sensitive payloads are included in this report.\n`.trim();\n\nreturn [\n  {\n    json: {\n      subject: \"Weekly Automation Report\",\n      report\n    }\n  }\n];"
       },
-      "type": "n8n-nodes-base.supabase",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        -120,
-        0
+        -64,
+        -16
       ],
-      "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
-      "name": "Supabase Source Query"
+      "id": "135c634e-549d-4ff7-b9df-ec52d9a7631d",
+      "name": "Build Report"
     },
     {
       "parameters": {
-        "content": "Native reporting is still needed. Add multiple Supabase metric nodes and a notification node.",
-        "height": 220,
-        "width": 420
+        "sendTo": "uzairrrrr6@gmail.com",
+        "subject": "={{$json.subject}}",
+        "emailType": "text",
+        "message": "={{$json.report}}",
+        "options": {}
       },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
       "position": [
-        -400,
-        -260
+        144,
+        -16
       ],
-      "id": "6adaa448-957c-5586-a4ee-821d913c4773",
-      "name": "WF-08 Weekly Report Notes"
+      "id": "aed5d489-09d9-4218-8554-24eccc96541d",
+      "name": "Send a message",
+      "webhookId": "103a032d-e838-4088-b91f-86e0dfe7ce81",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "0hJ7Y6lvalD2AmMZ",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/weekly_founder_report_metrics",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -272,
+        -16
+      ],
+      "id": "767ddc98-19ac-47ea-9e04-932376404f55",
+      "name": "Weekly Report Fetch",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -59,7 +88,29 @@
       "main": [
         [
           {
-            "node": "Supabase Source Query",
+            "node": "Weekly Report Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Report Fetch": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
             "type": "main",
             "index": 0
           }
@@ -67,12 +118,20 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner"
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "0GodX1BE3sfkBkyP",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "versionId": "e62f6647-3df2-5b85-aef9-641b586e67a9",
-  "id": "0d326830-3571-50fb-9631-1c6849f7d914",
+  "versionId": "9d3847e3-ebf3-4e2b-a80c-39329c564e78",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6d48232f5798c49b6b2edf42231411358c3fe95a04dfbd8d339a054335e6191c"
+  },
+  "id": "Qx3heZY2dPwjet0C",
   "tags": []
 }

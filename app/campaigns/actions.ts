@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { assertCampaignConfigInput, discoveryLimits, type CampaignConfigInput } from "@/lib/contracts";
 import { createCrmCampaign, duplicateCrmCampaign, markCampaignManualRunRequested, updateCrmCampaign, updateCrmCampaignStatus } from "@/lib/app/campaigns";
+import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { importDiscoveredLeads, type RawLeadInput } from "@/lib/workflows/discovery";
 import { runLeadDiscovery } from "@/lib/workflows/lead-discovery";
 
 function parseCsv(value: FormDataEntryValue | null) {
@@ -31,6 +33,50 @@ function str(value: FormDataEntryValue | null, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function normalizeWebsite(value: string | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function parseCsvRows(csv: string) {
+  const rows: string[][] = [];
+  let field = "";
+  let row: string[] = [];
+  let quoted = false;
+
+  for (let index = 0; index < csv.length; index += 1) {
+    const char = csv[index];
+    const next = csv[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      field += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(field.trim());
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(field.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+
+  row.push(field.trim());
+  if (row.some(Boolean)) rows.push(row);
+  return rows;
+}
+
+function normalizeLeadSource(value: string): CampaignConfigInput["lead_source"] {
+  if (value === "manual_import") return "manual_import";
+  return "google_places";
+}
+
 function campaignFromForm(formData: FormData): CampaignConfigInput {
   const input = {
     name: str(formData.get("name")),
@@ -43,7 +89,7 @@ function campaignFromForm(formData: FormData): CampaignConfigInput {
     exclude_cities: parseCsv(formData.get("exclude_cities")),
     language_of_business: parseCsv(formData.get("language_of_business")),
     max_leads_per_run: parseNumber(formData.get("max_leads_per_run"), discoveryLimits.maxFinalLeadsPerDay),
-    lead_source: str(formData.get("lead_source"), "google_maps") as CampaignConfigInput["lead_source"],
+    lead_source: normalizeLeadSource(str(formData.get("lead_source"), "google_places")),
     min_google_rating: parseOptionalNumber(formData.get("min_google_rating"), 3.5),
     min_review_count: parseOptionalNumber(formData.get("min_review_count"), 5),
     exclude_chains: parseBoolean(formData.get("exclude_chains")),
@@ -114,4 +160,89 @@ export async function triggerCampaignManualRun(campaignId: string) {
   revalidatePath("/campaigns");
   revalidatePath(`/campaigns/${campaignId}`);
   revalidatePath("/pipeline");
+}
+
+export async function manualImportLeadsAction(campaignId: string, _: unknown, formData: FormData) {
+  try {
+    const pastedCsv = str(formData.get("csv"));
+    const rows = parseCsvRows(pastedCsv).slice(0, 101);
+    const [header, ...bodyRows] = rows;
+    if (!header || bodyRows.length === 0) {
+      return { inserted: 0, skipped: 0, errors: ["Paste a CSV header and at least one lead row."] };
+    }
+
+    const columns = header.map((column) => column.trim().toLowerCase());
+    const indexOf = (name: string) => columns.indexOf(name);
+    const businessNameIndex = indexOf("business_name");
+    if (businessNameIndex < 0) {
+      return { inserted: 0, skipped: bodyRows.length, errors: ["CSV must include a business_name column."] };
+    }
+
+    const supabase = createSupabaseServiceClient();
+    const { data: campaign, error: campaignError } = await supabase
+      .from("campaigns")
+      .select("id,primary_niche,niche,target_countries,region")
+      .eq("id", campaignId)
+      .maybeSingle();
+    if (campaignError) throw new Error(campaignError.message);
+    if (!campaign) throw new Error("Campaign not found");
+
+    const errors: string[] = [];
+    const leads: RawLeadInput[] = [];
+    for (const [rowIndex, row] of bodyRows.entries()) {
+      const get = (name: string) => {
+        const index = indexOf(name);
+        return index >= 0 ? row[index]?.trim() : "";
+      };
+      const businessName = row[businessNameIndex]?.trim();
+      if (!businessName) {
+        errors.push(`Row ${rowIndex + 2}: business_name is required`);
+        continue;
+      }
+
+      leads.push({
+        business_name: businessName,
+        website: normalizeWebsite(get("website")),
+        email: get("email").toLowerCase() || null,
+        phone: get("phone") || null,
+        country: get("country") || campaign.target_countries?.[0] || campaign.region || null,
+        city: get("city") || null,
+        niche: get("niche") || campaign.primary_niche || campaign.niche || null,
+        google_maps_url: get("google_maps_url") || null,
+        linkedin_url: get("linkedin_url") || null,
+        address: get("address") || null,
+        campaign_id: campaignId,
+        source: "manual_import",
+        source_attribution: {
+          provider: "manual_import",
+          imported_from: "campaign_csv_paste",
+          imported_at: new Date().toISOString()
+        }
+      });
+    }
+
+    const result = await importDiscoveredLeads(
+      {
+        niche: campaign.primary_niche || campaign.niche || "Manual import",
+        location: campaign.target_countries?.[0] || campaign.region || "Manual import",
+        max_results: Math.min(leads.length, 100)
+      },
+      leads
+    );
+
+    revalidatePath(`/campaigns/${campaignId}`);
+    revalidatePath(`/campaigns/${campaignId}/import`);
+    revalidatePath("/pipeline");
+    return {
+      inserted: result.created,
+      skipped: result.duplicates + errors.length,
+      errors: [...errors, ...result.errors]
+    };
+  } catch (error) {
+    return {
+      inserted: 0,
+      skipped: 0,
+      errors: [error instanceof Error ? error.message : "Manual import failed"]
+    };
+  }
 }

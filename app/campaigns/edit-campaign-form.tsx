@@ -112,11 +112,9 @@ export function EditCampaignForm({
           <span>Lead source</span>
           <CrmSelect
             name="lead_source"
-            defaultValue={campaign.lead_source}
+            defaultValue={campaign.lead_source === "google_maps" ? "google_places" : campaign.lead_source}
             options={[
-              { value: "google_maps", label: "Google Maps", description: "Primary local business discovery route." },
-              { value: "google_search", label: "Google Search", description: "Broader web discovery route." },
-              { value: "directory", label: "Directory", description: "Approved directory source." },
+              { value: "google_places", label: "Google Places", description: "Primary local business discovery route." },
               { value: "manual_import", label: "Manual Import", description: "Hand-curated or uploaded lead source." }
             ]}
           />

@@ -6,14 +6,13 @@ import { CrmSelect } from "@/components/ui/crm-select";
 import { ScoreVisualizer } from "@/components/crm/score-visualizer";
 import { StickyBottomBar } from "@/components/crm/sticky-bottom-bar";
 import { InlineEditableField } from "@/components/crm/inline-editable-field";
+import { DraftReviewEditor } from "@/components/crm/draft-review-editor";
 import {
-  approveEmailDraftAction,
   approveLeadAction,
   assignLeadAction,
   changeLeadStatusAction,
   closeLeadAction,
   overrideBandAction,
-  rejectEmailDraftAction,
   updateLeadNotesAction
 } from "@/lib/crm/actions";
 import { getLeadDetail } from "@/lib/crm/queries";
@@ -62,32 +61,13 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
             {pendingDraft ? (
               <>
                 <div className="lg:col-span-2">
-                  <div className="metric-label">Subject</div>
-                  <strong className="block text-white/90 mb-3">{pendingDraft.subject ?? pendingDraft.subject_line ?? "Email draft"}</strong>
-                  <div className="metric-label">Body preview</div>
-                  <div className="bg-black/30 border border-white/10 rounded-lg p-4 text-sm text-white/70 whitespace-pre-wrap max-h-80 overflow-y-auto">
-                    {pendingDraft.body ?? pendingDraft.message_body ?? "No draft body stored."}
-                  </div>
+                  <DraftReviewEditor draft={pendingDraft} leadId={lead.id} />
                 </div>
                 <div className="space-y-4">
                   <div><span className="metric-label">Step</span><strong>{pendingDraft.step_number ?? "--"}</strong></div>
                   <div><span className="metric-label">Validation</span><strong>{pendingDraft.validation_passed ? "Passed" : "Needs review"}</strong></div>
                   <div><span className="metric-label">Word count</span><strong>{pendingDraft.word_count ?? "--"}</strong></div>
                   <div><span className="metric-label">Warnings</span><strong>{Array.isArray(pendingDraft.generation_warnings) ? pendingDraft.generation_warnings.join(", ") : "None"}</strong></div>
-                  <div className="button-row">
-                    <form action={approveEmailDraftAction}>
-                      <input type="hidden" name="draftId" value={pendingDraft.id} />
-                      <input type="hidden" name="leadId" value={lead.id} />
-                      <Button type="submit">Approve draft</Button>
-                    </form>
-                    <form action={rejectEmailDraftAction} className="flex flex-col gap-2">
-                      <input type="hidden" name="draftId" value={pendingDraft.id} />
-                      <input type="hidden" name="leadId" value={lead.id} />
-                      <input name="reason" placeholder="Rejection reason" className="bg-black/20 border border-white/10 rounded-lg p-2 text-white/90 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all" />
-                      <Button type="submit" variant="danger">Reject draft</Button>
-                    </form>
-                  </div>
-                  <Button type="button" variant="secondary" disabled>Edit draft coming soon</Button>
                 </div>
               </>
             ) : (
@@ -282,29 +262,9 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
             <div className="p-6 border-b border-white/5"><h2 className="text-lg font-medium text-white/90">Drafts & reviews</h2></div>
             <div className="p-6 space-y-4">
               {lead.drafts.map((draft: any) => (
-                <div className="record-card" key={draft.id}>
-                  <strong>{draft.subject ?? draft.subject_line ?? "Draft"}</strong>
-                  <div className="button-row mt-2">
-                    <Badge tone="info">{draft.approval_status ?? "pending"}</Badge>
-                    {draft.sent ? <Badge tone="success">Sent</Badge> : null}
-                  </div>
-                  {!draft.sent && ["pending", null, undefined].includes(draft.approval_status) ? (
-                    <div className="button-row mt-3">
-                      <form action={approveEmailDraftAction}>
-                        <input type="hidden" name="draftId" value={draft.id} />
-                        <input type="hidden" name="leadId" value={lead.id} />
-                        <Button type="submit" variant="secondary">Approve draft</Button>
-                      </form>
-                      <form action={rejectEmailDraftAction} className="flex flex-col gap-2">
-                        <input type="hidden" name="draftId" value={draft.id} />
-                        <input type="hidden" name="leadId" value={lead.id} />
-                        <input name="reason" placeholder="Rejection reason" className="bg-black/20 border border-white/10 rounded-lg p-2 text-white/90 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all" />
-                        <Button type="submit" variant="danger">Reject draft</Button>
-                      </form>
-                    </div>
-                  ) : null}
-                </div>
+                <DraftReviewEditor draft={draft} leadId={lead.id} compact key={draft.id} />
               ))}
+              {lead.drafts.length === 0 ? <div className="empty-state">No drafts recorded.</div> : null}
               {lead.reviews.map((review: any) => (
                 <div className="record-card" key={review.id}>
                   <strong>{review.reason ?? "Review item"}</strong>

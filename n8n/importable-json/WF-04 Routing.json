@@ -6,7 +6,8 @@
         "rule": {
           "interval": [
             {
-              "triggerAtHour": 9
+              "field": "minutes",
+              "minutesInterval": 30
             }
           ]
         }
@@ -14,43 +15,172 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -400,
-        0
+        -544,
+        -112
       ],
-      "id": "2c3ffe72-a4b1-5e52-a026-10e378217d5c",
+      "id": "4166de06-e219-488e-a1ed-c7c81ded423a",
       "name": "Schedule Trigger"
     },
     {
       "parameters": {
         "operation": "getAll",
         "tableId": "leads",
-        "limit": 50,
-        "filterType": "string",
-        "filterString": "status=eq.scored"
+        "limit": 25,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "scored"
+            }
+          ]
+        }
       },
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        -120,
-        0
+        -336,
+        -112
       ],
-      "id": "574dcaf0-640f-57a3-b166-32fc16cd0548",
-      "name": "Supabase Source Query"
+      "id": "8b4d4bc4-c4ed-46ba-8129-e125a8608903",
+      "name": "Select Scored Leads",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
     },
     {
       "parameters": {
-        "content": "Native routing is still needed until a backend route is added. Load latest lead_scores and automation_hypotheses, then upsert manual_review_queue or outreach_queue.",
-        "height": 220,
-        "width": 420
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c7a161b9-1c41-47b8-83e7-97da4e958e79",
+              "leftValue": "={{ \n  $node[\"Select Latest Score\"].json.manual_review_required === true ||\n  $node[\"Select Latest Score\"].json.confidence === \"low\"\n}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
       "position": [
-        -400,
-        -260
+        272,
+        -112
       ],
-      "id": "e8315846-a2d5-55b7-b91c-28330ff7a110",
-      "name": "WF-04 Routing Notes"
+      "id": "1a3fbcf3-1ae2-4765-9573-1f3c62a73835",
+      "name": "Manual Review Required"
+    },
+    {
+      "parameters": {
+        "url": "=https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/lead_scores?lead_id=eq.{{$node[\"Select Scored Leads\"].json.id}}&order=created_at.desc&limit=1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -128,
+        -112
+      ],
+      "id": "a129f3e2-2f13-4aa3-a4c3-06968b457c12",
+      "name": "Select Latest Score",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/automation_hypotheses?lead_id=eq.{{$node[\"Select Scored Leads\"].json.id}}&order=created_at.desc&limit=1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        80,
+        -112
+      ],
+      "id": "6f66cb21-db49-4eaf-a6c9-419eb8692be2",
+      "name": "Select Latest Hypothesis",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/queue_manual_review_item",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_lead_id\": \"{{$node['Select Scored Leads'].json.id}}\",\n  \"p_reason\": \"{{$node['Select Latest Score'].json.manual_review_required === true ? 'score_requires_manual_review' : 'low_confidence_requires_manual_review'}}\",\n  \"p_priority\": \"{{$node['Select Latest Score'].json.band === 'A' ? 'high' : 'normal'}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        496,
+        -272
+      ],
+      "id": "b332ed33-6369-4aa5-8201-8483c0814997",
+      "name": "Queue Manual Review",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/route_scored_lead",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_lead_id\": \"{{$node['Select Scored Leads'].json.id}}\",\n  \"p_band\": \"{{$node['Select Latest Score'].json.band}}\",\n  \"p_niche\": \"{{$node['Select Scored Leads'].json.niche || null}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        496,
+        16
+      ],
+      "id": "49b033c4-d17b-44a9-bbb3-7bd5943c7596",
+      "name": "Route Scored Lead",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -59,7 +189,58 @@
       "main": [
         [
           {
-            "node": "Supabase Source Query",
+            "node": "Select Scored Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Scored Leads": {
+      "main": [
+        [
+          {
+            "node": "Select Latest Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Latest Score": {
+      "main": [
+        [
+          {
+            "node": "Select Latest Hypothesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Latest Hypothesis": {
+      "main": [
+        [
+          {
+            "node": "Manual Review Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Review Required": {
+      "main": [
+        [
+          {
+            "node": "Queue Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route Scored Lead",
             "type": "main",
             "index": 0
           }
@@ -67,12 +248,20 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner"
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "0GodX1BE3sfkBkyP",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "versionId": "2563233c-caf7-5e21-8a04-ab8e77503b5f",
-  "id": "47291e7a-4dda-50aa-9b68-8e4ccce473a9",
+  "versionId": "0f6ad525-2ee7-4a7e-8982-4695ff91650d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6d48232f5798c49b6b2edf42231411358c3fe95a04dfbd8d339a054335e6191c"
+  },
+  "id": "kA8xrviF5S8lDEl1",
   "tags": []
 }

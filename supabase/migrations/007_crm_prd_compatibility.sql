@@ -12,7 +12,7 @@ alter table campaigns
   add column if not exists exclude_cities jsonb not null default '[]'::jsonb,
   add column if not exists language_of_business jsonb not null default '[]'::jsonb,
   add column if not exists max_leads_per_run integer not null default 100,
-  add column if not exists lead_source text not null default 'google_maps',
+  add column if not exists lead_source text not null default 'google_places',
   add column if not exists min_google_rating numeric not null default 3.5,
   add column if not exists min_review_count integer not null default 5,
   add column if not exists exclude_chains boolean not null default false,

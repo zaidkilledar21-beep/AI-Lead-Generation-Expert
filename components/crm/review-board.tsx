@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { completeReviewQueueItemAction } from "@/lib/crm/actions";
+import { completeReviewQueueItemAction, regenerateEmailDraftAction, updateEmailDraftAction } from "@/lib/crm/actions";
 
 interface ReviewItem {
   id: string;
@@ -138,10 +138,19 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       {selected.reason}
                     </div>
                     {selected.draftSubject ? (
-                      <div className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5">
-                        <strong className="block text-zinc-200 mb-2">{selected.draftSubject}</strong>
-                        <p className="line-clamp-4 whitespace-pre-wrap">{selected.draftPreview ?? "No draft body stored."}</p>
-                      </div>
+                      <form action={updateEmailDraftAction} className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5 space-y-3">
+                        <input type="hidden" name="draftId" value={selected.sourceId} />
+                        <input type="hidden" name="leadId" value={selected.leadId} />
+                        <label className="flex flex-col gap-1">
+                          <span className="text-zinc-200">Subject</span>
+                          <input name="subject" className="field" defaultValue={selected.draftSubject} />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-zinc-200">Body</span>
+                          <textarea name="body" className="field" rows={8} defaultValue={selected.draftPreview ?? ""} />
+                        </label>
+                        <Button type="submit" variant="secondary">Save draft edits</Button>
+                      </form>
                     ) : null}
                     {selected.replyExcerpt ? (
                       <div className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5">
@@ -191,6 +200,12 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                           <input type="hidden" name="decision" value="rejected" />
                           <input type="hidden" name="reason" value="Rejected from review queue" />
                           <Button type="submit" variant="danger" className="w-full shadow-lg">Reject draft</Button>
+                        </form>
+                        <form action={regenerateEmailDraftAction} className="w-full flex flex-col gap-2">
+                          <input type="hidden" name="draftId" value={selected.sourceId} />
+                          <input type="hidden" name="leadId" value={selected.leadId} />
+                          <input name="reason" placeholder="Regeneration note" className="field" />
+                          <Button type="submit" variant="secondary" className="w-full shadow-lg">Request regenerate</Button>
                         </form>
                       </>
                     ) : null}

@@ -228,11 +228,9 @@ export function CreateCampaignForm({
                     <span className="field-label">Lead source</span>
                     <CrmSelect
                       name="lead_source"
-                      defaultValue="google_maps"
+                      defaultValue="google_places"
                       options={[
-                        { value: "google_maps", label: "Google Maps", description: "Primary source for local business discovery." },
-                        { value: "google_search", label: "Google Search", description: "Broader search-driven discovery." },
-                        { value: "directory", label: "Directory", description: "Use approved directory sources only." },
+                        { value: "google_places", label: "Google Places", description: "Primary source for local business discovery." },
                         { value: "manual_import", label: "Manual Import", description: "Reserved for uploaded or hand-curated leads." }
                       ]}
                     />

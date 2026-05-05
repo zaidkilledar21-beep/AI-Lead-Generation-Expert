@@ -2,53 +2,489 @@
   "name": "WF-07 Reply Detection",
   "nodes": [
     {
-      "parameters": {},
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 5,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "filters": {}
+      },
       "type": "n8n-nodes-base.gmailTrigger",
-      "typeVersion": 1,
+      "typeVersion": 1.3,
       "position": [
-        -400,
-        0
+        -624,
+        -16
       ],
-      "id": "5de902a1-b522-5388-a927-3f177e304614",
-      "name": "Gmail Reply Trigger"
+      "id": "2d2ca980-8cc0-4afc-b1a6-c5dff3c32f63",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "0hJ7Y6lvalD2AmMZ",
+          "name": "Gmail account"
+        }
+      }
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "return { json: { from_email: $json.from, to_email: $json.to, reply_body: $json.textPlain ?? $json.textHtml, provider_message_id: $json.id, provider_thread_id: $json.threadId } };"
+        "jsCode": "const msg = $input.item.json;\n\nfunction cleanEmail(value) {\n  if (!value) return null;\n\n  const str = String(value);\n  const match = str.match(/<([^>]+)>/);\n\n  return (match ? match[1] : str)\n    .trim()\n    .toLowerCase();\n}\n\nfunction stripHtml(html) {\n  if (!html) return \"\";\n  return String(html)\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, \"\")\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, \"\")\n    .replace(/<[^>]+>/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n\nconst fromRaw =\n  msg.from ||\n  msg.From ||\n  msg.sender ||\n  msg.headers?.from ||\n  \"\";\n\nconst toRaw =\n  msg.to ||\n  msg.To ||\n  msg.recipient ||\n  msg.headers?.to ||\n  \"\";\n\nconst subject =\n  msg.subject ||\n  msg.Subject ||\n  \"\";\n\nconst providerMessageId =\n  msg.id ||\n  msg.messageId ||\n  msg.message_id ||\n  msg.headers?.[\"message-id\"] ||\n  null;\n\nconst providerThreadId =\n  msg.threadId ||\n  msg.thread_id ||\n  msg.conversationId ||\n  null;\n\nconst bodyRaw =\n  msg.textPlain ||\n  msg.text ||\n  msg.plainText ||\n  msg.body ||\n  stripHtml(msg.textHtml || msg.html || \"\");\n\nlet replyBody = String(bodyRaw || \"\")\n  .replace(/\\r/g, \"\")\n  .split(/\\nOn .*wrote:\\n/i)[0]\n  .split(/\\nFrom: .*/i)[0]\n  .trim();\n\nif (replyBody.length > 3000) {\n  replyBody = replyBody.slice(0, 3000);\n}\n\nconst fromEmail = cleanEmail(fromRaw);\nconst toEmail = cleanEmail(toRaw);\n\nconst noiseSenders = [\n  \"mailer-daemon\",\n  \"postmaster\",\n  \"no-reply\",\n  \"noreply\",\n  \"donotreply\",\n  \"do-not-reply\"\n];\n\nconst isNoise =\n  !fromEmail ||\n  noiseSenders.some(s => fromEmail.includes(s)) ||\n  /delivery status notification|undelivered mail|mail delivery/i.test(subject);\n\nreturn {\n  json: {\n    from_email: fromEmail,\n    to_email: toEmail,\n    subject,\n    reply_body: replyBody,\n    provider_message_id: providerMessageId,\n    provider_thread_id: providerThreadId,\n    is_noise: isNoise\n  }\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -120,
-        0
+        -416,
+        -16
       ],
-      "id": "2137e1bb-50ff-5b49-902b-f3b1b8b2d13a",
-      "name": "Normalize Reply"
+      "id": "b16bc4d4-6e9b-423a-8aa2-a396e5b4845a",
+      "name": "Normalize Message"
     },
     {
       "parameters": {
-        "content": "After Normalize Reply, add Supabase matching nodes, insert reply_events, DeepSeek classification, pause outreach_queue, update leads, and notify founders.",
-        "height": 220,
-        "width": 420
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/match_reply_to_lead",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{   JSON.stringify({     p_from_email: $json.from_email,     p_provider_message_id: $json.provider_message_id || null,     p_provider_thread_id: $json.provider_thread_id || null   }) }}",
+        "options": {}
       },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
       "position": [
-        -400,
-        -260
+        0,
+        -32
       ],
-      "id": "cdab464a-0bcc-585e-b7bd-3ce609913ce7",
-      "name": "WF-07 Notes"
+      "id": "3a60e0ff-7ce2-4cf1-beb0-dd314020d3db",
+      "name": "Match Lead",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/insert_reply_event",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    p_lead_id: $json.lead_id,\n    p_from_email: $json.from_email,\n    p_to_email: $json.to_email,\n    p_reply_body: $json.reply_body,\n    p_provider_message_id: $json.provider_message_id || null,\n    p_provider_thread_id: $json.provider_thread_id || null\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        624,
+        -48
+      ],
+      "id": "0ee40f43-e654-40a3-9b00-b6530a4ad08a",
+      "name": "Insert Reply Event",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "deepSeekApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{\n  JSON.stringify({\n    model: \"deepseek-chat\",\n    response_format: {\n      type: \"json_object\"\n    },\n    messages: [\n      {\n        role: \"system\",\n        content: \"You classify inbound cold outreach replies for an automation consultancy. Return valid JSON only. Never auto-send replies.\"\n      },\n      {\n        role: \"user\",\n        content: `\nClassify this inbound reply.\n\nFrom: ${$json.from_email}\nTo: ${$json.to_email}\nSubject: ${$json.subject}\nBusiness: ${$json.business_name}\nMatched by: ${$json.matched_by}\n\nReply body:\n${$json.reply_body}\n\nReturn this exact JSON shape:\n{\n  \"intent_classification\": \"positive_interest|neutral_question|objection|not_interested|unsubscribe|out_of_office|wrong_person|bounce|manual_review_required\",\n  \"sentiment\": \"positive|neutral|negative\",\n  \"requires_human_review\": true,\n  \"summary\": \"\",\n  \"suggested_next_action\": \"\",\n  \"suggested_reply_draft\": \"\"\n}\n\nRules:\n- Return JSON only.\n- If they ask for pricing, details, examples, implementation, a call, or say they are interested, classify as positive_interest.\n- If they ask a normal clarification question, classify as neutral_question.\n- If they object but do not opt out, classify as objection.\n- If they say stop, unsubscribe, remove me, or do not contact me, classify as unsubscribe.\n- If they say not interested, classify as not_interested.\n- If it is an automatic out-of-office message, classify as out_of_office.\n- If it is a delivery failure or bounce, classify as bounce.\n- If it is ambiguous, classify as manual_review_required.\n- requires_human_review must be true for positive_interest, neutral_question, objection, wrong_person, and manual_review_required.\n- requires_human_review should be false for unsubscribe, bounce, out_of_office, and clear not_interested.\n- Suggested draft is only for human review.\n        `.trim()\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1040,
+        -48
+      ],
+      "id": "09287a37-0d1d-49a3-a8ff-a1d144ee5d8a",
+      "name": "DeepSeek Reply Classifier",
+      "credentials": {
+        "deepSeekApi": {
+          "id": "aNfM8oqYzENtLlRm",
+          "name": "DeepSeek account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/pause_queue_after_reply",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{   JSON.stringify({     p_lead_id: $json.lead_id,     p_intent_classification: $json.intent_classification,     p_sentiment: $json.sentiment,     p_requires_human_review: Boolean($json.requires_human_review),     p_reply_event_id: $json.reply_event_id || null   }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1456,
+        -48
+      ],
+      "id": "05eac562-cf8e-4bca-b93c-62aee1fb84d8",
+      "name": "Pause Queue + Update Lead",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "uzairrrrr6@gmail.com",
+        "subject": "=Reply needs review: {{$node[\"Parse Reply Classification\"].json.business_name || \"Unknown business\"}}",
+        "emailType": "text",
+        "message": "=A lead replied and automation has been paused.\n\nBusiness: {{$node[\"Parse Reply Classification\"].json.business_name || \"Unknown business\"}}\nLead email: {{$node[\"Parse Reply Classification\"].json.lead_email || \"unknown\"}}\nMatched by: {{$node[\"Parse Reply Classification\"].json.matched_by || \"unknown\"}}\n\nClassification: {{$node[\"Parse Reply Classification\"].json.intent_classification}}\nSentiment: {{$node[\"Parse Reply Classification\"].json.sentiment}}\n\nSummary:\n{{$node[\"Parse Reply Classification\"].json.summary || \"No summary provided.\"}}\n\nExcerpt:\n{{$node[\"Parse Reply Classification\"].json.reply_body.slice(0, 800)}}\n\nSuggested next action:\n{{$node[\"Parse Reply Classification\"].json.suggested_next_action}}\n\nSuggested reply draft:\n{{$node[\"Parse Reply Classification\"].json.suggested_reply_draft || \"No draft generated.\"}}\n\nDashboard:\nhttps://ai-lead-generation-expert.vercel.app/pipeline/{{$node[\"Parse Reply Classification\"].json.lead_id}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2128,
+        -192
+      ],
+      "id": "cf7abad4-7ca4-4ad2-ac4c-9e4275109ed9",
+      "name": "Founder Notification",
+      "webhookId": "e558c594-ec83-43f1-a082-859da0d6b241",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "0hJ7Y6lvalD2AmMZ",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9948cedf-e278-406a-95b3-814dac6cdcf3",
+              "leftValue": "={{ $json.is_noise === false }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        -16
+      ],
+      "id": "fa597158-3241-459b-bf97-4f86c3ea753b",
+      "name": "Not Noise?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8a6dc58d-6825-4c77-abc7-b4f477519b28",
+              "leftValue": "={{ $json.matched === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        -32
+      ],
+      "id": "baaf4f00-244c-4e07-8981-4b80443052bf",
+      "name": "Lead Matched?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const previous = $(\"Attach Reply Event ID\").first().json;\nconst response = $input.item.json;\n\nconst allowedIntents = [\n  \"positive_interest\",\n  \"neutral_question\",\n  \"objection\",\n  \"not_interested\",\n  \"unsubscribe\",\n  \"out_of_office\",\n  \"wrong_person\",\n  \"bounce\",\n  \"manual_review_required\"\n];\n\nconst allowedSentiments = [\n  \"positive\",\n  \"neutral\",\n  \"negative\"\n];\n\nfunction safeString(value, fallback = \"\") {\n  if (value === null || value === undefined) return fallback;\n  return String(value).trim();\n}\n\nlet parsed = null;\nlet parseError = null;\n\ntry {\n  const content = response.choices?.[0]?.message?.content;\n\n  if (typeof content === \"string\") {\n    parsed = JSON.parse(content);\n  } else if (typeof content === \"object\" && content !== null) {\n    parsed = content;\n  } else {\n    parseError = \"missing_classifier_content\";\n  }\n} catch (error) {\n  parseError = \"classifier_response_not_valid_json\";\n}\n\nconst intentRaw = safeString(parsed?.intent_classification, \"manual_review_required\");\nconst sentimentRaw = safeString(parsed?.sentiment, \"neutral\");\n\nconst intent = allowedIntents.includes(intentRaw)\n  ? intentRaw\n  : \"manual_review_required\";\n\nconst sentiment = allowedSentiments.includes(sentimentRaw)\n  ? sentimentRaw\n  : \"neutral\";\n\nconst humanReviewIntents = [\n  \"positive_interest\",\n  \"neutral_question\",\n  \"objection\",\n  \"wrong_person\",\n  \"manual_review_required\"\n];\n\nconst requiresHumanReview =\n  typeof parsed?.requires_human_review === \"boolean\"\n    ? parsed.requires_human_review\n    : humanReviewIntents.includes(intent);\n\nreturn {\n  json: {\n    ...previous,\n    intent_classification: intent,\n    sentiment,\n    requires_human_review: requiresHumanReview,\n    summary: safeString(\n      parsed?.summary,\n      parseError ? `Classifier fallback used: ${parseError}` : \"\"\n    ),\n    suggested_next_action: safeString(\n      parsed?.suggested_next_action,\n      \"Review the reply manually before taking action.\"\n    ),\n    suggested_reply_draft: safeString(parsed?.suggested_reply_draft, \"\"),\n    classifier_parse_error: parseError,\n    raw_classifier_response: parsed || null\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        -48
+      ],
+      "id": "eeb28385-887e-4543-a13d-cd8f9741c3dc",
+      "name": "Parse Reply Classification"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const normalized = $(\"Normalize Message\").first().json;\nconst matchRaw = $input.item.json;\n\nconst match = Array.isArray(matchRaw) ? matchRaw[0] : matchRaw;\n\nif (!match?.lead_id) {\n  return {\n    json: {\n      ...normalized,\n      matched: false,\n      match_error: \"no_lead_match\"\n    }\n  };\n}\n\nreturn {\n  json: {\n    ...normalized,\n    matched: true,\n    lead_id: match.lead_id,\n    business_name: match.business_name,\n    lead_email: match.lead_email,\n    matched_by: match.matched_by\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        -32
+      ],
+      "id": "4bbd0d22-2575-4460-a3b9-3ee276488f7f",
+      "name": "Prepare Matched Reply"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const previous = $(\"Prepare Matched Reply\").first().json;\nconst raw = $input.item.json;\n\nconst row = Array.isArray(raw) ? raw[0] : raw;\n\nreturn {\n  json: {\n    ...previous,\n    reply_event_id: row.reply_event_id || row.id || null\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        -48
+      ],
+      "id": "618a0f7d-901f-4731-bb75-8e055f06b957",
+      "name": "Attach Reply Event ID"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "24617dc0-191c-4b2a-bc44-0ff41b5dcbed",
+              "leftValue": "={{ $node[\"Parse Reply Classification\"].json.requires_human_review === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1664,
+        -48
+      ],
+      "id": "56009f79-9c5a-42ba-9176-b64e385c9dea",
+      "name": "Human Review Required?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/queue_manual_review_item",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{   JSON.stringify({     p_lead_id: $node[\"Parse Reply Classification\"].json.lead_id,     p_reason: \"reply_\" + $node[\"Parse Reply Classification\"].json.intent_classification,     p_priority: [\"positive_interest\", \"neutral_question\", \"manual_review_required\"].includes(       $node[\"Parse Reply Classification\"].json.intent_classification     )       ? \"high\"       : \"normal\"   }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1872,
+        -64
+      ],
+      "id": "80dee8f5-dfcd-4a32-8923-20a323cd522f",
+      "name": "Queue Manual Review Item",
+      "credentials": {
+        "supabaseApi": {
+          "id": "G2PWTNFTSzofNG19",
+          "name": "Supabase account"
+        }
+      }
     }
   ],
   "pinData": {},
   "connections": {
-    "Gmail Reply Trigger": {
+    "Gmail Trigger": {
       "main": [
         [
           {
-            "node": "Normalize Reply",
+            "node": "Normalize Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Message": {
+      "main": [
+        [
+          {
+            "node": "Not Noise?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Lead": {
+      "main": [
+        [
+          {
+            "node": "Prepare Matched Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Reply Event": {
+      "main": [
+        [
+          {
+            "node": "Attach Reply Event ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Reply Classifier": {
+      "main": [
+        [
+          {
+            "node": "Parse Reply Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Queue + Update Lead": {
+      "main": [
+        [
+          {
+            "node": "Human Review Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not Noise?": {
+      "main": [
+        [
+          {
+            "node": "Match Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Matched?": {
+      "main": [
+        [
+          {
+            "node": "Insert Reply Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reply Classification": {
+      "main": [
+        [
+          {
+            "node": "Pause Queue + Update Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Matched Reply": {
+      "main": [
+        [
+          {
+            "node": "Lead Matched?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Reply Event ID": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Reply Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Review Required?": {
+      "main": [
+        [
+          {
+            "node": "Queue Manual Review Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Manual Review Item": {
+      "main": [
+        [
+          {
+            "node": "Founder Notification",
             "type": "main",
             "index": 0
           }
@@ -56,12 +492,20 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner"
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "0GodX1BE3sfkBkyP",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "versionId": "185df6c5-0878-5884-abc9-9d063baa48df",
-  "id": "3da08cdb-b983-526d-96c3-82010cba471b",
+  "versionId": "db5de017-193f-487d-ba0c-ae786831969a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6d48232f5798c49b6b2edf42231411358c3fe95a04dfbd8d339a054335e6191c"
+  },
+  "id": "puUqQs3dsYLhENEv",
   "tags": []
 }
