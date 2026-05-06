@@ -13,6 +13,35 @@ function cleanText(value: FormDataEntryValue | null) {
   return text.length > 0 ? text : null;
 }
 
+async function closePendingReplyReviewItems({
+  supabase,
+  leadId,
+  actor,
+  notes
+}: Readonly<{
+  supabase: ReturnType<typeof createSupabaseServiceClient>;
+  leadId: string | null;
+  actor: Awaited<ReturnType<typeof requireAppActor>>;
+  notes?: string | null;
+}>) {
+  if (!leadId) return;
+
+  const { error } = await supabase
+    .from("manual_review_queue")
+    .update({
+      review_status: "approved",
+      review_notes: notes ?? "Reply review resolved from CRM.",
+      completed_at: new Date().toISOString(),
+      completed_by: actor.displayName,
+      completed_by_user_id: actor.userId
+    })
+    .eq("lead_id", leadId)
+    .eq("review_status", "pending")
+    .like("reason", "reply_%");
+
+  if (error) throw new Error(error.message);
+}
+
 export async function assignLeadAction(formData: FormData) {
   const leadId = cleanText(formData.get("leadId"));
   const assignedTo = cleanText(formData.get("assignedTo"));
@@ -111,6 +140,28 @@ export async function closeLeadAction(formData: FormData) {
     if (replyError) throw new Error(replyError.message);
   }
 
+  const { error: replyReviewError } = await supabase
+    .from("reply_events")
+    .update({ requires_human_review: false })
+    .eq("lead_id", leadId)
+    .eq("requires_human_review", true);
+  if (replyReviewError) throw new Error(replyReviewError.message);
+
+  await closePendingReplyReviewItems({
+    supabase,
+    leadId,
+    actor,
+    notes: notes ?? `Marked ${outcome}; pending reply review closed.`
+  });
+
+  await logCrmAction({
+    actor,
+    actionType: outcome === "won" ? "marked_closed_won" : "marked_closed_lost",
+    leadId,
+    replyEventId,
+    detail: { outcome, notes, closed_pending_reply_reviews: true }
+  });
+
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
   revalidatePath("/inbox");
@@ -174,6 +225,13 @@ export async function markReplyHandledAction(formData: FormData) {
       created_at: new Date().toISOString()
     });
     if (eventError) throw new Error(eventError.message);
+
+    await closePendingReplyReviewItems({
+      supabase,
+      leadId,
+      actor,
+      notes
+    });
   }
 
   await logCrmAction({ actor, actionType: "reply_handled", leadId, replyEventId, detail: { notes } });
@@ -600,6 +658,27 @@ export async function moveLeadOnBoardAction(leadId: string, status: ManualBoardM
       })
       .eq("id", leadId);
     if (error) throw new Error(error.message);
+
+    const { error: replyError } = await supabase
+      .from("reply_events")
+      .update({ requires_human_review: false })
+      .eq("lead_id", leadId)
+      .eq("requires_human_review", true);
+    if (replyError) throw new Error(replyError.message);
+
+    await closePendingReplyReviewItems({
+      supabase,
+      leadId,
+      actor,
+      notes: `Lead moved to ${status}; pending reply review closed.`
+    });
+
+    await logCrmAction({
+      actor,
+      actionType: status === "closed_won" ? "marked_closed_won" : "marked_closed_lost",
+      leadId,
+      detail: { source: "manual_board_move", status, closed_pending_reply_reviews: true }
+    });
   }
 
   revalidatePath("/pipeline");

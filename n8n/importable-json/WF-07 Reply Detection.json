@@ -46,7 +46,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/match_reply_to_lead",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/match_reply_to_lead",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
@@ -73,7 +73,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/insert_reply_event",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/insert_reply_event",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
@@ -126,13 +126,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/pause_queue_after_reply",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/pause_queue_after_reply",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{   JSON.stringify({     p_lead_id: $json.lead_id,     p_intent_classification: $json.intent_classification,     p_sentiment: $json.sentiment,     p_requires_human_review: Boolean($json.requires_human_review),     p_reply_event_id: $json.reply_event_id || null   }) }}",
+        "body": "={{   JSON.stringify({     p_lead_id: $json.lead_id,     p_intent_classification: $json.intent_classification,     p_sentiment: $json.sentiment,     p_requires_human_review: Boolean($json.requires_human_review),     p_reply_event_id: $json.reply_event_id || null,     p_summary: $json.summary || null,     p_suggested_next_action: $json.suggested_next_action || null,     p_suggested_reply_draft: $json.suggested_reply_draft || null,     p_raw_classifier_response: $json   }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -152,10 +152,10 @@
     },
     {
       "parameters": {
-        "sendTo": "uzairrrrr6@gmail.com",
+        "sendTo": "={{$env.FOUNDER_NOTIFY_EMAIL}}",
         "subject": "=Reply needs review: {{$node[\"Parse Reply Classification\"].json.business_name || \"Unknown business\"}}",
         "emailType": "text",
-        "message": "=A lead replied and automation has been paused.\n\nBusiness: {{$node[\"Parse Reply Classification\"].json.business_name || \"Unknown business\"}}\nLead email: {{$node[\"Parse Reply Classification\"].json.lead_email || \"unknown\"}}\nMatched by: {{$node[\"Parse Reply Classification\"].json.matched_by || \"unknown\"}}\n\nClassification: {{$node[\"Parse Reply Classification\"].json.intent_classification}}\nSentiment: {{$node[\"Parse Reply Classification\"].json.sentiment}}\n\nSummary:\n{{$node[\"Parse Reply Classification\"].json.summary || \"No summary provided.\"}}\n\nExcerpt:\n{{$node[\"Parse Reply Classification\"].json.reply_body.slice(0, 800)}}\n\nSuggested next action:\n{{$node[\"Parse Reply Classification\"].json.suggested_next_action}}\n\nSuggested reply draft:\n{{$node[\"Parse Reply Classification\"].json.suggested_reply_draft || \"No draft generated.\"}}\n\nDashboard:\nhttps://ai-lead-generation-expert.vercel.app/pipeline/{{$node[\"Parse Reply Classification\"].json.lead_id}}",
+        "message": "=A lead replied and automation has been paused.\n\nBusiness: {{$node[\"Parse Reply Classification\"].json.business_name || \"Unknown business\"}}\nLead email: {{$node[\"Parse Reply Classification\"].json.lead_email || \"unknown\"}}\nMatched by: {{$node[\"Parse Reply Classification\"].json.matched_by || \"unknown\"}}\n\nClassification: {{$node[\"Parse Reply Classification\"].json.intent_classification}}\nSentiment: {{$node[\"Parse Reply Classification\"].json.sentiment}}\n\nSummary:\n{{$node[\"Parse Reply Classification\"].json.summary || \"No summary provided.\"}}\n\nExcerpt:\n{{$node[\"Parse Reply Classification\"].json.reply_body.slice(0, 800)}}\n\nSuggested next action:\n{{$node[\"Parse Reply Classification\"].json.suggested_next_action}}\n\nSuggested reply draft:\n{{$node[\"Parse Reply Classification\"].json.suggested_reply_draft || \"No draft generated.\"}}\n\nDashboard:\n{{$env.APP_BASE_URL}}/pipeline/{{$node[\"Parse Reply Classification\"].json.lead_id}}",
         "options": {}
       },
       "type": "n8n-nodes-base.gmail",
@@ -283,67 +283,6 @@
       ],
       "id": "618a0f7d-901f-4731-bb75-8e055f06b957",
       "name": "Attach Reply Event ID"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "24617dc0-191c-4b2a-bc44-0ff41b5dcbed",
-              "leftValue": "={{ $node[\"Parse Reply Classification\"].json.requires_human_review === true }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        1664,
-        -48
-      ],
-      "id": "56009f79-9c5a-42ba-9176-b64e385c9dea",
-      "name": "Human Review Required?"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/queue_manual_review_item",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "supabaseApi",
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{   JSON.stringify({     p_lead_id: $node[\"Parse Reply Classification\"].json.lead_id,     p_reason: \"reply_\" + $node[\"Parse Reply Classification\"].json.intent_classification,     p_priority: [\"positive_interest\", \"neutral_question\", \"manual_review_required\"].includes(       $node[\"Parse Reply Classification\"].json.intent_classification     )       ? \"high\"       : \"normal\"   }) }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        1872,
-        -64
-      ],
-      "id": "80dee8f5-dfcd-4a32-8923-20a323cd522f",
-      "name": "Queue Manual Review Item",
-      "credentials": {
-        "supabaseApi": {
-          "id": "G2PWTNFTSzofNG19",
-          "name": "Supabase account"
-        }
-      }
     }
   ],
   "pinData": {},
@@ -407,7 +346,7 @@
       "main": [
         [
           {
-            "node": "Human Review Required?",
+            "node": "Founder Notification",
             "type": "main",
             "index": 0
           }
@@ -463,28 +402,6 @@
         [
           {
             "node": "DeepSeek Reply Classifier",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Human Review Required?": {
-      "main": [
-        [
-          {
-            "node": "Queue Manual Review Item",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Queue Manual Review Item": {
-      "main": [
-        [
-          {
-            "node": "Founder Notification",
             "type": "main",
             "index": 0
           }

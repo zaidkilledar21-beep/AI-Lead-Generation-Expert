@@ -87,7 +87,7 @@
     },
     {
       "parameters": {
-        "url": "=https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/lead_scores?lead_id=eq.{{$node[\"Select Scored Leads\"].json.id}}&order=created_at.desc&limit=1",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/lead_scores?lead_id=eq.{{$node[\"Select Scored Leads\"].json.id}}&order=created_at.desc&limit=1",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "options": {}
@@ -109,7 +109,7 @@
     },
     {
       "parameters": {
-        "url": "=https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/automation_hypotheses?lead_id=eq.{{$node[\"Select Scored Leads\"].json.id}}&order=created_at.desc&limit=1",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/automation_hypotheses?lead_id=eq.{{$node[\"Select Scored Leads\"].json.id}}&order=created_at.desc&limit=1",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "options": {}
@@ -133,7 +133,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/queue_manual_review_item",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/queue_manual_review_item",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
@@ -159,7 +159,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/route_scored_lead",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/route_scored_lead",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
