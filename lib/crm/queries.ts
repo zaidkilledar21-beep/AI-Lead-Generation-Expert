@@ -1,5 +1,11 @@
 import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
-import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
+import {
+  HUMAN_REVIEW_REPLY_INTENTS,
+  POSITIVE_REPLY_INTENTS,
+  formatReplyIntentLabel,
+  normalizeReplyIntent,
+  normalizeReplyReviewReason
+} from "@/lib/crm/status-contract";
 import type { AnalyticsCampaign, AnalyticsDaily, AnalyticsSequenceStep, CountryData, IntentData, NicheData, LeadProfile, WeeklySnapshot } from "@/lib/crm/types";
 
 /** Safely coerce an `unknown` DB value to string. Objects would produce `[object Object]` via String(), so we guard against that. */
@@ -57,7 +63,7 @@ function mapPipelineRow(row: Record<string, any>) {
     lastEmailSentAt: row.last_email_sent_at ?? null,
     replyCount: row.reply_count ?? 0,
     lastReplyAt: row.last_reply_at ?? null,
-    latestReplyIntent: row.latest_reply_intent ?? null,
+    latestReplyIntent: row.latest_reply_intent ? normalizeReplyIntent(row.latest_reply_intent) : null,
     hasUnhandledReply: Boolean(row.has_unhandled_reply),
     hasPendingReview: Boolean(row.has_pending_review),
     pendingReviewSince: row.pending_review_since ?? null
@@ -240,7 +246,7 @@ export async function getLeadDetail(leadId: string) {
     ...asArray(replies as Array<Record<string, any>>).map((item) => ({
       id: `reply-${item.id}`,
       type: "reply",
-      label: item.intent_classification ?? "reply",
+      label: formatReplyIntentLabel(item.intent_classification),
       detail: item.summary ?? item.reply_body ?? "Reply received",
       at: item.reply_received_at ?? null
     })),
@@ -361,16 +367,15 @@ export async function getReviewItems() {
   ]);
 
   const pipelineByLeadId = new Map(pipelineRows.map((row) => [row.id, row]));
-  const importantReplyIntents = new Set([
-    ...POSITIVE_REPLY_INTENTS,
-    ...OBJECTION_REPLY_INTENTS,
-    "ambiguous",
-    "manual_review_required"
-  ]);
+  const importantReplyIntents = new Set<string>(HUMAN_REVIEW_REPLY_INTENTS);
+
+  const pendingReplyReviewKeys = new Set<string>();
 
   const manualItems = asArray(manualReviews as Array<Record<string, any>>).map((item) => {
     const lead = relationOne<Record<string, any>>(item.leads);
     const pipeline = pipelineByLeadId.get(item.lead_id);
+    const reason = normalizeReplyReviewReason(item.reason);
+    if (reason.startsWith("reply_")) pendingReplyReviewKeys.add(`${item.lead_id}:${reason}`);
     return {
       id: `manual-${item.id}`,
       source: "manual_review" as const,
@@ -381,7 +386,7 @@ export async function getReviewItems() {
       country: lead?.country ?? pipeline?.country ?? null,
       city: lead?.city ?? pipeline?.city ?? null,
       leadStatus: lead?.status ?? null,
-      reason: item.reason ?? "Manual review required",
+      reason,
       priority: item.priority ?? "normal",
       reviewStatus: item.review_status,
       notes: item.review_notes ?? null,
@@ -420,9 +425,14 @@ export async function getReviewItems() {
   });
 
   const replyItems = asArray(replies as Array<Record<string, any>>)
-    .filter((item) => Boolean(item.requires_human_review) || importantReplyIntents.has(item.intent_classification ?? ""))
+    .filter((item) => Boolean(item.requires_human_review) || importantReplyIntents.has(normalizeReplyIntent(item.intent_classification)))
+    .filter((item) => {
+      const intent = normalizeReplyIntent(item.intent_classification);
+      return !pendingReplyReviewKeys.has(`${item.lead_id}:reply_${intent}`);
+    })
     .map((item) => {
       const pipeline = pipelineByLeadId.get(item.lead_id);
+      const intent = normalizeReplyIntent(item.intent_classification);
       return {
         id: `reply-${item.id}`,
         source: "reply_event" as const,
@@ -434,15 +444,15 @@ export async function getReviewItems() {
         country: pipeline?.country ?? null,
         city: pipeline?.city ?? null,
         leadStatus: pipeline?.status ?? null,
-        reason: item.summary ?? item.suggested_next_action ?? "Reply needs founder review",
-        priority: (POSITIVE_REPLY_INTENTS as readonly string[]).includes(item.intent_classification ?? "") ? "urgent" : "high",
+        reason: `reply_${intent}`,
+        priority: (POSITIVE_REPLY_INTENTS as readonly string[]).includes(intent) ? "urgent" : "high",
         reviewStatus: "pending",
-        notes: item.suggested_next_action ?? null,
+        notes: item.suggested_next_action ?? item.summary ?? null,
         band: item.band ?? pipeline?.effectiveBand ?? null,
         score: pipeline?.score ?? null,
         campaignName: item.campaign_name ?? pipeline?.campaignName ?? null,
         replyExcerpt: item.reply_excerpt ?? item.reply_body ?? null,
-        intent: item.intent_classification ?? null,
+        intent,
         createdAt: item.reply_received_at ?? null
       };
     });
@@ -472,7 +482,7 @@ export async function getInboxThreads() {
     toEmail: item.to_email ?? null,
     body: item.reply_body ?? "",
     excerpt: item.reply_excerpt ?? "",
-    intent: item.intent_classification ?? null,
+    intent: item.intent_classification ? normalizeReplyIntent(item.intent_classification) : null,
     sentiment: item.sentiment ?? null,
     summary: item.summary ?? null,
     suggestedNextAction: item.suggested_next_action ?? null,
@@ -626,7 +636,7 @@ export async function getAnalyticsData(rangeDays = 30, from?: string, to?: strin
   };
 
   const intentMap = asArray(replies.data as any[]).reduce((acc, curr) => {
-    const key = curr.intent_classification || "unclassified";
+    const key = curr.intent_classification ? normalizeReplyIntent(curr.intent_classification) : "unclassified";
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -648,7 +658,7 @@ export async function getAnalyticsData(rangeDays = 30, from?: string, to?: strin
     if (!acc[key]) acc[key] = { country: key, leads: 0, replies: 0, positive: 0 };
     acc[key].leads += 1;
     acc[key].replies += Number(curr.replyCount || 0);
-    if ((POSITIVE_REPLY_INTENTS as readonly string[]).includes(curr.latestReplyIntent ?? "")) acc[key].positive += 1;
+    if ((POSITIVE_REPLY_INTENTS as readonly string[]).includes(normalizeReplyIntent(curr.latestReplyIntent))) acc[key].positive += 1;
     return acc;
   }, {} as Record<string, CountryData>);
   const performanceByCountry = Object.values(countryMap).sort((a, b) => b.leads - a.leads);
@@ -768,7 +778,7 @@ export async function getThreadHistory(leadId: string) {
     ...asArray(replies as Array<Record<string, any>>).map((item) => ({
       id: `reply-${item.id}`,
       type: "received",
-      label: item.intent_classification ?? "reply",
+      label: formatReplyIntentLabel(item.intent_classification),
       body: item.reply_body ?? item.summary ?? "Reply received",
       at: item.reply_received_at ?? null,
       sender: item.from_email

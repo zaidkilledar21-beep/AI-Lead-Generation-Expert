@@ -36,7 +36,7 @@
             {
               "keyName": "next_send_at",
               "condition": "lte",
-              "keyValue": "=={{ $now.toISO() }}"
+              "keyValue": "={{ $now.toISO() }}"
             }
           ]
         }
@@ -59,7 +59,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/load_draft_context",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/load_draft_context",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
@@ -125,7 +125,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/persist_draft_or_block",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/persist_draft_or_block",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,

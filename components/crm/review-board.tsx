@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { completeReviewQueueItemAction, regenerateEmailDraftAction, updateEmailDraftAction } from "@/lib/crm/actions";
+import { formatReplyIntentLabel } from "@/lib/crm/status-contract";
 
 interface ReviewItem {
   id: string;
@@ -44,6 +45,11 @@ function sourceLabel(source: ReviewItem["source"]) {
   if (source === "email_draft") return "Draft approval";
   if (source === "reply_event") return "Reply review";
   return "Manual review";
+}
+
+function reviewReasonLabel(item: ReviewItem) {
+  if (!item.reason.startsWith("reply_")) return item.reason;
+  return formatReplyIntentLabel(item.reason.slice("reply_".length));
 }
 
 export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
@@ -96,7 +102,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       <div className="mb-2">
                         <Badge tone="info">{sourceLabel(item.source)}</Badge>
                       </div>
-                      <p className="text-sm text-zinc-400 line-clamp-2 mb-2">{item.reason}</p>
+                      <p className="text-sm text-zinc-400 line-clamp-2 mb-2">{reviewReasonLabel(item)}</p>
                       <div className="text-xs font-mono text-zinc-500">
                         {item.createdAt ? new Date(item.createdAt).toLocaleString() : "--"}
                       </div>
@@ -135,7 +141,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       {selected.band ? <Badge tone="muted">Band {selected.band}</Badge> : null}
                     </div>
                     <div className="text-zinc-300 mb-4 bg-black/20 p-4 rounded-lg border border-white/5">
-                      {selected.reason}
+                      {reviewReasonLabel(selected)}
                     </div>
                     {selected.draftSubject ? (
                       <form action={updateEmailDraftAction} className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5 space-y-3">
@@ -154,7 +160,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                     ) : null}
                     {selected.replyExcerpt ? (
                       <div className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5">
-                        <strong className="block text-zinc-200 mb-2">{selected.intent ?? "Reply"}</strong>
+                        <strong className="block text-zinc-200 mb-2">{selected.intent ? formatReplyIntentLabel(selected.intent) : "Reply"}</strong>
                         <p className="line-clamp-4 whitespace-pre-wrap">{selected.replyExcerpt}</p>
                       </div>
                     ) : null}

@@ -59,11 +59,23 @@ Create these in n8n credentials. Do not hardcode secrets inside nodes.
 Set these in the Hetzner n8n container environment:
 
 ```text
-APP_BASE_URL=https://ai-lead-generation-expert.vercel.app
-N8N_API_KEY=<same value configured in Vercel>
+SUPABASE_URL=<project URL, no trailing slash>
+SUPABASE_SERVICE_ROLE_KEY=<service role key used by the Supabase credential>
+APP_BASE_URL=<deployed app base URL, no trailing slash>
+N8N_WORKFLOW_API_KEY=<same value configured in Vercel>
+FOUNDER_NOTIFY_EMAIL=<founder notification inbox>
 ```
 
-Set the same `N8N_API_KEY` in Vercel. Keep `GLOBAL_OUTREACH_PAUSED=true` and `app_settings.global_outreach.paused=true` until dry runs pass. DeepSeek should be configured as an n8n credential; do not rely on `$env.DEEPSEEK_API_KEY` inside n8n node expressions.
+Set the same workflow API key in Vercel. App endpoint calls use the `x-n8n-api-key` header. Keep `GLOBAL_OUTREACH_PAUSED=true` and `app_settings.global_outreach.paused=true` until dry runs pass. DeepSeek should be configured as an n8n credential; do not rely on `$env.DEEPSEEK_API_KEY` inside n8n node expressions.
+
+The checked-in workflow exports use n8n env expressions for Supabase/app URLs and founder notifications:
+
+```text
+{{$env.SUPABASE_URL}}
+{{$env.APP_BASE_URL}}
+{{$env.FOUNDER_NOTIFY_EMAIL}}
+{{$env.N8N_WORKFLOW_API_KEY}}
+```
 
 ## Global Workflow Rules
 
@@ -99,6 +111,8 @@ Set the same `N8N_API_KEY` in Vercel. Keep `GLOBAL_OUTREACH_PAUSED=true` and `ap
 
 `WF-01` and `WF-10` call the deployed Vercel app through `APP_BASE_URL`. `WF-04` through `WF-08` should be exported from the live n8n instance after confirming they call the live Supabase RPC endpoints. The checked-in table/schema migration supports those RPC contracts, but do not treat placeholder JSON exports as production-ready if they only contain source-query nodes and sticky notes.
 
+Discovery implementation lives in the app. `WF-10` is the scheduled/orchestrated wrapper around `/api/workflows/discovery/run`, while CRM manual runs call the same app-owned runner server-side. Downstream enrichment, scoring, routing, drafting, sending, reply detection, and reporting remain n8n/Supabase workflow concerns.
+
 ### Lifecycle Contract Checks
 
 Before importing or updating workflow JSONs, verify that `WF-04` through `WF-08` keep the CRM lifecycle contract:
@@ -107,6 +121,8 @@ Before importing or updating workflow JSONs, verify that `WF-04` through `WF-08`
 - Manual review completion uses `review_status = "approved"` or `review_status = "rejected"`; workflows must not write `manual_review_queue.review_status = "handled"`.
 - Sending remains scheduler-owned; workflows must not invent `outreach_queue.status = "in_sequence"` or `email_drafts.approval_status = "sent"`.
 - Replies are persisted in `reply_events`; workflow telemetry is persisted in `workflow_events`.
+- `WF-07 Reply Detection` must emit only canonical reply intents: `positive_interest`, `neutral_question`, `objection`, `not_interested`, `unsubscribe`, `out_of_office`, `wrong_person`, `bounce`, and `manual_review_required`.
+- `pause_queue_after_reply` owns reply-triggered manual review queueing; `WF-07` must not call `queue_manual_review_item` separately for the same reply.
 - CRM-facing status changes should continue through the dashboard/RPC contract where available, especially `dashboard_update_lead_status`.
 
 ## Files

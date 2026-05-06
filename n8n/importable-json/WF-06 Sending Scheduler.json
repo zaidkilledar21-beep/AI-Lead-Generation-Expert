@@ -24,7 +24,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/sending_global_outreach_allowed",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/sending_global_outreach_allowed",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "options": {}
@@ -47,7 +47,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/select_available_sending_inbox",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/select_available_sending_inbox",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "options": {}
@@ -94,12 +94,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/update_email_send_state",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/update_email_send_state",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"p_draft_id\": \"{{$node['Select Approved Drafts'].json.draft_id}}\",\n  \"p_gmail_message_id\": \"{{$json.id || $json.messageId || $json.message_id || null}}\",\n  \"p_inbox_id\": \"{{$node['Select Inbox Capacity'].json.id}}\",\n  \"p_lead_id\": \"{{$node['Select Approved Drafts'].json.lead_id}}\",\n  \"p_queue_id\": \"{{$node['Select Approved Drafts'].json.queue_id}}\"\n}",
+        "jsonBody": "={\n  \"p_draft_id\": \"{{$node['Select Approved Drafts'].json.draft_id}}\",\n  \"p_gmail_message_id\": \"{{$json.id || $json.messageId || $json.message_id || null}}\",\n  \"p_gmail_thread_id\": \"{{$json.threadId || $json.thread_id || $json.thread?.id || null}}\",\n  \"p_inbox_id\": \"{{$node['Select Inbox Capacity'].json.id}}\",\n  \"p_lead_id\": \"{{$node['Select Approved Drafts'].json.lead_id}}\",\n  \"p_queue_id\": \"{{$node['Select Approved Drafts'].json.queue_id}}\"\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -222,7 +222,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xizzrlisczijlgtfmpat.supabase.co/rest/v1/rpc/select_approved_due_email_draft",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/select_approved_due_email_draft",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "options": {}

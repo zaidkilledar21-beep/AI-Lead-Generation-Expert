@@ -31,7 +31,7 @@ export default async function InboxPage({
     if (tab === "objections") return (OBJECTION_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "");
     if (tab === "neutral") return (NEUTRAL_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "");
     if (tab === "ooo") return thread.intent === "out_of_office";
-    if (tab === "bounced") return ["bounce", "bounce_or_noise"].includes(thread.intent ?? "");
+    if (tab === "bounced") return thread.intent === "bounce";
     if (tab === "review") return thread.requiresHumanReview;
     return true;
   }).filter((thread) => {

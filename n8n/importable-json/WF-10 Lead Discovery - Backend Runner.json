@@ -38,13 +38,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://ai-lead-generation-expert.vercel.app/api/workflows/discovery/run",
+        "url": "={{$env.APP_BASE_URL}}/api/workflows/discovery/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "x-n8n-api-key",
-              "value": ""
+              "value": "={{$env.N8N_WORKFLOW_API_KEY}}"
             }
           ]
         },
@@ -99,7 +99,7 @@
     },
     {
       "parameters": {
-        "sendTo": "uzair@getsynqro.com",
+        "sendTo": "={{$env.FOUNDER_NOTIFY_EMAIL}}",
         "subject": "⚠️ WF-10 Lead Discovery Needs Attention",
         "emailType": "text",
         "message": "=WF-10 Lead Discovery needs attention.  Status: {{$json.status || 'unknown'}}  Discovery run: {{$json.discovery_run_id || $json.run_id || 'none'}}  Created: {{$json.created || 0}}  Duplicates: {{$json.duplicates || 0}}  Manual review: {{$json.manual_review || 0}}  First error: {{($json.errors && $json.errors.length > 0) ? $json.errors[0] : 'none'}}  Check the dashboard and workflow_events table for details.",

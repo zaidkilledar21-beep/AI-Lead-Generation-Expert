@@ -162,8 +162,6 @@ end;
 $$;
 
 revoke all on function queue_manual_review_item(uuid, text, text, text, jsonb) from public;
-grant execute on function queue_manual_review_item(uuid, text, text, text, jsonb) to anon;
-grant execute on function queue_manual_review_item(uuid, text, text, text, jsonb) to authenticated;
 grant execute on function queue_manual_review_item(uuid, text, text, text, jsonb) to service_role;
 
 -- Sending safety contracts: dashboard approval still queues only; WF-06 remains
@@ -172,8 +170,6 @@ grant execute on function dashboard_update_lead_status(uuid, text) to authentica
 grant execute on function dashboard_update_lead_status(uuid, text) to service_role;
 grant execute on function dashboard_approve_lead_for_outreach(uuid) to authenticated;
 grant execute on function dashboard_approve_lead_for_outreach(uuid) to service_role;
-grant execute on function reserve_places_quota(uuid, text, integer, integer, integer) to anon;
-grant execute on function reserve_places_quota(uuid, text, integer, integer, integer) to authenticated;
 grant execute on function reserve_places_quota(uuid, text, integer, integer, integer) to service_role;
 
 create or replace function sending_global_outreach_allowed()
@@ -479,13 +475,13 @@ revoke all on function match_reply_to_lead(text, text, text) from public;
 revoke all on function insert_reply_event(uuid, text, text, text, text, text) from public;
 revoke all on function pause_queue_after_reply(uuid, text, text, boolean, uuid) from public;
 
-grant execute on function sending_global_outreach_allowed() to anon, authenticated, service_role;
-grant execute on function select_available_sending_inbox() to anon, authenticated, service_role;
-grant execute on function select_approved_due_email_draft() to anon, authenticated, service_role;
-grant execute on function update_email_send_state(uuid, text, uuid, uuid, uuid) to anon, authenticated, service_role;
-grant execute on function match_reply_to_lead(text, text, text) to anon, authenticated, service_role;
-grant execute on function insert_reply_event(uuid, text, text, text, text, text) to anon, authenticated, service_role;
-grant execute on function pause_queue_after_reply(uuid, text, text, boolean, uuid) to anon, authenticated, service_role;
+grant execute on function sending_global_outreach_allowed() to service_role;
+grant execute on function select_available_sending_inbox() to service_role;
+grant execute on function select_approved_due_email_draft() to service_role;
+grant execute on function update_email_send_state(uuid, text, uuid, uuid, uuid) to service_role;
+grant execute on function match_reply_to_lead(text, text, text) to service_role;
+grant execute on function insert_reply_event(uuid, text, text, text, text, text) to service_role;
+grant execute on function pause_queue_after_reply(uuid, text, text, boolean, uuid) to service_role;
 
 -- CRM-facing analytics and workflow telemetry remain version-controlled via the
 -- views in 007_crm_prd_compatibility.sql and workflow_events.

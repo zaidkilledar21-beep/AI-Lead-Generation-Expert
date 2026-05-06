@@ -39,37 +39,102 @@ export const TERMINAL_LEAD_STATUSES = [
   "bounced"
 ] as const;
 
-export const POSITIVE_REPLY_INTENTS = [
-  "interested",
-  "pricing_request",
-  "call_request",
-  "demo_request",
-  "meeting_request",
-  "high_intent"
+export const REPLY_INTENTS = [
+  "positive_interest",
+  "neutral_question",
+  "objection",
+  "not_interested",
+  "unsubscribe",
+  "out_of_office",
+  "wrong_person",
+  "bounce",
+  "manual_review_required"
 ] as const;
 
+export type ReplyIntent = typeof REPLY_INTENTS[number];
+
+export const POSITIVE_REPLY_INTENTS = [
+  "positive_interest"
+] as const satisfies readonly ReplyIntent[];
+
 export const NEUTRAL_REPLY_INTENTS = [
-  "question",
   "neutral_question",
-  "ambiguous",
   "out_of_office"
-] as const;
+] as const satisfies readonly ReplyIntent[];
 
 export const NEGATIVE_REPLY_INTENTS = [
   "not_interested",
-  "negative",
-  "rejection",
   "unsubscribe",
-  "opt_out"
-] as const;
+  "bounce"
+] as const satisfies readonly ReplyIntent[];
 
 export const OBJECTION_REPLY_INTENTS = [
-  ...NEGATIVE_REPLY_INTENTS,
   "objection",
   "wrong_person",
-  "ambiguous",
   "manual_review_required"
-] as const;
+] as const satisfies readonly ReplyIntent[];
+
+export const HUMAN_REVIEW_REPLY_INTENTS = [
+  "positive_interest",
+  "neutral_question",
+  "objection",
+  "wrong_person",
+  "manual_review_required"
+] as const satisfies readonly ReplyIntent[];
+
+export const REPLY_INTENT_LABELS: Record<ReplyIntent, string> = {
+  positive_interest: "Positive interest",
+  neutral_question: "Neutral question",
+  objection: "Objection",
+  not_interested: "Not interested",
+  unsubscribe: "Unsubscribe",
+  out_of_office: "Out of office",
+  wrong_person: "Wrong person",
+  bounce: "Bounce",
+  manual_review_required: "Manual review required"
+};
+
+export function isCanonicalReplyIntent(intent: string | null | undefined): intent is ReplyIntent {
+  return Boolean(intent && (REPLY_INTENTS as readonly string[]).includes(intent));
+}
+
+export function normalizeReplyIntent(intent: string | null | undefined): ReplyIntent {
+  switch (intent) {
+    case "interested":
+    case "pricing_request":
+    case "call_request":
+    case "demo_request":
+    case "meeting_request":
+    case "high_intent":
+      return "positive_interest";
+    case "question":
+      return "neutral_question";
+    case "negative":
+    case "rejection":
+    case "no_interest":
+      return "not_interested";
+    case "opt_out":
+    case "do_not_contact":
+    case "remove_me":
+      return "unsubscribe";
+    case "ambiguous":
+      return "manual_review_required";
+    case "bounce_or_noise":
+      return "bounce";
+    default:
+      return isCanonicalReplyIntent(intent) ? intent : "manual_review_required";
+  }
+}
+
+export function normalizeReplyReviewReason(reason: string | null | undefined): string {
+  if (!reason?.startsWith("reply_")) return reason ?? "manual_review_required";
+  return `reply_${normalizeReplyIntent(reason.slice("reply_".length))}`;
+}
+
+export function formatReplyIntentLabel(intent: string | null | undefined) {
+  const normalized = normalizeReplyIntent(intent);
+  return REPLY_INTENT_LABELS[normalized];
+}
 
 export const MANUAL_BOARD_MOVE_STATUSES = [
   "paused",

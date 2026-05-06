@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { markReplyHandledAction, assignLeadAction, closeLeadAction } from "@/lib/crm/actions";
-import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
+import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS, formatReplyIntentLabel } from "@/lib/crm/status-contract";
 
 interface InboxThread {
   id: string;
@@ -118,7 +118,7 @@ export function InboxView({
               if ((POSITIVE_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "")) intentTone = "success";
               if ((OBJECTION_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "")) intentTone = "danger";
               if (thread.intent === "out_of_office") intentTone = "warning";
-              if (["bounce", "bounce_or_noise"].includes(thread.intent ?? "")) intentTone = "muted";
+              if (thread.intent === "bounce") intentTone = "muted";
 
               let sentimentColor = "bg-white/20";
               if (thread.sentiment === "positive") sentimentColor = "bg-emerald-500";
@@ -173,7 +173,7 @@ export function InboxView({
                   <div className="flex justify-between items-center pl-4">
                     <div className="flex gap-1.5">
                       <Badge tone={intentTone} className="text-[10px] px-1.5 py-0 uppercase tracking-tighter">
-                        {thread.intent?.replaceAll("_", " ") ?? "unclassified"}
+                        {thread.intent ? formatReplyIntentLabel(thread.intent) : "unclassified"}
                       </Badge>
                       {thread.band ? <Badge tone="muted" className="text-[10px] px-1.5 py-0">{thread.band}</Badge> : null}
                     </div>
