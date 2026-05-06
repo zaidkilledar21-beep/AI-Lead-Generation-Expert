@@ -49,6 +49,7 @@ type PlacesDetails = {
 export type RunLeadDiscoveryInput = {
   campaign_id?: string;
   dry_run?: boolean;
+  trigger_type?: "manual" | "schedule" | "webhook";
 };
 
 type DiscoveryRunStatus = "completed" | "failed" | "quota_exhausted";
@@ -713,7 +714,7 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
 
   const { data: run, error: runError } = await supabase
     .from("discovery_runs")
-    .insert({ campaign_id: campaign.id, trigger_type: input.dry_run ? "manual" : "schedule", source: "google_places" })
+    .insert({ campaign_id: campaign.id, trigger_type: input.trigger_type ?? (input.dry_run ? "manual" : "schedule"), source: "google_places" })
     .select("id")
     .single();
 

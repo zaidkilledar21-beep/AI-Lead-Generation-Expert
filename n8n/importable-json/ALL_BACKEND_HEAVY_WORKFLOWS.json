@@ -23,8 +23,32 @@
       },
       {
         "parameters": {
+          "httpMethod": "POST",
+          "path": "wf-10-lead-discovery",
+          "authentication": "headerAuth",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -400,
+          192
+        ],
+        "id": "7cc22356-1f4c-5a28-b998-15e9c5cff764",
+        "name": "CRM Manual Run Webhook",
+        "webhookId": "wf-10-lead-discovery",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REPLACE_WITH_CRM_MANUAL_RUN_HEADER_AUTH",
+            "name": "CRM Manual Run Header Auth"
+          }
+        }
+      },
+      {
+        "parameters": {
           "mode": "runOnceForEachItem",
-          "jsCode": "return { json: { dry_run: false } };"
+          "jsCode": "const input = $json || {};\nconst body = input.body || input;\nconst fromWebhook = Boolean(input.body);\n\nreturn {\n  json: {\n    campaign_id: body.campaign_id || undefined,\n    dry_run: Boolean(body.dry_run ?? false),\n    trigger_type: body.trigger_type || (fromWebhook ? \"manual\" : \"schedule\"),\n    trigger_source: body.source || body.trigger_source || (fromWebhook ? \"crm_manual_run\" : \"schedule\"),\n    requested_by: body.requested_by || null,\n    requested_at: body.requested_at || new Date().toISOString()\n  }\n};"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -126,6 +150,17 @@
     "pinData": {},
     "connections": {
       "Start Daily Discovery": {
+        "main": [
+          [
+            {
+              "node": "Build Discovery Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CRM Manual Run Webhook": {
         "main": [
           [
             {

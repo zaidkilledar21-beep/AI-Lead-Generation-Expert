@@ -10,10 +10,15 @@ export async function POST(request: NextRequest) {
   if (unauthorized) return unauthorized;
 
   try {
-    const body = (await request.json().catch(() => ({}))) as { campaign_id?: string; dry_run?: boolean };
+    const body = (await request.json().catch(() => ({}))) as {
+      campaign_id?: string;
+      dry_run?: boolean;
+      trigger_type?: "manual" | "schedule" | "webhook";
+    };
     const result = await runLeadDiscovery({
       campaign_id: body.campaign_id,
-      dry_run: body.dry_run
+      dry_run: body.dry_run,
+      trigger_type: body.trigger_type
     });
 
     return NextResponse.json(result);

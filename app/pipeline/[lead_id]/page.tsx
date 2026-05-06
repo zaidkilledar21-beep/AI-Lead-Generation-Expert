@@ -253,6 +253,10 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                   </div>
                   <p>{reply.summary ?? reply.reply_body ?? "Reply received"}</p>
                   <div className="muted">{reply.suggested_next_action ?? "No suggested next action."}</div>
+                  <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="metric-label mb-1">AI reply draft</div>
+                    <p className="whitespace-pre-wrap text-sm text-white/75">{reply.ai_draft_reply ?? "No AI reply draft was generated for this reply."}</p>
+                  </div>
                 </div>
               ))}
             </div>

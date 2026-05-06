@@ -11,23 +11,29 @@ Trigger:
 
 1. Manual Trigger during setup.
 2. Schedule Trigger once daily after dry-run approval.
-3. Optional app webhook `POST /api/workflows/discovery/run`.
+3. CRM manual-run webhook in n8n: `POST /webhook/wf-10-lead-discovery`.
+4. Internal app callback from WF-10: `POST /api/workflows/discovery/run`.
 
 Input shape:
 
 ```json
 {
   "campaign_id": "uuid",
-  "dry_run": false
+  "dry_run": false,
+  "trigger_type": "manual"
 }
 ```
 
 Node Skeleton:
 
 1. Trigger
+   - Schedule trigger uses `trigger_type = schedule`.
+   - CRM webhook uses `trigger_type = manual` and passes `campaign_id` from the CRM payload.
+   - Protect the CRM webhook with n8n Header Auth using the `x-n8n-api-key` header.
 
-2. Authenticate App Call
+2. Authenticate App Callback
    - Use `x-n8n-api-key` for app route calls.
+   - Prefer `$env.N8N_API_KEY`; keep `$env.N8N_WORKFLOW_API_KEY` as a compatibility fallback.
 
 3. Supabase Select `campaigns`
    - Pull one `status = active` campaign.
@@ -45,7 +51,7 @@ Node Skeleton:
      - all paid fallback flags false.
 
 4. Reserve Daily Run Quota
-   - Call Supabase RPC `reserve_discovery_quota`.
+   - Call Supabase RPC `reserve_places_quota`.
    - Counter: `run_count`.
    - Stop if run count cap is reached.
 

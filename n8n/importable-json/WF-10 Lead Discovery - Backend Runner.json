@@ -22,18 +22,40 @@
     },
     {
       "parameters": {
-        "mode": "raw",
-        "jsonOutput": "{\n  \n  \"dry_run\": true\n}",
+        "httpMethod": "POST",
+        "path": "wf-10-lead-discovery",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
         "options": {}
       },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        208,
+        192
+      ],
+      "id": "02d7a4ee-f40e-40a1-91dc-0a16a73a9519",
+      "name": "Manual Run Webhook",
+      "webhookId": "wf-10-lead-discovery",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CRM_MANUAL_RUN_HEADER_AUTH",
+          "name": "CRM Manual Run Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json || {};\nconst body = input.body || input;\nconst fromWebhook = Boolean(input.body);\n\nreturn [\n  {\n    json: {\n      campaign_id: body.campaign_id || undefined,\n      dry_run: Boolean(body.dry_run ?? false),\n      trigger_type: body.trigger_type || (fromWebhook ? \"manual\" : \"schedule\"),\n      trigger_source: body.source || body.trigger_source || (fromWebhook ? \"crm_manual_run\" : \"schedule\"),\n      requested_by: body.requested_by || null,\n      requested_at: body.requested_at || new Date().toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         208,
         0
       ],
       "id": "9e5132a3-fb2e-4d6c-9092-956936a9ae5a",
-      "name": "Set Request Body"
+      "name": "Build Request Body"
     },
     {
       "parameters": {
@@ -44,13 +66,13 @@
           "parameters": [
             {
               "name": "x-n8n-api-key",
-              "value": "={{$env.N8N_WORKFLOW_API_KEY}}"
+              "value": "={{$env.N8N_API_KEY || $env.N8N_WORKFLOW_API_KEY}}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{\n  \"dry_run\": true\n}",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -128,18 +150,29 @@
       "main": [
         [
           {
-            "node": "Set Request Body",
+            "node": "Build Request Body",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Set Request Body": {
+    "Build Request Body": {
       "main": [
         [
           {
             "node": "POST Discovery Endpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Run Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Request Body",
             "type": "main",
             "index": 0
           }

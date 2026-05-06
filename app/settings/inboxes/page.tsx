@@ -8,7 +8,7 @@ export default async function InboxesSettingsPage() {
 
   return (
     <>
-      <PageHeader title="Inboxes" description="Manage sender inbox capacity, warmup state, and daily send limits." />
+      <PageHeader title="Inboxes" description="Manage sender inbox capacity, warmup state, and daily send limits. Gmail OAuth credentials are managed in n8n." />
       <section className="panel">
         <div className="panel-header"><h2>Add sender inbox</h2></div>
         <div className="panel-body">

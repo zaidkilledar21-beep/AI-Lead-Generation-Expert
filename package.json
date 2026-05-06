@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:auth": "vitest run tests/unit/workflow-auth.test.ts tests/unit/middleware.test.ts",
+    "validate:workflows": "node scripts/validate-workflow-contracts.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
