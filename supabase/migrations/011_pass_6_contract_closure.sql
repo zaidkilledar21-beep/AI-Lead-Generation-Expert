@@ -642,5 +642,7 @@ begin
 end;
 $$;
 
+revoke execute on function public.dashboard_update_lead_status(uuid, text) from public;
+revoke execute on function public.dashboard_update_lead_status(uuid, text) from anon;
 grant execute on function public.dashboard_update_lead_status(uuid, text) to authenticated;
 grant execute on function public.dashboard_update_lead_status(uuid, text) to service_role;
