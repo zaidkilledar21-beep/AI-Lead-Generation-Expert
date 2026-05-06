@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import type { Route } from "next";
+import { DASHBOARD_READ_ROLES, getActiveDashboardUserRole } from "@/lib/app/auth";
 import { createSupabaseDashboardClient } from "@/lib/supabase/dashboard";
 
 export type LoginState = {
@@ -22,10 +23,21 @@ export async function signIn(_previousState: LoginState, formData: FormData): Pr
     return { error: "Supabase dashboard client is not configured" };
   }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     return { error: error.message };
+  }
+
+  try {
+    const role = data.user ? await getActiveDashboardUserRole(data.user.id) : null;
+    if (!role || !DASHBOARD_READ_ROLES.includes(role)) {
+      await supabase.auth.signOut();
+      return { error: "Dashboard access is not active" };
+    }
+  } catch {
+    await supabase.auth.signOut();
+    return { error: "Dashboard access is not active" };
   }
 
   redirect(next as unknown as Route);

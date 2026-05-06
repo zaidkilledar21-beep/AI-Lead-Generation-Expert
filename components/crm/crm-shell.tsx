@@ -142,7 +142,7 @@ export function CrmShell({
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
         >
-          <form className="global-search relative flex-1 max-w-xl group" role="search">
+          <form action="/pipeline" className="global-search relative flex-1 max-w-xl group" role="search">
             <label className="sr-only" htmlFor="global-search">Search CRM</label>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-[var(--accent)] transition-colors" />
             <input 
@@ -166,16 +166,15 @@ export function CrmShell({
               {optimisticPaused ? <PlayCircle className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
               <span>{optimisticPaused ? "Resume Outreach" : "Global Pause"}</span>
             </motion.button>
-            <motion.button 
+            <motion.a 
               className="notification-button relative" 
-              type="button" 
-              aria-label="Notifications"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
+              aria-label="View notifications"
+              href="/settings/notifications"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Bell className="w-4 h-4 text-zinc-300" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-[var(--bg)]" />
-            </motion.button>
+            </motion.a>
             <motion.div 
               className="founder-chip font-medium border-white/10 cursor-pointer" 
               aria-label="Logged in founder"
@@ -194,4 +193,3 @@ export function CrmShell({
     </div>
   );
 }
-

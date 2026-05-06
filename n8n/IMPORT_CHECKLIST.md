@@ -10,13 +10,16 @@ Updated workflow JSON exports are committed under `n8n/importable-json/`. The pr
 - DeepSeek API key credential for scoring, drafting, and reply classification.
 - Notification channel credential for founder alerts and weekly reports.
 - App workflow API key for app HTTP endpoints using `x-n8n-api-key`.
+- Header Auth credential for the WF-10 CRM manual-run webhook. Configure the header name as `x-n8n-api-key` and the value as the same `N8N_API_KEY` used by the app.
 
 ## Environment
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `APP_BASE_URL`
-- `N8N_WORKFLOW_API_KEY`
+- `N8N_API_KEY`
+- `N8N_WORKFLOW_API_KEY` only if an imported workflow still references the compatibility alias.
+- `N8N_DISCOVERY_WEBHOOK_PATH=/webhook/wf-10-lead-discovery` in the app, or set `N8N_DISCOVERY_WEBHOOK_URL` to the full n8n production webhook URL.
 - `FOUNDER_NOTIFY_EMAIL`
 - `GOOGLE_PLACES_API_KEY` if WF-10 uses env-backed HTTP nodes instead of credentials.
 - Global outreach remains paused until WF-06 dry-run and reply tests pass.
@@ -49,6 +52,8 @@ Updated workflow JSON exports are committed under `n8n/importable-json/`. The pr
 ## Safety Checks
 
 - WF-06 send test: use one approved draft, one test inbox, and global pause off only for the controlled test.
+- CRM manual run test: click "Request n8n run" in the CRM and confirm the request enters `WF-10 Lead Discovery - Backend Runner`; the CRM must not call `/api/workflows/discovery/run` directly.
+- WF-10 callback test: confirm WF-10 calls `POST {{APP_BASE_URL}}/api/workflows/discovery/run` with `x-n8n-api-key` and `trigger_type = manual` for CRM webhook executions.
 - WF-07 reply test: verify a reply creates `reply_events`, pauses `outreach_queue`, and blocks all future sends for that lead.
 - WF-07 manual review test: for `positive_interest`, `neutral_question`, `objection`, `wrong_person`, or `manual_review_required`, verify exactly one pending `manual_review_queue` row exists with reason `reply_<canonical_intent>`.
 - WF-06 provider ID test: verify `update_email_send_state` receives both `p_gmail_message_id` and `p_gmail_thread_id` from Gmail output when Gmail returns them.

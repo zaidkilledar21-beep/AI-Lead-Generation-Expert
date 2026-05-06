@@ -62,11 +62,12 @@ Set these in the Hetzner n8n container environment:
 SUPABASE_URL=<project URL, no trailing slash>
 SUPABASE_SERVICE_ROLE_KEY=<service role key used by the Supabase credential>
 APP_BASE_URL=<deployed app base URL, no trailing slash>
-N8N_WORKFLOW_API_KEY=<same value configured in Vercel>
+N8N_API_KEY=<same value configured in Vercel>
+N8N_WORKFLOW_API_KEY=<optional compatibility alias for older exports>
 FOUNDER_NOTIFY_EMAIL=<founder notification inbox>
 ```
 
-Set the same workflow API key in Vercel. App endpoint calls use the `x-n8n-api-key` header. Keep `GLOBAL_OUTREACH_PAUSED=true` and `app_settings.global_outreach.paused=true` until dry runs pass. DeepSeek should be configured as an n8n credential; do not rely on `$env.DEEPSEEK_API_KEY` inside n8n node expressions.
+Set the same workflow API key in Vercel. App endpoint calls use the `x-n8n-api-key` header. For CRM manual campaign runs, also set either `N8N_DISCOVERY_WEBHOOK_URL` or `N8N_BASE_URL` plus `N8N_DISCOVERY_WEBHOOK_PATH=/webhook/wf-10-lead-discovery` in Vercel so the CRM can request WF-10 through n8n. Keep `GLOBAL_OUTREACH_PAUSED=true` and `app_settings.global_outreach.paused=true` until dry runs pass. DeepSeek should be configured as an n8n credential; do not rely on `$env.DEEPSEEK_API_KEY` inside n8n node expressions.
 
 The checked-in workflow exports use n8n env expressions for Supabase/app URLs and founder notifications:
 
@@ -74,7 +75,7 @@ The checked-in workflow exports use n8n env expressions for Supabase/app URLs an
 {{$env.SUPABASE_URL}}
 {{$env.APP_BASE_URL}}
 {{$env.FOUNDER_NOTIFY_EMAIL}}
-{{$env.N8N_WORKFLOW_API_KEY}}
+{{$env.N8N_API_KEY || $env.N8N_WORKFLOW_API_KEY}}
 ```
 
 ## Global Workflow Rules
@@ -111,7 +112,7 @@ The checked-in workflow exports use n8n env expressions for Supabase/app URLs an
 
 `WF-01` and `WF-10` call the deployed Vercel app through `APP_BASE_URL`. `WF-04` through `WF-08` should be exported from the live n8n instance after confirming they call the live Supabase RPC endpoints. The checked-in table/schema migration supports those RPC contracts, but do not treat placeholder JSON exports as production-ready if they only contain source-query nodes and sticky notes.
 
-Discovery implementation lives in the app. `WF-10` is the scheduled/orchestrated wrapper around `/api/workflows/discovery/run`, while CRM manual runs call the same app-owned runner server-side. Downstream enrichment, scoring, routing, drafting, sending, reply detection, and reporting remain n8n/Supabase workflow concerns.
+Discovery implementation lives in the app, but orchestration ownership is n8n. `WF-10` is the scheduled and CRM-manual wrapper around `/api/workflows/discovery/run`; the CRM manual run button posts to the WF-10 webhook, and WF-10 calls the authenticated app workflow endpoint. Keep `/api/workflows/discovery/run` for n8n/internal workflow use only. Downstream enrichment, scoring, routing, drafting, sending, reply detection, and reporting remain n8n/Supabase workflow concerns.
 
 ### Lifecycle Contract Checks
 

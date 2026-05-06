@@ -122,7 +122,7 @@ export default async function CampaignsPage({
                   <td>
                     <div className="button-row">
                       <form action={triggerCampaignManualRun.bind(null, campaign.id)}>
-                        <button className="ui-button ui-button-secondary" type="submit">Run</button>
+                        <button className="ui-button ui-button-secondary" type="submit">Request n8n run</button>
                       </form>
                       <form action={updateCampaignStatus.bind(null, campaign.id, campaign.status === "active" ? "paused" : "active")}>
                         <button className="ui-button ui-button-secondary" type="submit">{campaign.status === "active" ? "Pause" : "Resume"}</button>

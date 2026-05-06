@@ -530,6 +530,7 @@ export async function deleteFilterAction(formData: FormData) {
 }
 
 export async function toggleGlobalPauseAction() {
+  await requireAppActor();
   const supabase = createSupabaseServiceClient();
   const { data: current } = await supabase
     .from("app_settings")

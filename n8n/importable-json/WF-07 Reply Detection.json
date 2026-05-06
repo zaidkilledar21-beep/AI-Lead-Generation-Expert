@@ -132,7 +132,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{   JSON.stringify({     p_lead_id: $json.lead_id,     p_intent_classification: $json.intent_classification,     p_sentiment: $json.sentiment,     p_requires_human_review: Boolean($json.requires_human_review),     p_reply_event_id: $json.reply_event_id || null,     p_summary: $json.summary || null,     p_suggested_next_action: $json.suggested_next_action || null,     p_suggested_reply_draft: $json.suggested_reply_draft || null,     p_raw_classifier_response: $json   }) }}",
+        "body": "={{   JSON.stringify({     p_lead_id: $json.lead_id,     p_intent_classification: $json.intent_classification,     p_sentiment: $json.sentiment,     p_requires_human_review: Boolean($json.requires_human_review),     p_reply_event_id: $json.reply_event_id || null,     p_summary: $json.summary || null,     p_suggested_next_action: $json.suggested_next_action || null,     p_ai_draft_reply: $json.suggested_reply_draft || null,     p_raw_classifier_response: $json   }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",

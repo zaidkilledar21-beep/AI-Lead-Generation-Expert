@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { assertCampaignConfigInput, discoveryLimits, type CampaignConfigInput } from "@/lib/contracts";
+import { requireDashboardWriteAccess } from "@/lib/app/auth";
 import { createCrmCampaign, duplicateCrmCampaign, markCampaignManualRunRequested, updateCrmCampaign, updateCrmCampaignStatus } from "@/lib/app/campaigns";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { triggerDiscoveryWorkflow } from "@/lib/n8n/client";
 import { importDiscoveredLeads, type RawLeadInput } from "@/lib/workflows/discovery";
-import { runLeadDiscovery } from "@/lib/workflows/lead-discovery";
 
 function parseCsv(value: FormDataEntryValue | null) {
   const raw = typeof value === "string" ? value : "";
@@ -155,15 +156,43 @@ export async function duplicateCampaignAction(campaignId: string) {
 }
 
 export async function triggerCampaignManualRun(campaignId: string) {
+  const actor = await requireDashboardWriteAccess();
   await markCampaignManualRunRequested(campaignId);
-  await runLeadDiscovery({ campaign_id: campaignId });
+  const result = await triggerDiscoveryWorkflow({
+    campaignId,
+    requestedBy: actor
+  });
+
+  const supabase = createSupabaseServiceClient();
+  await supabase.from("workflow_events").insert({
+    workflow_name: "WF-10 Lead Discovery",
+    campaign_id: campaignId,
+    event_type: "crm_manual_run_requested",
+    status: result.ok ? "requested" : "failed",
+    payload: {
+      requested_by: actor.userId,
+      requested_by_email: actor.email,
+      n8n_status: result.status,
+      n8n_workflow_run_id: result.workflowRunId,
+      n8n_message: result.message,
+      n8n_payload: result.payload
+    },
+    created_at: new Date().toISOString()
+  });
+
+  if (!result.ok) {
+    throw new Error(result.message ?? "n8n discovery workflow request failed");
+  }
+
   revalidatePath("/campaigns");
   revalidatePath(`/campaigns/${campaignId}`);
   revalidatePath("/pipeline");
+  revalidatePath("/analytics");
 }
 
 export async function manualImportLeadsAction(campaignId: string, _: unknown, formData: FormData) {
   try {
+    await requireDashboardWriteAccess();
     const pastedCsv = str(formData.get("csv"));
     const rows = parseCsvRows(pastedCsv).slice(0, 101);
     const [header, ...bodyRows] = rows;

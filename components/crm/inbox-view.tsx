@@ -341,7 +341,7 @@ export function InboxView({
                   </button>
                 </div>
                 <div className="prose prose-invert max-w-none text-brand/80 whitespace-pre-wrap text-sm leading-relaxed">
-                  {selected.aiDraftReply ?? "Generating response based on founder profile..."}
+                  {selected.aiDraftReply ?? "No AI reply draft was generated for this reply."}
                 </div>
               </div>
 
