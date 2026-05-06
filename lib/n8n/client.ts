@@ -22,10 +22,18 @@ function discoveryWebhookUrl() {
   const explicitUrl = process.env.N8N_DISCOVERY_WEBHOOK_URL;
   if (explicitUrl) return explicitUrl;
 
-  const baseUrl = getRequiredEnv("N8N_BASE_URL").replace(/\/+$/, "");
+  const baseUrl = trimTrailingSlashes(getRequiredEnv("N8N_BASE_URL"));
   const path = process.env.N8N_DISCOVERY_WEBHOOK_PATH || "/webhook/wf-10-lead-discovery";
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${baseUrl}${normalizedPath}`;
+}
+
+function trimTrailingSlashes(value: string) {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 function workflowApiKey() {
