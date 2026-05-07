@@ -1,17 +1,19 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { useState, useTransition } from "react";
 
 export function ActionFeedbackForm({
   action,
   successMessage,
   className,
+  formRef,
   children
 }: Readonly<{
   action: (formData: FormData) => Promise<unknown>;
   successMessage: string;
   className?: string;
+  formRef?: Ref<HTMLFormElement>;
   children: ReactNode;
 }>) {
   const [isPending, startTransition] = useTransition();
@@ -19,6 +21,7 @@ export function ActionFeedbackForm({
 
   return (
     <form
+      ref={formRef}
       className={className}
       onSubmit={(event) => {
         event.preventDefault();

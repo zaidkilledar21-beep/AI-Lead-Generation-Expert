@@ -4,8 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { CrmSelect } from "@/components/ui/crm-select";
-import { markReplyHandledAction, assignLeadAction, closeLeadAction } from "@/lib/crm/actions";
+import { markReplyHandledAction, assignReplyAction, closeLeadAction } from "@/lib/crm/actions";
 import { OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS, formatReplyIntentLabel } from "@/lib/crm/status-contract";
+import { ActionFeedbackForm } from "@/components/crm/action-feedback-form";
+import { CopyButton } from "@/components/crm/copy-button";
+import { getReplySlaLabel } from "@/lib/crm/inbox-utils";
 
 interface InboxThread {
   id: string;
@@ -67,7 +70,6 @@ export function InboxView({
   leadDetails?: LeadDetails | null;
   profiles?: LeadProfile[];
 }>) {
-  const [copied, setCopied] = useState(false);
   const [now, setNow] = useState<number | null>(null);
   const assignFormRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
@@ -92,13 +94,6 @@ export function InboxView({
     return `/inbox?${params.toString()}`;
   };
 
-  const copyDraft = async () => {
-    if (!selected?.aiDraftReply) return;
-    await navigator.clipboard.writeText(selected.aiDraftReply);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[75vh] min-h-[600px] mt-6">
       {/* Left Pane: Thread List */}
@@ -119,6 +114,7 @@ export function InboxView({
               if ((OBJECTION_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "")) intentTone = "danger";
               if (thread.intent === "out_of_office") intentTone = "warning";
               if (thread.intent === "bounce") intentTone = "muted";
+              const slaLabel = now ? getReplySlaLabel(thread.receivedAt, !thread.isUnhandled, now) : null;
 
               let sentimentColor = "bg-white/20";
               if (thread.sentiment === "positive") sentimentColor = "bg-emerald-500";
@@ -131,8 +127,9 @@ export function InboxView({
                   )
                 : (thread.receivedAt ? new Date(thread.receivedAt).toLocaleDateString() : "--");
 
-              const assignedInitials = thread.leadAssignedTo 
-                ? thread.leadAssignedTo.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+              const assignedName = thread.replyAssignedTo ?? thread.leadAssignedTo;
+              const assignedInitials = assignedName
+                ? assignedName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                 : null;
 
               return (
@@ -155,7 +152,7 @@ export function InboxView({
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {assignedInitials && (
-                        <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white/40 border border-white/10" title={`Assigned to ${thread.leadAssignedTo}`}>
+                        <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white/40 border border-white/10" title={`Assigned to ${assignedName}`}>
                           {assignedInitials}
                         </div>
                       )}
@@ -176,6 +173,7 @@ export function InboxView({
                         {thread.intent ? formatReplyIntentLabel(thread.intent) : "unclassified"}
                       </Badge>
                       {thread.band ? <Badge tone="muted" className="text-[10px] px-1.5 py-0">{thread.band}</Badge> : null}
+                      {slaLabel ? <Badge tone={slaLabel === "New today" ? "info" : "warning"} className="text-[10px] px-1.5 py-0">{slaLabel}</Badge> : null}
                     </div>
                     {thread.isUnhandled ? (
                       <div className="flex items-center gap-1">
@@ -219,41 +217,46 @@ export function InboxView({
               
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <form action={closeLeadAction} className="flex items-center">
+                  <ActionFeedbackForm action={closeLeadAction} successMessage="Lead marked won." className="flex items-center">
                     <input type="hidden" name="leadId" value={selected.leadId} />
                     <input type="hidden" name="replyEventId" value={selected.id} />
                     <input type="hidden" name="outcome" value="won" />
                     <button type="submit" className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase rounded-lg border border-emerald-500/20 transition-all active:scale-95">
                       Mark Won
                     </button>
-                  </form>
-                  <form action={closeLeadAction} className="flex items-center">
+                  </ActionFeedbackForm>
+                  <ActionFeedbackForm action={closeLeadAction} successMessage="Lead marked lost." className="flex items-center">
                     <input type="hidden" name="leadId" value={selected.leadId} />
                     <input type="hidden" name="replyEventId" value={selected.id} />
                     <input type="hidden" name="outcome" value="lost" />
+                    <input type="hidden" name="notes" value="Marked lost from inbox." />
                     <button type="submit" className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-bold uppercase rounded-lg border border-rose-500/20 transition-all active:scale-95">
                       Mark Lost
                     </button>
-                  </form>
+                  </ActionFeedbackForm>
                 </div>
 
                 <div className="h-6 w-px bg-white/10" />
 
-                <form ref={assignFormRef} action={assignLeadAction} className="flex items-center gap-2">
-                  <input type="hidden" name="leadId" value={selected.leadId} />
-                  <CrmSelect
-                    name="assignedTo"
-                    defaultValue={leadDetails?.assignedTo ?? selected.leadAssignedTo ?? selected.replyAssignedTo ?? ""}
-                    placeholder="Assign to..."
-                    emptyState="No founder profiles configured."
-                    className="min-w-[220px]"
-                    options={profiles.map((profile) => ({
-                      value: profile.display_name,
-                      label: profile.display_name
-                    }))}
-                    onValueChange={() => assignFormRef.current?.requestSubmit()}
-                  />
-                </form>
+                <div className="flex flex-col gap-1">
+                  <ActionFeedbackForm formRef={assignFormRef} action={assignReplyAction} successMessage="Conversation assignment updated." className="flex items-center gap-2">
+                    <input type="hidden" name="replyEventId" value={selected.id} />
+                    <input type="hidden" name="leadId" value={selected.leadId} />
+                    <CrmSelect
+                      name="assignedTo"
+                      defaultValue={selected.replyAssignedTo ?? leadDetails?.assignedTo ?? selected.leadAssignedTo ?? ""}
+                      placeholder="Assign to..."
+                      emptyState="No founder profiles configured."
+                      className="min-w-[220px]"
+                      options={profiles.map((profile) => ({
+                        value: profile.display_name,
+                        label: profile.display_name
+                      }))}
+                      onValueChange={() => assignFormRef.current?.requestSubmit()}
+                    />
+                  </ActionFeedbackForm>
+                  <p className="text-[10px] text-white/35">Assigning this conversation updates the reply owner.</p>
+                </div>
                 <div className="h-6 w-px bg-white/10" />
                 <Badge tone={selected.isUnhandled ? "warning" : "success"}>
                   {selected.isUnhandled ? "Action Required" : "Resolved"}
@@ -303,7 +306,7 @@ export function InboxView({
                     <span className="text-xs font-bold text-brand uppercase tracking-wider">AI Summary</span>
                   </div>
                   <div className="text-sm text-brand-light/70 italic leading-relaxed">
-                    {selected.summary || "Analyzing thread context..."}
+                    {selected.summary || "No AI summary was stored for this reply."}
                   </div>
                 </div>
                 
@@ -316,6 +319,9 @@ export function InboxView({
                   </div>
                   <div className="text-sm text-blue-100/70 leading-relaxed">
                     {selected.suggestedNextAction || "Wait for further classification."}
+                  </div>
+                  <div className="mt-3">
+                    <CopyButton value={selected.suggestedNextAction} label="Copy suggested next action" unavailableLabel="No suggested next action stored." className="text-[10px]" />
                   </div>
                 </div>
               </div>
@@ -331,22 +337,22 @@ export function InboxView({
                     </div>
                     <h3 className="font-medium text-brand">AI Draft Reply</h3>
                   </div>
-                  <button
-                    type="button"
-                    onClick={copyDraft}
-                    disabled={!selected.aiDraftReply}
-                    className="text-[10px] font-bold text-brand uppercase hover:underline disabled:text-white/20 disabled:no-underline"
-                  >
-                    {copied ? "Copied" : "Copy to clipboard"}
-                  </button>
+                  <CopyButton value={selected.aiDraftReply} label="Copy AI draft" unavailableLabel="No AI draft stored." className="text-[10px]" />
                 </div>
+                <p className="mb-4 text-xs text-white/45">
+                  Sending replies from CRM is not enabled. Copy the AI draft and reply from the Gmail/n8n-managed inbox.
+                </p>
                 <div className="prose prose-invert max-w-none text-brand/80 whitespace-pre-wrap text-sm leading-relaxed">
                   {selected.aiDraftReply ?? "No AI reply draft was generated for this reply."}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <CopyButton value={selected.body || selected.excerpt} label="Copy reply body" unavailableLabel="No reply body stored." className="text-[10px]" />
+                  <CopyButton value={selected.fromEmail} label="Copy lead email" unavailableLabel="No lead email stored." className="text-[10px]" />
                 </div>
               </div>
 
               {/* Handled Form */}
-              <form action={markReplyHandledAction} className="bg-black/40 border border-white/10 p-6 rounded-2xl mt-auto">
+              <ActionFeedbackForm action={markReplyHandledAction} successMessage="Reply marked handled." className="bg-black/40 border border-white/10 p-6 rounded-2xl mt-auto">
                 <input type="hidden" name="replyEventId" value={selected.id} />
                 <input type="hidden" name="leadId" value={selected.leadId} />
                 <div className="flex flex-col gap-4">
@@ -363,7 +369,7 @@ export function InboxView({
                     </button>
                   </div>
                 </div>
-              </form>
+              </ActionFeedbackForm>
             </div>
           </>
         ) : (

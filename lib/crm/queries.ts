@@ -7,6 +7,7 @@ import {
   normalizeReplyIntent,
   normalizeReplyReviewReason
 } from "@/lib/crm/status-contract";
+import { previewText } from "@/lib/crm/inbox-utils";
 import type { AnalyticsCampaign, AnalyticsDaily, AnalyticsSequenceStep, CountryData, IntentData, NicheData, LeadProfile, WeeklySnapshot } from "@/lib/crm/types";
 
 /** Safely coerce an `unknown` DB value to string. Objects would produce `[object Object]` via String(), so we guard against that. */
@@ -487,13 +488,13 @@ export async function getInboxThreads() {
     businessName: item.business_name ?? "Unknown lead",
     fromEmail: item.from_email ?? null,
     toEmail: item.to_email ?? null,
-    body: item.reply_body ?? "",
-    excerpt: item.reply_excerpt ?? "",
+    body: previewText(item.reply_body, 4000),
+    excerpt: previewText(item.reply_excerpt, 500),
     intent: item.intent_classification ? normalizeReplyIntent(item.intent_classification) : null,
     sentiment: item.sentiment ?? null,
-    summary: item.summary ?? null,
-    suggestedNextAction: item.suggested_next_action ?? null,
-    aiDraftReply: item.ai_draft_reply ?? null,
+    summary: previewText(item.summary, 1200) || null,
+    suggestedNextAction: previewText(item.suggested_next_action, 800) || null,
+    aiDraftReply: previewText(item.ai_draft_reply, 4000) || null,
     handledAt: item.handled_at ?? null,
     handledBy: item.handled_by ?? null,
     receivedAt: item.reply_received_at ?? null,
