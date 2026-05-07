@@ -13,6 +13,103 @@ function cleanText(value: FormDataEntryValue | null) {
   return text.length > 0 ? text : null;
 }
 
+const rejectionNoteRequiredMessage = "Please explain why this item is being rejected.";
+
+const editableLeadFields = [
+  "business_name",
+  "email",
+  "phone",
+  "whatsapp",
+  "website",
+  "linkedin_url",
+  "decision_maker_name",
+  "decision_maker_role"
+] as const;
+
+type EditableLeadField = typeof editableLeadFields[number];
+
+function isEditableLeadField(field: string): field is EditableLeadField {
+  return (editableLeadFields as readonly string[]).includes(field);
+}
+
+function isAsciiWhitespace(char: string) {
+  return char === " " || char === "\t" || char === "\n" || char === "\r" || char === "\f";
+}
+
+function hasAsciiWhitespace(value: string) {
+  for (const char of value) {
+    if (isAsciiWhitespace(char)) return true;
+  }
+  return false;
+}
+
+function hasHttpScheme(value: string) {
+  const prefix = value.slice(0, 8).toLowerCase();
+  return prefix.startsWith("http://") || prefix.startsWith("https://");
+}
+
+function normalizeInlineText(value: string) {
+  let normalized = "";
+  let previousWasSpace = false;
+
+  for (const char of value) {
+    if (isAsciiWhitespace(char)) {
+      if (!previousWasSpace) normalized += " ";
+      previousWasSpace = true;
+    } else {
+      normalized += char;
+      previousWasSpace = false;
+    }
+  }
+
+  return normalized.trim();
+}
+
+function isValidEmailAddress(value: string) {
+  if (value.length > 254 || hasAsciiWhitespace(value)) return false;
+
+  const atIndex = value.indexOf("@");
+  if (atIndex <= 0 || atIndex !== value.lastIndexOf("@") || atIndex === value.length - 1) {
+    return false;
+  }
+
+  const localPart = value.slice(0, atIndex);
+  const domain = value.slice(atIndex + 1);
+  if (localPart.length > 64 || domain.length > 253) return false;
+  if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) return false;
+
+  return domain.split(".").every((label) => label.length > 0 && label.length <= 63);
+}
+
+function normalizeEditableLeadValue(field: EditableLeadField, value: string) {
+  const trimmed = value.trim();
+  if (field === "business_name") {
+    if (!trimmed) throw new Error("Business name cannot be blank");
+    return trimmed;
+  }
+  if (field === "email") {
+    if (!trimmed) return null;
+    if (!isValidEmailAddress(trimmed)) throw new Error("Email must be a valid email address");
+    return trimmed.toLowerCase();
+  }
+  if (field === "website" || field === "linkedin_url") {
+    if (!trimmed) return null;
+    try {
+      const url = new URL(hasHttpScheme(trimmed) ? trimmed : `https://${trimmed}`);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error("Unsupported URL protocol");
+      }
+      return url.toString();
+    } catch {
+      throw new Error(field === "website" ? "Website must be a valid URL" : "LinkedIn URL must be a valid URL");
+    }
+  }
+  if (field === "phone" || field === "whatsapp") {
+    return normalizeInlineText(trimmed) || null;
+  }
+  return trimmed || null;
+}
+
 async function closePendingReplyReviewItems({
   supabase,
   leadId,
@@ -114,6 +211,7 @@ export async function closeLeadAction(formData: FormData) {
   const notes = cleanText(formData.get("notes"));
   if (!leadId) throw new Error("leadId is required");
   if (outcome !== "won" && outcome !== "lost") throw new Error("Unsupported close outcome");
+  if (outcome === "lost" && replyEventId && !notes) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const status = outcome === "won" ? "closed_won" : "closed_lost";
@@ -251,6 +349,7 @@ export async function completeReviewAction(formData: FormData) {
   if (decision !== "approved" && decision !== "rejected") {
     throw new Error("Unsupported review decision");
   }
+  if (decision === "rejected" && !notes) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
@@ -390,6 +489,7 @@ export async function regenerateEmailDraftAction(formData: FormData) {
   const reason = cleanText(formData.get("reason"));
   if (!draftId) throw new Error("draftId is required");
   if (!leadId) throw new Error("leadId is required");
+  if (!reason) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
@@ -414,6 +514,8 @@ export async function regenerateEmailDraftAction(formData: FormData) {
     status: "started",
     payload: {
       draft_id: draftId,
+      lead_id: leadId,
+      requested_by_user_id: actor.userId,
       requested_by: actor.displayName,
       reason,
       requested_at: requestedAt
@@ -425,7 +527,7 @@ export async function regenerateEmailDraftAction(formData: FormData) {
     actor,
     actionType: "email_draft_regeneration_requested",
     leadId,
-    detail: { draft_id: draftId, reason }
+    detail: { draft_id: draftId, reason, requested_at: requestedAt, requested_by_user_id: actor.userId }
   });
 
   revalidatePath(`/pipeline/${leadId}`);
@@ -438,6 +540,7 @@ export async function rejectEmailDraftAction(formData: FormData) {
   const reason = cleanText(formData.get("reason"));
   if (!draftId) throw new Error("draftId is required");
   if (!leadId) throw new Error("leadId is required");
+  if (!reason) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
@@ -714,28 +817,43 @@ export async function moveLeadOnBoardAction(leadId: string, status: ManualBoardM
 
 export async function updateLeadFieldAction(leadId: string, field: string, value: string) {
   if (!leadId || !field) throw new Error("leadId and field are required");
-  
-  const allowedFields = ["email", "phone", "whatsapp", "linkedin_url", "website"];
-  if (!allowedFields.includes(field)) {
+  if (!isEditableLeadField(field)) {
     throw new Error(`Unsupported field update: ${field}`);
   }
+  const normalizedValue = normalizeEditableLeadValue(field, value);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
+  const { data: lead, error: loadError } = await supabase
+    .from("leads")
+    .select(field)
+    .eq("id", leadId)
+    .maybeSingle();
+  if (loadError) throw new Error(loadError.message);
+  if (!lead) throw new Error("Lead not found");
+  const oldValue = (lead as Record<string, unknown>)[field] ?? null;
 
   const { error } = await supabase
     .from("leads")
-    .update({ [field]: value, updated_at: new Date().toISOString() })
+    .update({ [field]: normalizedValue, updated_at: new Date().toISOString() })
     .eq("id", leadId);
 
   if (error) throw new Error(error.message);
 
   await logCrmAction({
     actor,
-    actionType: "note_added",
+    actionType: "lead_field_updated",
     leadId,
-    detail: { event: "field_updated", field, value }
+    detail: {
+      field_changed: field,
+      old_value: oldValue,
+      new_value: normalizedValue,
+      actor_id: actor.userId,
+      performed_by: actor.displayName
+    }
   });
 
   revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/pipeline");
+  return { value: normalizedValue };
 }

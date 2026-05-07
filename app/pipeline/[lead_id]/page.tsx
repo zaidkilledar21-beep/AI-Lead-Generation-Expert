@@ -7,6 +7,7 @@ import { ScoreVisualizer } from "@/components/crm/score-visualizer";
 import { StickyBottomBar } from "@/components/crm/sticky-bottom-bar";
 import { InlineEditableField } from "@/components/crm/inline-editable-field";
 import { DraftReviewEditor } from "@/components/crm/draft-review-editor";
+import { LeadActionForm } from "./lead-action-form";
 import {
   approveLeadAction,
   assignLeadAction,
@@ -17,6 +18,11 @@ import {
 } from "@/lib/crm/actions";
 import { getLeadDetail } from "@/lib/crm/queries";
 import { Mail, MessageSquare, Briefcase, Activity, CheckCircle, Search, ThumbsDown } from "lucide-react";
+
+function externalLink(value: string | null | undefined) {
+  if (!value) return null;
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
 
 export default async function LeadDetailPage({ params }: Readonly<{ params: Promise<{ lead_id: string }> }>) {
   const { lead_id } = await params;
@@ -32,15 +38,22 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
         description={[lead.niche, lead.city, lead.country].filter(Boolean).join(" / ") || "Lead record"}
         actions={
           <div className="button-row">
-            <LinkButton variant="secondary" href={lead.website ?? "#"} className={!lead.website ? "pointer-events-none opacity-50" : ""}>Website</LinkButton>
-            <LinkButton variant="secondary" href={lead.googleMapsUrl ?? "#"} className={!lead.googleMapsUrl ? "pointer-events-none opacity-50" : ""}>Google Maps</LinkButton>
+            {externalLink(lead.website) ? (
+              <a className="ui-button ui-button-secondary" href={externalLink(lead.website) ?? undefined} target="_blank" rel="noreferrer">Website</a>
+            ) : <span className="muted">No website</span>}
+            {externalLink(lead.googleMapsUrl) ? (
+              <a className="ui-button ui-button-secondary" href={externalLink(lead.googleMapsUrl) ?? undefined} target="_blank" rel="noreferrer">Google Maps</a>
+            ) : <span className="muted">No Google Maps link</span>}
+            {externalLink(lead.linkedinUrl) ? (
+              <a className="ui-button ui-button-secondary" href={externalLink(lead.linkedinUrl) ?? undefined} target="_blank" rel="noreferrer">LinkedIn</a>
+            ) : <span className="muted">No LinkedIn URL</span>}
             {lead.approvedForOutreach ? (
               <Badge tone="success">Approved for outreach</Badge>
             ) : (
-              <form action={approveLeadAction}>
+              <LeadActionForm action={approveLeadAction} successMessage="Lead approved for outreach.">
                 <input type="hidden" name="leadId" value={lead.id} />
                 <Button type="submit">Approve for outreach</Button>
-              </form>
+              </LeadActionForm>
             )}
           </div>
         }
@@ -91,14 +104,17 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
               </div>
             </div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+              <InlineEditableField leadId={lead.id} field="business_name" initialValue={lead.businessName} label="Business name" />
               <InlineEditableField leadId={lead.id} field="email" initialValue={lead.email} label="Email" />
               <InlineEditableField leadId={lead.id} field="phone" initialValue={lead.phone} label="Phone" />
               <InlineEditableField leadId={lead.id} field="whatsapp" initialValue={lead.whatsapp} label="WhatsApp" />
+              <InlineEditableField leadId={lead.id} field="website" initialValue={lead.website} label="Website" />
+              <InlineEditableField leadId={lead.id} field="linkedin_url" initialValue={lead.linkedinUrl} label="LinkedIn URL" />
               <div><span className="metric-label">Source</span><strong>{lead.source ?? "Unknown"}</strong></div>
               <div><span className="metric-label">Campaign</span><strong>{lead.campaignName ?? "Unassigned"}</strong></div>
               <div><span className="metric-label">Owner</span><strong>{lead.assignedTo ?? "Unassigned"}</strong></div>
-              <div><span className="metric-label">Decision maker</span><strong>{lead.decisionMakerName ?? "Unknown"}</strong></div>
-              <div><span className="metric-label">Role</span><strong>{lead.decisionMakerRole ?? "Unknown"}</strong></div>
+              <InlineEditableField leadId={lead.id} field="decision_maker_name" initialValue={lead.decisionMakerName} label="Decision maker" />
+              <InlineEditableField leadId={lead.id} field="decision_maker_role" initialValue={lead.decisionMakerRole} label="Role" />
             </div>
           </div>
 
@@ -191,13 +207,13 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
           <div className="glass-panel group">
             <div className="p-6 border-b border-white/5"><h2 className="text-lg font-medium text-white/90">Actions</h2></div>
             <div className="p-6 space-y-6">
-              <form action={assignLeadAction} className="form">
+              <LeadActionForm action={assignLeadAction} successMessage="Lead assignment saved." className="form">
                 <input type="hidden" name="leadId" value={lead.id} />
                 <label>Assign to<input name="assignedTo" defaultValue={lead.assignedTo ?? ""} /></label>
                 <Button type="submit" variant="secondary">Assign</Button>
-              </form>
+              </LeadActionForm>
               <hr />
-              <form action={overrideBandAction} className="flex flex-col gap-4">
+              <LeadActionForm action={overrideBandAction} successMessage="Band override saved." className="flex flex-col gap-4">
                 <input type="hidden" name="leadId" value={lead.id} />
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-white/60">Band</span>
@@ -212,31 +228,31 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                   <input name="reason" placeholder="Why override this band?" className="bg-black/20 border border-white/10 rounded-lg p-2 text-white/90 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all" />
                 </label>
                 <button type="submit" className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/80 transition-all font-medium text-sm">Override band</button>
-              </form>
+              </LeadActionForm>
               <hr />
               <div className="button-row">
-                <form action={changeLeadStatusAction}>
+                <LeadActionForm action={changeLeadStatusAction} successMessage="Lead paused.">
                   <input type="hidden" name="leadId" value={lead.id} />
                   <input type="hidden" name="status" value="paused" />
                   <Button type="submit" variant="secondary">Pause</Button>
-                </form>
-                <form action={changeLeadStatusAction}>
+                </LeadActionForm>
+                <LeadActionForm action={changeLeadStatusAction} successMessage="Lead archived.">
                   <input type="hidden" name="leadId" value={lead.id} />
                   <input type="hidden" name="status" value="archived" />
                   <Button type="submit" variant="danger">Archive</Button>
-                </form>
+                </LeadActionForm>
               </div>
               <div className="button-row mt-4">
-                <form action={closeLeadAction}>
+                <LeadActionForm action={closeLeadAction} successMessage="Lead marked closed won.">
                   <input type="hidden" name="leadId" value={lead.id} />
                   <input type="hidden" name="outcome" value="won" />
                   <Button type="submit">Closed won</Button>
-                </form>
-                <form action={closeLeadAction}>
+                </LeadActionForm>
+                <LeadActionForm action={closeLeadAction} successMessage="Lead marked closed lost.">
                   <input type="hidden" name="leadId" value={lead.id} />
                   <input type="hidden" name="outcome" value="lost" />
                   <Button type="submit" variant="danger">Closed lost</Button>
-                </form>
+                </LeadActionForm>
               </div>
             </div>
           </div>
@@ -281,11 +297,11 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
           <div className="glass-panel group">
             <div className="p-6 border-b border-white/5"><h2 className="text-lg font-medium text-white/90">Notes</h2></div>
             <div className="p-6">
-              <form action={updateLeadNotesAction} className="form">
+              <LeadActionForm action={updateLeadNotesAction} successMessage="Notes saved." className="form">
                 <input type="hidden" name="leadId" value={lead.id} />
                 <label>Founder notes<textarea name="notes" rows={8} defaultValue={lead.notes ?? ""} /></label>
                 <Button type="submit">Save notes</Button>
-              </form>
+              </LeadActionForm>
               <div className="stack-list mt-4">
                 {lead.notesHistory.map((note: any) => (
                   <div className="record-card" key={note.id}>
@@ -306,28 +322,28 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
               Approved
             </div>
           ) : (
-            <form action={approveLeadAction} className="flex-1">
+            <LeadActionForm action={approveLeadAction} successMessage="Lead approved for outreach." className="flex-1">
               <input type="hidden" name="leadId" value={lead.id} />
               <button type="submit" className="ui-button ui-button-primary w-full shadow-lg shadow-brand/20">
                 Approve for Outreach
               </button>
-            </form>
+            </LeadActionForm>
           )}
           <div className="flex gap-2">
-            <form action={changeLeadStatusAction}>
+            <LeadActionForm action={changeLeadStatusAction} successMessage="Lead paused.">
               <input type="hidden" name="leadId" value={lead.id} />
               <input type="hidden" name="status" value="paused" />
               <button type="submit" className="ui-button ui-button-secondary">
                 Pause
               </button>
-            </form>
-            <form action={changeLeadStatusAction}>
+            </LeadActionForm>
+            <LeadActionForm action={changeLeadStatusAction} successMessage="Lead archived.">
               <input type="hidden" name="leadId" value={lead.id} />
               <input type="hidden" name="status" value="archived" />
               <button type="submit" className="ui-button ui-button-danger">
                 Archive
               </button>
-            </form>
+            </LeadActionForm>
           </div>
         </div>
       </StickyBottomBar>

@@ -60,6 +60,7 @@ export type CrmActionType =
   | "reply_handled"
   | "band_overridden"
   | "note_added"
+  | "lead_field_updated"
   | "email_draft_approved"
   | "email_draft_rejected"
   | "manual_review_completed"
