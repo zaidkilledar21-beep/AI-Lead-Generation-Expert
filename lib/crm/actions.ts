@@ -13,6 +13,8 @@ function cleanText(value: FormDataEntryValue | null) {
   return text.length > 0 ? text : null;
 }
 
+const rejectionNoteRequiredMessage = "Please explain why this item is being rejected.";
+
 const editableLeadFields = [
   "business_name",
   "email",
@@ -30,6 +32,55 @@ function isEditableLeadField(field: string): field is EditableLeadField {
   return (editableLeadFields as readonly string[]).includes(field);
 }
 
+function isAsciiWhitespace(char: string) {
+  return char === " " || char === "\t" || char === "\n" || char === "\r" || char === "\f";
+}
+
+function hasAsciiWhitespace(value: string) {
+  for (const char of value) {
+    if (isAsciiWhitespace(char)) return true;
+  }
+  return false;
+}
+
+function hasHttpScheme(value: string) {
+  const prefix = value.slice(0, 8).toLowerCase();
+  return prefix.startsWith("http://") || prefix.startsWith("https://");
+}
+
+function normalizeInlineText(value: string) {
+  let normalized = "";
+  let previousWasSpace = false;
+
+  for (const char of value) {
+    if (isAsciiWhitespace(char)) {
+      if (!previousWasSpace) normalized += " ";
+      previousWasSpace = true;
+    } else {
+      normalized += char;
+      previousWasSpace = false;
+    }
+  }
+
+  return normalized.trim();
+}
+
+function isValidEmailAddress(value: string) {
+  if (value.length > 254 || hasAsciiWhitespace(value)) return false;
+
+  const atIndex = value.indexOf("@");
+  if (atIndex <= 0 || atIndex !== value.lastIndexOf("@") || atIndex === value.length - 1) {
+    return false;
+  }
+
+  const localPart = value.slice(0, atIndex);
+  const domain = value.slice(atIndex + 1);
+  if (localPart.length > 64 || domain.length > 253) return false;
+  if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) return false;
+
+  return domain.split(".").every((label) => label.length > 0 && label.length <= 63);
+}
+
 function normalizeEditableLeadValue(field: EditableLeadField, value: string) {
   const trimmed = value.trim();
   if (field === "business_name") {
@@ -38,13 +89,13 @@ function normalizeEditableLeadValue(field: EditableLeadField, value: string) {
   }
   if (field === "email") {
     if (!trimmed) return null;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) throw new Error("Email must be a valid email address");
+    if (!isValidEmailAddress(trimmed)) throw new Error("Email must be a valid email address");
     return trimmed.toLowerCase();
   }
   if (field === "website" || field === "linkedin_url") {
     if (!trimmed) return null;
     try {
-      const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+      const url = new URL(hasHttpScheme(trimmed) ? trimmed : `https://${trimmed}`);
       if (url.protocol !== "http:" && url.protocol !== "https:") {
         throw new Error("Unsupported URL protocol");
       }
@@ -54,7 +105,7 @@ function normalizeEditableLeadValue(field: EditableLeadField, value: string) {
     }
   }
   if (field === "phone" || field === "whatsapp") {
-    return trimmed.replace(/\s+/g, " ") || null;
+    return normalizeInlineText(trimmed) || null;
   }
   return trimmed || null;
 }
@@ -160,6 +211,7 @@ export async function closeLeadAction(formData: FormData) {
   const notes = cleanText(formData.get("notes"));
   if (!leadId) throw new Error("leadId is required");
   if (outcome !== "won" && outcome !== "lost") throw new Error("Unsupported close outcome");
+  if (outcome === "lost" && replyEventId && !notes) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const status = outcome === "won" ? "closed_won" : "closed_lost";
@@ -297,6 +349,7 @@ export async function completeReviewAction(formData: FormData) {
   if (decision !== "approved" && decision !== "rejected") {
     throw new Error("Unsupported review decision");
   }
+  if (decision === "rejected" && !notes) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
@@ -436,6 +489,7 @@ export async function regenerateEmailDraftAction(formData: FormData) {
   const reason = cleanText(formData.get("reason"));
   if (!draftId) throw new Error("draftId is required");
   if (!leadId) throw new Error("leadId is required");
+  if (!reason) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
@@ -460,6 +514,8 @@ export async function regenerateEmailDraftAction(formData: FormData) {
     status: "started",
     payload: {
       draft_id: draftId,
+      lead_id: leadId,
+      requested_by_user_id: actor.userId,
       requested_by: actor.displayName,
       reason,
       requested_at: requestedAt
@@ -471,7 +527,7 @@ export async function regenerateEmailDraftAction(formData: FormData) {
     actor,
     actionType: "email_draft_regeneration_requested",
     leadId,
-    detail: { draft_id: draftId, reason }
+    detail: { draft_id: draftId, reason, requested_at: requestedAt, requested_by_user_id: actor.userId }
   });
 
   revalidatePath(`/pipeline/${leadId}`);
