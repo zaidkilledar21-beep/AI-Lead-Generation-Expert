@@ -62,6 +62,7 @@ export async function routeApprovedLead(leadId: string) {
     .select("id")
     .eq("band", score.band)
     .eq("active", true)
+    .eq("archived", false)
     .limit(1)
     .maybeSingle();
 

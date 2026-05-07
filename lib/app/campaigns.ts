@@ -277,7 +277,7 @@ export async function getCampaignReadiness(campaignId: string): Promise<Campaign
 
   const [inboxesResult, sequencesResult, globalPauseResult] = await Promise.all([
     supabase.from("inboxes").select("id,email_address,active"),
-    supabase.from("outreach_sequences").select("id,name,active"),
+    supabase.from("outreach_sequences").select("id,name,active,archived"),
     supabase.from("app_settings").select("value").eq("key", "global_outreach").maybeSingle()
   ]);
 
@@ -294,7 +294,7 @@ export async function getCampaignReadiness(campaignId: string): Promise<Campaign
   const assignedInbox = assignedInboxId ? asArray(inboxesResult.data as Array<Record<string, unknown>>).find((inbox) => inbox.id === assignedInboxId) : null;
   const activeSequenceIds = new Set(
     asArray(sequencesResult.data as Array<Record<string, unknown>>)
-      .filter((sequence) => sequence.active === true)
+      .filter((sequence) => sequence.active === true && sequence.archived !== true)
       .map((sequence) => String(sequence.id))
   );
   const configuredSequences = ["sequence_band_a", "sequence_band_b", "sequence_band_c"]
