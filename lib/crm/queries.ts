@@ -1,4 +1,5 @@
 import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
+import { getCampaignReadiness } from "@/lib/app/campaigns";
 import {
   HUMAN_REVIEW_REPLY_INTENTS,
   POSITIVE_REPLY_INTENTS,
@@ -151,6 +152,10 @@ export async function getCampaignRows() {
       languageOfBusiness: campaign.language_of_business ?? [],
       nicheKeywords: campaign.niche_keywords ?? [],
       maxLeadsPerRun: campaign.max_leads_per_run ?? 100,
+      maxCandidatesPerDay: campaign.max_candidates_per_day ?? 75,
+      maxDetailsCallsPerDay: campaign.max_details_calls_per_day ?? 100,
+      maxTotalPlacesCallsPerDay: campaign.max_total_places_calls_per_day ?? 150,
+      maxDiscoveryRunsPerDay: campaign.max_discovery_runs_per_day ?? 1,
       leadSource: campaign.lead_source === "google_maps" ? "google_places" : (campaign.lead_source ?? "google_places"),
       runFrequency: campaign.run_frequency ?? "manual",
       nextRunAt: campaign.next_run_at ?? null,
@@ -197,9 +202,11 @@ export async function getCampaignDetailData(campaignId: string) {
 
   const campaign = campaigns.find((item) => item.id === campaignId);
   if (!campaign) return null;
+  const readiness = await getCampaignReadiness(campaignId);
 
   return {
     campaign,
+    readiness,
     leads: leads.filter((lead) => lead.campaignId === campaignId),
     runs: asArray(runs.data as Array<Record<string, any>>).map((run) => ({
       id: run.id,

@@ -3,7 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { assertCampaignConfigInput, discoveryLimits, type CampaignConfigInput } from "@/lib/contracts";
 import { requireDashboardWriteAccess } from "@/lib/app/auth";
-import { createCrmCampaign, duplicateCrmCampaign, markCampaignManualRunRequested, updateCrmCampaign, updateCrmCampaignStatus } from "@/lib/app/campaigns";
+import {
+  archiveCrmCampaign,
+  assertCampaignManualRunReadiness,
+  createCrmCampaign,
+  duplicateCrmCampaign,
+  markCampaignManualRunRequested,
+  updateCrmCampaign,
+  updateCrmCampaignStatus
+} from "@/lib/app/campaigns";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { triggerDiscoveryWorkflow } from "@/lib/n8n/client";
 import { importDiscoveredLeads, type RawLeadInput } from "@/lib/workflows/discovery";
@@ -148,15 +156,31 @@ export async function updateCampaign(campaignId: string, _: unknown, formData: F
 export async function updateCampaignStatus(campaignId: string, status: "active" | "paused" | "archived") {
   await updateCrmCampaignStatus(campaignId, status);
   revalidatePath("/campaigns");
+  revalidatePath(`/campaigns/${campaignId}`);
 }
 
 export async function duplicateCampaignAction(campaignId: string) {
-  await duplicateCrmCampaign(campaignId);
+  const newCampaignId = await duplicateCrmCampaign(campaignId);
   revalidatePath("/campaigns");
+  revalidatePath(`/campaigns/${newCampaignId}`);
+  return newCampaignId;
+}
+
+export async function duplicateCampaignFormAction(campaignId: string) {
+  await duplicateCampaignAction(campaignId);
+}
+
+export async function archiveCampaignAction(campaignId: string) {
+  await archiveCrmCampaign(campaignId);
+  revalidatePath("/campaigns");
+  revalidatePath("/analytics");
+  revalidatePath("/pipeline");
+  revalidatePath(`/campaigns/${campaignId}`);
 }
 
 export async function triggerCampaignManualRun(campaignId: string) {
   const actor = await requireDashboardWriteAccess();
+  await assertCampaignManualRunReadiness(campaignId);
   await markCampaignManualRunRequested(campaignId);
   const result = await triggerDiscoveryWorkflow({
     campaignId,

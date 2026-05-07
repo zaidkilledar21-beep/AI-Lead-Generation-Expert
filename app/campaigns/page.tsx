@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { getCampaignRows } from "@/lib/crm/queries";
-import { duplicateCampaignAction, triggerCampaignManualRun, updateCampaignStatus } from "./actions";
+import { archiveCampaignAction, duplicateCampaignFormAction, triggerCampaignManualRun, updateCampaignStatus } from "./actions";
 
 function statusTone(status: string) {
   if (status === "active") return "success" as const;
@@ -17,11 +17,12 @@ export default async function CampaignsPage({
   searchParams?: { status?: string; q?: string; source?: string };
 }>) {
   const campaigns = await getCampaignRows();
-  const status = searchParams?.status ?? "all";
+  const status = searchParams?.status ?? "operating";
   const source = searchParams?.source ?? "all";
   const q = (searchParams?.q ?? "").trim().toLowerCase();
   const filtered = campaigns.filter((campaign) => {
-    if (status !== "all" && campaign.status !== status) return false;
+    if (status === "operating" && campaign.status === "archived") return false;
+    if (status !== "all" && status !== "operating" && campaign.status !== status) return false;
     if (source !== "all" && campaign.leadSource !== source) return false;
     if (!q) return true;
     return [campaign.name, campaign.primaryNiche, campaign.niche, campaign.region, ...campaign.targetCountries, ...campaign.targetCities]
@@ -50,6 +51,7 @@ export default async function CampaignsPage({
               name="status"
               defaultValue={status}
               options={[
+                { value: "operating", label: "Active operating views" },
                 { value: "all", label: "All statuses" },
                 { value: "draft", label: "Draft" },
                 { value: "active", label: "Active" },
@@ -122,17 +124,23 @@ export default async function CampaignsPage({
                   <td>
                     <div className="button-row">
                       <form action={triggerCampaignManualRun.bind(null, campaign.id)}>
-                        <button className="ui-button ui-button-secondary" type="submit">Request n8n run</button>
+                        <button className="ui-button ui-button-secondary" type="submit" disabled={campaign.status === "archived"}>
+                          Trigger manual n8n discovery run
+                        </button>
                       </form>
-                      <form action={updateCampaignStatus.bind(null, campaign.id, campaign.status === "active" ? "paused" : "active")}>
-                        <button className="ui-button ui-button-secondary" type="submit">{campaign.status === "active" ? "Pause" : "Resume"}</button>
-                      </form>
-                      <form action={duplicateCampaignAction.bind(null, campaign.id)}>
+                      {campaign.status !== "archived" ? (
+                        <form action={updateCampaignStatus.bind(null, campaign.id, campaign.status === "active" ? "paused" : "active")}>
+                          <button className="ui-button ui-button-secondary" type="submit">{campaign.status === "active" ? "Pause" : "Resume"}</button>
+                        </form>
+                      ) : null}
+                      <form action={duplicateCampaignFormAction.bind(null, campaign.id)}>
                         <button className="ui-button ui-button-secondary" type="submit">Duplicate</button>
                       </form>
-                      <form action={updateCampaignStatus.bind(null, campaign.id, "archived")}>
-                        <button className="ui-button ui-button-secondary" type="submit">Archive</button>
-                      </form>
+                      {campaign.status !== "archived" ? (
+                        <form action={archiveCampaignAction.bind(null, campaign.id)}>
+                          <button className="ui-button ui-button-secondary" type="submit">Archive</button>
+                        </form>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
