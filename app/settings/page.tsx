@@ -1,8 +1,10 @@
 import { PageHeader } from "@/components/crm/page-header";
+import { ActionFeedbackForm } from "@/components/crm/action-feedback-form";
 import { SettingsDiagnosticsCard } from "@/components/crm/settings-diagnostics-card";
+import { SystemDiagnosticsPanel } from "@/components/crm/system-diagnostics-panel";
 import { Badge } from "@/components/ui/badge";
 import { CrmSelect } from "@/components/ui/crm-select";
-import { getSettingsData } from "@/lib/crm/queries";
+import { getSettingsData, getSystemDiagnostics } from "@/lib/crm/queries";
 import { updateGlobalOutreachSettingsAction } from "./actions";
 
 function settingValue(settings: Array<Record<string, any>>, key: string) {
@@ -10,7 +12,7 @@ function settingValue(settings: Array<Record<string, any>>, key: string) {
 }
 
 export default async function SettingsIndexPage() {
-  const settings = await getSettingsData();
+  const [settings, systemDiagnostics] = await Promise.all([getSettingsData(), getSystemDiagnostics()]);
   const globalOutreach = settingValue(settings.settings as Array<Record<string, any>>, "global_outreach");
   const paused = Boolean(globalOutreach.paused);
   const dailyCap = Number(globalOutreach.daily_cap ?? globalOutreach.dailyCap ?? 0);
@@ -19,6 +21,7 @@ export default async function SettingsIndexPage() {
     <>
       <PageHeader title="Settings" description="Global CRM workflow controls for the internal founder operating model." />
       <SettingsDiagnosticsCard diagnostics={settings.diagnostics} />
+      <SystemDiagnosticsPanel diagnostics={systemDiagnostics} />
       <section className="metric-grid">
         <div className="metric-card">
           <div className="metric-label">Global outreach</div>
@@ -37,7 +40,7 @@ export default async function SettingsIndexPage() {
       <section className="panel">
         <div className="panel-header"><h2>Global outreach controls</h2></div>
         <div className="panel-body">
-          <form action={updateGlobalOutreachSettingsAction} className="form">
+          <ActionFeedbackForm action={updateGlobalOutreachSettingsAction} successMessage="Global controls saved." className="form">
             <div className="form-grid">
               <label>
                 <span>Outreach state</span>
@@ -56,7 +59,7 @@ export default async function SettingsIndexPage() {
               </label>
             </div>
             <button className="ui-button ui-button-primary" type="submit">Save global controls</button>
-          </form>
+          </ActionFeedbackForm>
         </div>
       </section>
 

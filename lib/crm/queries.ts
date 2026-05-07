@@ -1,4 +1,6 @@
 import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
+import { createSupabaseDashboardClient } from "@/lib/supabase/dashboard";
+import { getActiveDashboardUserRole } from "@/lib/app/auth";
 import { getCampaignReadiness } from "@/lib/app/campaigns";
 import {
   HUMAN_REVIEW_REPLY_INTENTS,
@@ -530,20 +532,29 @@ export async function getSettingsData() {
     };
   }
 
-  const [inboxesResult, profilesResult, sequencesResult, settingsResult, savedFilters] = await Promise.all([
+  const [inboxesResult, profilesResult, sequencesResult, settingsResult, assignedCampaignsResult, savedFilters] = await Promise.all([
     supabase.from("inboxes").select("*").order("email_address"),
     supabase.from("founder_profiles").select("*").order("display_name"),
     supabase.from("outreach_sequences").select("*,outreach_steps(*)").order("band"),
     supabase.from("app_settings").select("*").order("key"),
+    supabase.from("campaigns").select("assigned_inbox_id").eq("status", "active").not("assigned_inbox_id", "is", null).limit(1000),
     getSavedFilters("pipeline")
   ]);
 
-  const inboxes = asArray(inboxesResult.data as Array<Record<string, unknown>>);
+  const assignedCounts = new Map<string, number>();
+  for (const campaign of asArray(assignedCampaignsResult.data as Array<Record<string, unknown>>)) {
+    const inboxId = toStrOrNull(campaign.assigned_inbox_id);
+    if (inboxId) assignedCounts.set(inboxId, (assignedCounts.get(inboxId) ?? 0) + 1);
+  }
+  const inboxes: Array<Record<string, unknown>> = asArray(inboxesResult.data as Array<Record<string, unknown>>).map((inbox) => ({
+    ...inbox,
+    active_campaign_assignments: assignedCounts.get(toStr(inbox.id)) ?? 0
+  }));
   const profiles = asArray(profilesResult.data as Array<Record<string, unknown>>).map((p): LeadProfile => ({
     user_id: toStr(p.user_id ?? p.id),
     display_name: toStr(p.display_name),
     timezone: toStrOrNull(p.timezone),
-    telegram_chat_id: toStrOrNull(p.telegram_chat_id),
+    telegram_chat_id: null,
     notification_preferences: p.notification_preferences == null
       ? null
       : (p.notification_preferences as Record<string, unknown>),
@@ -557,7 +568,7 @@ export async function getSettingsData() {
     )
   }));
   const settings = asArray(settingsResult.data as Array<Record<string, unknown>>);
-  const activeInboxes = inboxes.filter((inbox) => inbox.active === true);
+  const activeInboxes = inboxes.filter((inbox) => inbox.active === true && inbox.archived !== true);
   const activeSequences = sequences.filter((sequence) => sequence.active === true && sequence.archived !== true);
 
   const messages = [
@@ -565,6 +576,7 @@ export async function getSettingsData() {
     profilesResult.error ? "Founder profiles could not be loaded. Check Supabase query access or schema alignment." : null,
     sequencesResult.error ? "Outreach sequences could not be loaded. Check Supabase query access or schema alignment." : null,
     settingsResult.error ? "Global app settings could not be loaded. Check Supabase query access or schema alignment." : null,
+    assignedCampaignsResult.error ? "Active campaign inbox assignments could not be loaded. Archive warnings may be incomplete." : null,
     !inboxesResult.error && activeInboxes.length === 0 ? "No sender inboxes configured. Add and activate at least one inbox before assigning campaigns or owners." : null,
     !profilesResult.error && profiles.length === 0 ? "No founder profiles configured. Inbox assignment and owner filters will stay empty until a profile exists." : null,
     !sequencesResult.error && activeSequences.length === 0 ? "No active outreach sequences found. Activate at least one sequence before assigning Band A/B/C routing." : null
@@ -579,10 +591,82 @@ export async function getSettingsData() {
     settings,
     savedFilters,
     diagnostics: {
-      hasFailures: Boolean(inboxesResult.error || profilesResult.error || sequencesResult.error || settingsResult.error),
+      hasFailures: Boolean(inboxesResult.error || profilesResult.error || sequencesResult.error || settingsResult.error || assignedCampaignsResult.error),
       requiresSetup: activeInboxes.length === 0 || profiles.length === 0 || activeSequences.length === 0,
       messages
     }
+  };
+}
+
+function latestDiagnosticLabel(row: Record<string, unknown> | null, fallback: string) {
+  if (!row) return "Unavailable";
+  const type = toStr(row.event_type ?? row.workflow_name ?? row.type, fallback);
+  const status = toStrOrNull(row.status);
+  const at = toStrOrNull(row.created_at ?? row.reply_received_at);
+  return [type, status, at ? new Date(at).toLocaleString() : null].filter(Boolean).join(" - ");
+}
+
+export async function getSystemDiagnostics() {
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) {
+    return {
+      globalPause: "Unavailable",
+      activeInboxCount: "Unavailable",
+      activeSequenceCount: "Unavailable",
+      lastWorkflowEvent: "Unavailable",
+      lastSendEvent: "Unavailable",
+      lastReplyEvent: "Unavailable",
+      n8nDiscoveryWebhook: "Unavailable"
+    };
+  }
+
+  const [settingsResult, inboxesResult, sequencesResult, workflowResult, sendResult, replyResult] = await Promise.all([
+    supabase.from("app_settings").select("value").eq("key", "global_outreach").maybeSingle(),
+    supabase.from("inboxes").select("id", { count: "exact", head: true }).eq("active", true).eq("archived", false),
+    supabase.from("outreach_sequences").select("id", { count: "exact", head: true }).eq("active", true).eq("archived", false),
+    supabase.from("workflow_events").select("workflow_name,event_type,status,created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("outreach_events").select("event_type,created_at").eq("event_type", "email_sent").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("reply_events").select("intent_classification,reply_received_at").order("reply_received_at", { ascending: false }).limit(1).maybeSingle()
+  ]);
+
+  const globalSettings = (settingsResult.data?.value as Record<string, unknown> | null) ?? {};
+  const hasN8nWebhook = Boolean(process.env.N8N_DISCOVERY_WEBHOOK_URL || (process.env.N8N_BASE_URL && process.env.N8N_DISCOVERY_WEBHOOK_PATH));
+
+  return {
+    globalPause: settingsResult.error ? "Unavailable" : (globalSettings.paused ? "Paused" : "Allowed"),
+    activeInboxCount: inboxesResult.error ? "Unavailable" : String(inboxesResult.count ?? 0),
+    activeSequenceCount: sequencesResult.error ? "Unavailable" : String(sequencesResult.count ?? 0),
+    lastWorkflowEvent: workflowResult.error ? "Unavailable" : latestDiagnosticLabel(workflowResult.data as Record<string, unknown> | null, "workflow_event"),
+    lastSendEvent: sendResult.error ? "Unavailable" : latestDiagnosticLabel(sendResult.data as Record<string, unknown> | null, "email_sent"),
+    lastReplyEvent: replyResult.error ? "Unavailable" : latestDiagnosticLabel(replyResult.data as Record<string, unknown> | null, "reply_event"),
+    n8nDiscoveryWebhook: hasN8nWebhook ? "Configured" : "Not configured"
+  };
+}
+
+export async function getAccountSettingsData() {
+  const authClient = await createSupabaseDashboardClient();
+  if (!authClient) return null;
+
+  const {
+    data: { user }
+  } = await authClient.auth.getUser();
+  if (!user) return null;
+
+  let role = "Unavailable";
+  let active = "Unavailable";
+  try {
+    role = await getActiveDashboardUserRole(user.id);
+    active = "Active";
+  } catch {
+    active = "Inactive";
+  }
+
+  return {
+    name: typeof user.user_metadata?.display_name === "string" ? user.user_metadata.display_name : (typeof user.user_metadata?.name === "string" ? user.user_metadata.name : user.email ?? user.id),
+    email: user.email ?? "Email unavailable",
+    role,
+    active,
+    lastLogin: user.last_sign_in_at ?? null
   };
 }
 

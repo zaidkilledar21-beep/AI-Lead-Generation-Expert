@@ -1,39 +1,35 @@
 import { PageHeader } from "@/components/crm/page-header";
-import { updateFounderProfileAction } from "../actions";
-import { getSettingsData } from "@/lib/crm/queries";
+import { Badge } from "@/components/ui/badge";
+import { getAccountSettingsData } from "@/lib/crm/queries";
 
 export default async function AccountSettingsPage() {
-  const settings = await getSettingsData();
-  const profile = settings.profiles[0] ?? null;
+  const account = await getAccountSettingsData();
 
   return (
     <>
-      <PageHeader title="Account" description="Founder profile, timezone, and audit attribution." />
+      <PageHeader title="Account" description="Read-only dashboard identity and access status." />
       <section className="panel">
-        <div className="panel-header"><h2>Founder profile</h2></div>
-        <div className="panel-body">
-          <form action={updateFounderProfileAction} className="form">
-            <div className="form-grid">
-              <label>
-                <span>Display name</span>
-                <input name="displayName" defaultValue={profile?.display_name ?? ""} />
-              </label>
-              <label>
-                <span>Timezone</span>
-                <input name="timezone" defaultValue={profile?.timezone ?? "Asia/Karachi"} />
-              </label>
-              <label className="form-span-2">
-                <span>Telegram chat id</span>
-                <input name="telegramChatId" defaultValue={profile?.telegram_chat_id ?? ""} />
-              </label>
-            </div>
-            <input type="hidden" name="positiveReplies" value="true" />
-            <input type="hidden" name="reviewBacklog" value="true" />
-            <input type="hidden" name="weeklyReport" value="true" />
-            <input type="hidden" name="draftApprovals" value="true" />
-            <input type="hidden" name="sendFailures" value="true" />
-            <button className="ui-button ui-button-primary" type="submit">Save profile</button>
-          </form>
+        <div className="panel-header">
+          <h2>Dashboard user</h2>
+          <Badge tone={account?.active === "Active" ? "success" : "warning"}>{account?.active ?? "Unavailable"}</Badge>
+        </div>
+        <div className="panel-body grid gap-3 md:grid-cols-2">
+          <div className="record-card">
+            <div className="metric-label">Name</div>
+            <div className="text-white/85">{account?.name ?? "Name unavailable"}</div>
+          </div>
+          <div className="record-card">
+            <div className="metric-label">Email</div>
+            <div className="text-white/85">{account?.email ?? "Email unavailable"}</div>
+          </div>
+          <div className="record-card">
+            <div className="metric-label">Role</div>
+            <div className="text-white/85">{account?.role ?? "Role unavailable"}</div>
+          </div>
+          <div className="record-card">
+            <div className="metric-label">Last login</div>
+            <div className="text-white/85">{account?.lastLogin ? new Date(account.lastLogin).toLocaleString() : "Last login unavailable."}</div>
+          </div>
         </div>
       </section>
     </>

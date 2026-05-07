@@ -7,6 +7,7 @@ import { approveCrmLeadForOutreach, updateCrmLeadStatus, type DashboardLeadStatu
 import { updateGlobalOutreachSettings } from "@/lib/app/settings";
 import { MANUAL_BOARD_MOVE_STATUSES, type ManualBoardMoveStatus } from "@/lib/crm/status-contract";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { isAsciiWhitespace, isValidEmailAddress } from "@/lib/text-validation";
 
 function cleanText(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -32,17 +33,6 @@ function isEditableLeadField(field: string): field is EditableLeadField {
   return (editableLeadFields as readonly string[]).includes(field);
 }
 
-function isAsciiWhitespace(char: string) {
-  return char === " " || char === "\t" || char === "\n" || char === "\r" || char === "\f";
-}
-
-function hasAsciiWhitespace(value: string) {
-  for (const char of value) {
-    if (isAsciiWhitespace(char)) return true;
-  }
-  return false;
-}
-
 function hasHttpScheme(value: string) {
   const prefix = value.slice(0, 8).toLowerCase();
   return prefix.startsWith("http://") || prefix.startsWith("https://");
@@ -63,22 +53,6 @@ function normalizeInlineText(value: string) {
   }
 
   return normalized.trim();
-}
-
-function isValidEmailAddress(value: string) {
-  if (value.length > 254 || hasAsciiWhitespace(value)) return false;
-
-  const atIndex = value.indexOf("@");
-  if (atIndex <= 0 || atIndex !== value.lastIndexOf("@") || atIndex === value.length - 1) {
-    return false;
-  }
-
-  const localPart = value.slice(0, atIndex);
-  const domain = value.slice(atIndex + 1);
-  if (localPart.length > 64 || domain.length > 253) return false;
-  if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) return false;
-
-  return domain.split(".").every((label) => label.length > 0 && label.length <= 63);
 }
 
 function normalizeEditableLeadValue(field: EditableLeadField, value: string) {
