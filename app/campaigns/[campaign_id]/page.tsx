@@ -2,10 +2,15 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/crm/page-header";
 import { SettingsDiagnosticsCard } from "@/components/crm/settings-diagnostics-card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { triggerCampaignManualRun, updateCampaignStatus } from "../actions";
 import { EditCampaignForm } from "../edit-campaign-form";
+import { CampaignDetailControls } from "./campaign-detail-controls";
 import { getCampaignDetailData, getSettingsData } from "@/lib/crm/queries";
+
+function readinessTone(status: string) {
+  if (status === "Ready") return "success" as const;
+  if (status === "Blocked") return "danger" as const;
+  return "warning" as const;
+}
 
 export default async function CampaignDetailPage({
   params,
@@ -27,19 +32,38 @@ export default async function CampaignDetailPage({
         title={detail.campaign.name}
         description={`${detail.campaign.primaryNiche ?? detail.campaign.niche} / ${detail.campaign.targetCountries.join(", ") || detail.campaign.region}`}
         actions={
-          <div className="button-row">
-            <form action={triggerCampaignManualRun.bind(null, detail.campaign.id)}>
-              <Button type="submit">Request n8n run</Button>
-            </form>
-            <a className="ui-button ui-button-secondary" href={`/campaigns/${detail.campaign.id}/import`}>Import leads</a>
-            <form action={async () => { "use server"; await updateCampaignStatus(detail.campaign.id, detail.campaign.status === "active" ? "paused" : "active"); }}>
-              <Button type="submit" variant="secondary">{detail.campaign.status === "active" ? "Pause" : "Resume"}</Button>
-            </form>
-          </div>
+          <CampaignDetailControls
+            campaignId={detail.campaign.id}
+            status={detail.campaign.status}
+            manualRunBlocked={detail.readiness.status === "Blocked"}
+          />
         }
       />
       <SettingsDiagnosticsCard diagnostics={settings.diagnostics} title="Campaign edit dependencies" />
-      <p className="muted mt-4">Manual run requests are sent to n8n WF-10. Refresh run history to see discovery progress after the workflow writes back to Supabase.</p>
+      <p className="muted mt-4">Active campaigns are eligible for scheduled or manual n8n discovery runs.</p>
+
+      <section className="panel mt-4">
+        <div className="panel-header">
+          <div>
+            <h2>Campaign readiness</h2>
+            <p className="muted">Server-side checks for discovery, routing, inbox, n8n, and global pause state.</p>
+          </div>
+          <Badge tone={readinessTone(detail.readiness.status)}>{detail.readiness.status}</Badge>
+        </div>
+        <div className="panel-body grid gap-3">
+          {[...detail.readiness.blockers, ...detail.readiness.warnings, ...detail.readiness.info].map((item) => (
+            <div key={`${item.severity}-${item.label}-${item.message}`} className="rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <strong>{item.label}</strong>
+                <Badge tone={item.severity === "blocker" ? "danger" : item.severity === "warning" ? "warning" : "info"}>
+                  {item.severity}
+                </Badge>
+              </div>
+              <p className="muted mt-2">{item.message}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="metric-grid">
         <div className="metric-card"><div className="metric-label">Status</div><div className="metric-value"><Badge>{detail.campaign.status}</Badge></div></div>

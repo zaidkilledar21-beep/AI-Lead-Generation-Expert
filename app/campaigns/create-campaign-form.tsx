@@ -20,9 +20,9 @@ function SubmitButton() {
       disabled={pending}
     >
       {pending ? (
-        <span className="flex items-center gap-2 animate-pulse">Launching...</span>
+        <span className="flex items-center gap-2 animate-pulse">Saving...</span>
       ) : (
-        <span className="flex items-center gap-2"><Rocket className="w-5 h-5" /> Launch Campaign</span>
+        <span className="flex items-center gap-2"><Rocket className="w-5 h-5" /> Save Campaign</span>
       )}
     </button>
   );
@@ -33,7 +33,7 @@ const STEPS = [
   { id: 2, title: "Targeting", icon: Target },
   { id: 3, title: "Scoring & Sequences", icon: CheckCircle2 },
   { id: 4, title: "Automation & Limits", icon: Settings },
-  { id: 5, title: "Review & Launch", icon: Rocket }
+  { id: 5, title: "Review & Save", icon: Rocket }
 ];
 
 const previewSchema = z.object({
@@ -176,7 +176,7 @@ export function CreateCampaignForm({
                       defaultValue="draft"
                       options={[
                         { value: "draft", label: "Draft", description: "Save configuration without running discovery." },
-                        { value: "active", label: "Active", description: "Allow discovery once the campaign is launched." },
+                        { value: "active", label: "Active", description: "Active campaigns are eligible for scheduled or manual n8n discovery runs." },
                         { value: "paused", label: "Paused", description: "Keep the configuration but block execution." }
                       ]}
                     />
@@ -433,7 +433,7 @@ export function CreateCampaignForm({
                 className="space-y-6"
               >
                 <div className="border-b border-white/10 pb-4 mb-6">
-                  <h2 className="text-xl font-bold">Review & Launch</h2>
+                  <h2 className="text-xl font-bold">Review & Save</h2>
                   <p className="text-muted text-sm mt-1">Verify campaign configurations before writing to the database.</p>
                 </div>
 
@@ -477,9 +477,9 @@ export function CreateCampaignForm({
                 <div className="bg-brand/10 border border-brand/20 p-6 rounded-xl flex flex-col items-center justify-center text-center space-y-4 mb-8">
                   <Rocket className="w-12 h-12 text-brand animate-pulse" />
                   <div>
-                    <h3 className="text-lg font-bold text-white">Ready to Deploy</h3>
+                    <h3 className="text-lg font-bold text-white">Ready to Save</h3>
                     <p className="text-brand-light/80 text-sm max-w-md mx-auto mt-2">
-                      The campaign parameters have been validated. Once launched, the ingestion engine will immediately begin execution if status is active.
+                      Active campaigns are eligible for scheduled or manual n8n discovery runs.
                     </p>
                   </div>
                 </div>
