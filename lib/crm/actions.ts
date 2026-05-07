@@ -540,6 +540,7 @@ export async function rejectEmailDraftAction(formData: FormData) {
   const reason = cleanText(formData.get("reason"));
   if (!draftId) throw new Error("draftId is required");
   if (!leadId) throw new Error("leadId is required");
+  if (!reason) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();

@@ -3,9 +3,10 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { completeReviewQueueItemAction, regenerateEmailDraftAction, updateEmailDraftAction } from "@/lib/crm/actions";
 import { formatReplyIntentLabel } from "@/lib/crm/status-contract";
+import { ActionFeedbackForm } from "@/components/crm/action-feedback-form";
 
 interface ReviewItem {
   id: string;
@@ -41,6 +42,8 @@ const reviewDecisions = [
   { value: "rejected", label: "Reject / archive" }
 ] as const;
 
+const rejectionPrompt = "Please explain why this item is being rejected.";
+
 function sourceLabel(source: ReviewItem["source"]) {
   if (source === "email_draft") return "Draft approval";
   if (source === "reply_event") return "Reply review";
@@ -52,46 +55,41 @@ function reviewReasonLabel(item: ReviewItem) {
   return formatReplyIntentLabel(item.reason.slice("reply_".length));
 }
 
-function ReviewActionForm({
-  action,
-  successMessage,
-  className,
-  children
-}: Readonly<{
-  action: (formData: FormData) => Promise<unknown>;
-  successMessage: string;
-  className?: string;
-  children: ReactNode;
-}>) {
-  const [isPending, startTransition] = useTransition();
-  const [feedback, setFeedback] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
+function sourceIdField(source: ReviewItem["source"]) {
+  if (source === "manual_review") return "reviewId";
+  if (source === "email_draft") return "draftId";
+  return "replyEventId";
+}
 
+function ReviewQueueActionForm({
+  item,
+  decision,
+  label,
+  successMessage,
+  variant,
+  outcome,
+  noteName,
+  className = "flex-1"
+}: Readonly<{
+  item: ReviewItem;
+  decision: string;
+  label: string;
+  successMessage: string;
+  variant?: "primary" | "secondary" | "danger";
+  outcome?: "won" | "lost";
+  noteName?: "notes" | "reason";
+  className?: string;
+}>) {
   return (
-    <form
-      className={className}
-      onSubmit={(event) => {
-        event.preventDefault();
-        const formData = new FormData(event.currentTarget);
-        setFeedback(null);
-        startTransition(async () => {
-          try {
-            await action(formData);
-            setFeedback({ tone: "success", message: successMessage });
-          } catch (error) {
-            setFeedback({ tone: "danger", message: error instanceof Error ? error.message : "Action failed." });
-          }
-        });
-      }}
-    >
-      <fieldset disabled={isPending} className="contents">
-        {children}
-      </fieldset>
-      {feedback ? (
-        <p className={`mt-2 text-sm ${feedback.tone === "success" ? "text-emerald-300" : "text-red-300"}`}>
-          {feedback.message}
-        </p>
-      ) : null}
-    </form>
+    <ActionFeedbackForm action={completeReviewQueueItemAction} successMessage={successMessage} className={className}>
+      <input type="hidden" name="source" value={item.source} />
+      <input type="hidden" name={sourceIdField(item.source)} value={item.sourceId} />
+      <input type="hidden" name="leadId" value={item.leadId} />
+      <input type="hidden" name="decision" value={decision} />
+      {outcome ? <input type="hidden" name="outcome" value={outcome} /> : null}
+      {noteName ? <textarea name={noteName} className="field mb-2" rows={3} placeholder={rejectionPrompt} /> : null}
+      <Button type="submit" variant={variant} className="w-full shadow-lg">{label}</Button>
+    </ActionFeedbackForm>
   );
 }
 
@@ -203,7 +201,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       {reviewReasonLabel(selected)}
                     </div>
                     {selected.draftSubject ? (
-                      <ReviewActionForm action={updateEmailDraftAction} successMessage="Draft edits saved." className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5 space-y-3">
+                      <ActionFeedbackForm action={updateEmailDraftAction} successMessage="Draft edits saved." className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5 space-y-3">
                         <input type="hidden" name="draftId" value={selected.sourceId} />
                         <input type="hidden" name="leadId" value={selected.leadId} />
                         <label className="flex flex-col gap-1">
@@ -215,7 +213,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                           <textarea name="body" className="field" rows={8} defaultValue={selected.draftPreview ?? ""} />
                         </label>
                         <Button type="submit" variant="secondary">Save draft edits</Button>
-                      </ReviewActionForm>
+                      </ActionFeedbackForm>
                     ) : null}
                     {selected.replyExcerpt ? (
                       <div className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5">
@@ -235,46 +233,21 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
 
                   <div className="flex flex-wrap gap-3">
                     {selected.source === "manual_review" ? reviewDecisions.map((decision) => (
-                      <ReviewActionForm
-                        action={completeReviewQueueItemAction}
+                      <ReviewQueueActionForm
+                        item={selected}
+                        decision={decision.value}
+                        label={decision.label}
                         successMessage={decision.value === "approved" ? "Manual review approved." : "Manual review rejected."}
+                        variant={decisionVariant(decision.value)}
+                        noteName={decision.value === "rejected" ? "notes" : undefined}
                         key={decision.value}
-                        className="flex-1"
-                      >
-                        <input type="hidden" name="source" value={selected.source} />
-                        <input type="hidden" name="reviewId" value={selected.sourceId} />
-                        <input type="hidden" name="leadId" value={selected.leadId} />
-                        <input type="hidden" name="decision" value={decision.value} />
-                        {decision.value === "rejected" ? (
-                          <textarea name="notes" className="field mb-2" rows={3} placeholder="Please explain why this item is being rejected." />
-                        ) : null}
-                        <Button 
-                          type="submit" 
-                          variant={decisionVariant(decision.value)}
-                          className="w-full shadow-lg"
-                        >
-                          {decision.label}
-                        </Button>
-                      </ReviewActionForm>
+                      />
                     )) : null}
                     {selected.source === "email_draft" ? (
                       <>
-                        <ReviewActionForm action={completeReviewQueueItemAction} successMessage="Draft approved." className="flex-1">
-                          <input type="hidden" name="source" value={selected.source} />
-                          <input type="hidden" name="draftId" value={selected.sourceId} />
-                          <input type="hidden" name="leadId" value={selected.leadId} />
-                          <input type="hidden" name="decision" value="approved" />
-                          <Button type="submit" className="w-full shadow-lg">Approve draft</Button>
-                        </ReviewActionForm>
-                        <ReviewActionForm action={completeReviewQueueItemAction} successMessage="Draft rejected." className="flex-1">
-                          <input type="hidden" name="source" value={selected.source} />
-                          <input type="hidden" name="draftId" value={selected.sourceId} />
-                          <input type="hidden" name="leadId" value={selected.leadId} />
-                          <input type="hidden" name="decision" value="rejected" />
-                          <textarea name="reason" className="field mb-2" rows={3} placeholder="Please explain why this item is being rejected." />
-                          <Button type="submit" variant="danger" className="w-full shadow-lg">Reject draft</Button>
-                        </ReviewActionForm>
-                        <ReviewActionForm
+                        <ReviewQueueActionForm item={selected} decision="approved" label="Approve draft" successMessage="Draft approved." />
+                        <ReviewQueueActionForm item={selected} decision="rejected" label="Reject draft" successMessage="Draft rejected." variant="danger" noteName="reason" />
+                        <ActionFeedbackForm
                           action={regenerateEmailDraftAction}
                           successMessage="Regeneration requested. WF-05 will pick this up on the next run."
                           className="w-full flex flex-col gap-2"
@@ -283,35 +256,14 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                           <input type="hidden" name="leadId" value={selected.leadId} />
                           <input name="reason" placeholder="Regeneration note" className="field" />
                           <Button type="submit" variant="secondary" className="w-full shadow-lg">Request regenerate</Button>
-                        </ReviewActionForm>
+                        </ActionFeedbackForm>
                       </>
                     ) : null}
                     {selected.source === "reply_event" ? (
                       <>
-                        <ReviewActionForm action={completeReviewQueueItemAction} successMessage="Reply marked handled." className="flex-1">
-                          <input type="hidden" name="source" value={selected.source} />
-                          <input type="hidden" name="replyEventId" value={selected.sourceId} />
-                          <input type="hidden" name="leadId" value={selected.leadId} />
-                          <input type="hidden" name="decision" value="mark_reply_handled" />
-                          <Button type="submit" variant="secondary" className="w-full shadow-lg">Mark handled</Button>
-                        </ReviewActionForm>
-                        <ReviewActionForm action={completeReviewQueueItemAction} successMessage="Lead marked won." className="flex-1">
-                          <input type="hidden" name="source" value={selected.source} />
-                          <input type="hidden" name="replyEventId" value={selected.sourceId} />
-                          <input type="hidden" name="leadId" value={selected.leadId} />
-                          <input type="hidden" name="outcome" value="won" />
-                          <input type="hidden" name="decision" value="won" />
-                          <Button type="submit" className="w-full shadow-lg">Mark won</Button>
-                        </ReviewActionForm>
-                        <ReviewActionForm action={completeReviewQueueItemAction} successMessage="Lead marked lost." className="flex-1">
-                          <input type="hidden" name="source" value={selected.source} />
-                          <input type="hidden" name="replyEventId" value={selected.sourceId} />
-                          <input type="hidden" name="leadId" value={selected.leadId} />
-                          <input type="hidden" name="outcome" value="lost" />
-                          <input type="hidden" name="decision" value="lost" />
-                          <textarea name="notes" className="field mb-2" rows={3} placeholder="Please explain why this item is being rejected." />
-                          <Button type="submit" variant="danger" className="w-full shadow-lg">Mark lost</Button>
-                        </ReviewActionForm>
+                        <ReviewQueueActionForm item={selected} decision="mark_reply_handled" label="Mark handled" successMessage="Reply marked handled." variant="secondary" />
+                        <ReviewQueueActionForm item={selected} decision="won" label="Mark won" successMessage="Lead marked won." outcome="won" />
+                        <ReviewQueueActionForm item={selected} decision="lost" label="Mark lost" successMessage="Lead marked lost." variant="danger" outcome="lost" noteName="notes" />
                       </>
                     ) : null}
                   </div>
