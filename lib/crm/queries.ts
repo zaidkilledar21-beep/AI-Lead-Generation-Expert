@@ -547,10 +547,17 @@ export async function getSettingsData() {
       ? null
       : (p.notification_preferences as Record<string, unknown>),
   }));
-  const sequences = asArray(sequencesResult.data as Array<Record<string, unknown>>);
+  const sequences: Array<Record<string, unknown> & { outreach_steps: Array<Record<string, unknown>> }> = asArray(
+    sequencesResult.data as Array<Record<string, unknown>>
+  ).map((sequence) => ({
+    ...sequence,
+    outreach_steps: asArray(sequence.outreach_steps as Array<Record<string, unknown>>).sort(
+      (a, b) => Number(a.step_number ?? 0) - Number(b.step_number ?? 0)
+    )
+  }));
   const settings = asArray(settingsResult.data as Array<Record<string, unknown>>);
   const activeInboxes = inboxes.filter((inbox) => inbox.active === true);
-  const activeSequences = sequences.filter((sequence) => sequence.active === true);
+  const activeSequences = sequences.filter((sequence) => sequence.active === true && sequence.archived !== true);
 
   const messages = [
     inboxesResult.error ? "Sender inboxes could not be loaded. Check Supabase query access or schema alignment." : null,

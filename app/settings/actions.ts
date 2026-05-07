@@ -3,11 +3,100 @@
 import { revalidatePath } from "next/cache";
 import { setGlobalOutreachPaused, updateGlobalOutreachSettings, updateInboxDailyLimit } from "@/lib/app/settings";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
-import { requireAppActor } from "@/lib/app/auth";
+import { requireAppActor, requireDashboardWriteAccess } from "@/lib/app/auth";
+import { logCrmAction } from "@/lib/app/audit";
 
 function cleanText(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
   return text.length > 0 ? text : null;
+}
+
+function readBoolean(formData: FormData, name: string) {
+  const value = cleanText(formData.get(name));
+  return value === "true" || value === "on";
+}
+
+function readInteger(formData: FormData, name: string) {
+  const parsed = Number(formData.get(name));
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function assertSequenceBand(value: string | null): asserts value is "A" | "B" | "C" {
+  if (value !== "A" && value !== "B" && value !== "C") {
+    throw new Error("Sequence band must be A, B, or C");
+  }
+}
+
+async function sequenceHasActiveSteps(supabase: ReturnType<typeof createSupabaseServiceClient>, sequenceId: string) {
+  const { count, error } = await supabase
+    .from("outreach_steps")
+    .select("id", { count: "exact", head: true })
+    .eq("sequence_id", sequenceId)
+    .eq("active", true)
+    .eq("archived", false);
+  if (error) throw new Error(error.message);
+  return (count ?? 0) > 0;
+}
+
+async function getActiveAssignedCampaignIds(supabase: ReturnType<typeof createSupabaseServiceClient>, sequenceId: string) {
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("id")
+    .eq("status", "active")
+    .or(`sequence_band_a.eq.${sequenceId},sequence_band_b.eq.${sequenceId},sequence_band_c.eq.${sequenceId}`);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((campaign) => campaign.id as string);
+}
+
+function revalidateSequenceSettings(campaignIds: string[] = []) {
+  revalidatePath("/settings/sequences");
+  if (campaignIds.length > 0) {
+    revalidatePath("/campaigns");
+    for (const campaignId of campaignIds) {
+      revalidatePath(`/campaigns/${campaignId}`);
+    }
+  }
+}
+
+function sequenceInput(formData: FormData) {
+  const name = cleanText(formData.get("name"));
+  const description = cleanText(formData.get("description"));
+  const band = cleanText(formData.get("band"))?.toUpperCase() ?? null;
+  assertSequenceBand(band);
+  if (!name) throw new Error("Sequence name is required");
+
+  return {
+    name,
+    description,
+    band,
+    active: readBoolean(formData, "active") && !readBoolean(formData, "archived"),
+    archived: readBoolean(formData, "archived")
+  };
+}
+
+function sequenceStepInput(formData: FormData) {
+  const sequenceId = cleanText(formData.get("sequence_id"));
+  const stepNumber = readInteger(formData, "step_number");
+  const delayDays = readInteger(formData, "delay_days");
+  const templateType = cleanText(formData.get("template_type"));
+  const promptGuidance = cleanText(formData.get("prompt_guidance"));
+  const active = readBoolean(formData, "active");
+
+  if (!sequenceId) throw new Error("sequence_id is required");
+  if (!stepNumber || stepNumber < 1) throw new Error("Step number must be a positive integer");
+  if (delayDays == null || delayDays < 0) throw new Error("Delay days must be a non-negative integer");
+  if (active && !templateType && !promptGuidance) {
+    throw new Error("Active steps require a template type or prompt guidance");
+  }
+
+  return {
+    sequence_id: sequenceId,
+    step_number: stepNumber,
+    delay_days: delayDays,
+    template_type: templateType,
+    prompt_guidance: promptGuidance,
+    active
+  };
 }
 
 export async function toggleGlobalPauseAction(formData: FormData) {
@@ -141,4 +230,212 @@ export async function sendTestNotificationAction() {
   if (workflowError) throw new Error(workflowError.message);
 
   revalidatePath("/settings/notifications");
+}
+
+export async function createSequenceAction(formData: FormData) {
+  const actor = await requireDashboardWriteAccess();
+  const input = sequenceInput(formData);
+  if (input.active) {
+    throw new Error("Create the sequence first, add at least one active step, then activate it.");
+  }
+
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("outreach_sequences")
+    .insert(input)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "sequence_created",
+    detail: { sequence_id: data.id, name: input.name, band: input.band, active: input.active }
+  });
+
+  revalidateSequenceSettings();
+  return data.id as string;
+}
+
+export async function updateSequenceAction(formData: FormData) {
+  const actor = await requireDashboardWriteAccess();
+  const sequenceId = cleanText(formData.get("sequence_id"));
+  if (!sequenceId) throw new Error("sequence_id is required");
+  const input = sequenceInput(formData);
+
+  const supabase = createSupabaseServiceClient();
+  const campaignIds = await getActiveAssignedCampaignIds(supabase, sequenceId);
+  if (input.archived && campaignIds.length > 0 && !readBoolean(formData, "confirmAssignedArchive")) {
+    throw new Error("This sequence is assigned to active campaigns. Archiving it may prevent draft generation for those campaigns.");
+  }
+
+  if (input.active && !(await sequenceHasActiveSteps(supabase, sequenceId))) {
+    throw new Error("Sequence cannot be active with zero active steps.");
+  }
+
+  const { error } = await supabase
+    .from("outreach_sequences")
+    .update(input)
+    .eq("id", sequenceId);
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "sequence_updated",
+    detail: { sequence_id: sequenceId, ...input, active_campaign_dependencies: campaignIds.length }
+  });
+
+  revalidateSequenceSettings(campaignIds);
+}
+
+export async function archiveSequenceAction(formData: FormData) {
+  const actor = await requireDashboardWriteAccess();
+  const sequenceId = cleanText(formData.get("sequence_id"));
+  const confirmed = readBoolean(formData, "confirmAssignedArchive");
+  if (!sequenceId) throw new Error("sequence_id is required");
+
+  const supabase = createSupabaseServiceClient();
+  const campaignIds = await getActiveAssignedCampaignIds(supabase, sequenceId);
+  if (campaignIds.length > 0 && !confirmed) {
+    throw new Error("This sequence is assigned to active campaigns. Archiving it may prevent draft generation for those campaigns.");
+  }
+
+  const { error } = await supabase
+    .from("outreach_sequences")
+    .update({ active: false, archived: true })
+    .eq("id", sequenceId);
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "sequence_archived",
+    detail: { sequence_id: sequenceId, active_campaign_dependencies: campaignIds.length }
+  });
+
+  revalidateSequenceSettings(campaignIds);
+}
+
+export async function createSequenceStepAction(formData: FormData) {
+  const actor = await requireDashboardWriteAccess();
+  const input = sequenceStepInput(formData);
+  const supabase = createSupabaseServiceClient();
+
+  const { data: existing, error: existingError } = await supabase
+    .from("outreach_steps")
+    .select("id")
+    .eq("sequence_id", input.sequence_id)
+    .eq("step_number", input.step_number)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (existing) throw new Error("Step number must be unique per sequence.");
+
+  const { data, error } = await supabase
+    .from("outreach_steps")
+    .insert(input)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "sequence_step_created",
+    detail: { step_id: data.id, ...input }
+  });
+
+  revalidateSequenceSettings(await getActiveAssignedCampaignIds(supabase, input.sequence_id));
+  return data.id as string;
+}
+
+export async function updateSequenceStepAction(formData: FormData) {
+  const actor = await requireDashboardWriteAccess();
+  const stepId = cleanText(formData.get("step_id"));
+  if (!stepId) throw new Error("step_id is required");
+  const input = sequenceStepInput(formData);
+  const supabase = createSupabaseServiceClient();
+
+  const { data: duplicate, error: duplicateError } = await supabase
+    .from("outreach_steps")
+    .select("id")
+    .eq("sequence_id", input.sequence_id)
+    .eq("step_number", input.step_number)
+    .neq("id", stepId)
+    .maybeSingle();
+  if (duplicateError) throw new Error(duplicateError.message);
+  if (duplicate) throw new Error("Step number must be unique per sequence.");
+
+  if (!input.active) {
+    const { data: sequence, error: sequenceError } = await supabase
+      .from("outreach_sequences")
+      .select("active")
+      .eq("id", input.sequence_id)
+      .maybeSingle();
+    if (sequenceError) throw new Error(sequenceError.message);
+    if (sequence?.active) {
+      const { count, error: countError } = await supabase
+        .from("outreach_steps")
+        .select("id", { count: "exact", head: true })
+        .eq("sequence_id", input.sequence_id)
+        .eq("active", true)
+        .eq("archived", false)
+        .neq("id", stepId);
+      if (countError) throw new Error(countError.message);
+      if ((count ?? 0) === 0) throw new Error("Active sequence must keep at least one active step.");
+    }
+  }
+
+  const { error } = await supabase
+    .from("outreach_steps")
+    .update(input)
+    .eq("id", stepId);
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "sequence_step_updated",
+    detail: { step_id: stepId, ...input }
+  });
+
+  revalidateSequenceSettings(await getActiveAssignedCampaignIds(supabase, input.sequence_id));
+}
+
+export async function archiveSequenceStepAction(formData: FormData) {
+  const actor = await requireDashboardWriteAccess();
+  const stepId = cleanText(formData.get("step_id"));
+  const sequenceId = cleanText(formData.get("sequence_id"));
+  if (!stepId) throw new Error("step_id is required");
+  if (!sequenceId) throw new Error("sequence_id is required");
+
+  const supabase = createSupabaseServiceClient();
+  const { data: sequence, error: sequenceError } = await supabase
+    .from("outreach_sequences")
+    .select("active")
+    .eq("id", sequenceId)
+    .maybeSingle();
+  if (sequenceError) throw new Error(sequenceError.message);
+
+  if (sequence?.active) {
+    const { count, error: countError } = await supabase
+      .from("outreach_steps")
+      .select("id", { count: "exact", head: true })
+      .eq("sequence_id", sequenceId)
+      .eq("active", true)
+      .eq("archived", false)
+      .neq("id", stepId);
+    if (countError) throw new Error(countError.message);
+    if ((count ?? 0) === 0) throw new Error("Active sequence must keep at least one active step.");
+  }
+
+  const { error } = await supabase
+    .from("outreach_steps")
+    .update({ active: false, archived: true })
+    .eq("id", stepId);
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "sequence_step_archived",
+    detail: { step_id: stepId, sequence_id: sequenceId }
+  });
+
+  revalidateSequenceSettings(await getActiveAssignedCampaignIds(supabase, sequenceId));
 }
