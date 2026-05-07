@@ -13,6 +13,7 @@ export type CrmActionType =
   | "reply_handled"
   | "band_overridden"
   | "note_added"
+  | "lead_field_updated"
   | "email_draft_approved"
   | "email_draft_edited"
   | "email_draft_regeneration_requested"

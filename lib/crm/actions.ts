@@ -13,6 +13,52 @@ function cleanText(value: FormDataEntryValue | null) {
   return text.length > 0 ? text : null;
 }
 
+const editableLeadFields = [
+  "business_name",
+  "email",
+  "phone",
+  "whatsapp",
+  "website",
+  "linkedin_url",
+  "decision_maker_name",
+  "decision_maker_role"
+] as const;
+
+type EditableLeadField = typeof editableLeadFields[number];
+
+function isEditableLeadField(field: string): field is EditableLeadField {
+  return (editableLeadFields as readonly string[]).includes(field);
+}
+
+function normalizeEditableLeadValue(field: EditableLeadField, value: string) {
+  const trimmed = value.trim();
+  if (field === "business_name") {
+    if (!trimmed) throw new Error("Business name cannot be blank");
+    return trimmed;
+  }
+  if (field === "email") {
+    if (!trimmed) return null;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) throw new Error("Email must be a valid email address");
+    return trimmed.toLowerCase();
+  }
+  if (field === "website" || field === "linkedin_url") {
+    if (!trimmed) return null;
+    try {
+      const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error("Unsupported URL protocol");
+      }
+      return url.toString();
+    } catch {
+      throw new Error(field === "website" ? "Website must be a valid URL" : "LinkedIn URL must be a valid URL");
+    }
+  }
+  if (field === "phone" || field === "whatsapp") {
+    return trimmed.replace(/\s+/g, " ") || null;
+  }
+  return trimmed || null;
+}
+
 async function closePendingReplyReviewItems({
   supabase,
   leadId,
@@ -714,28 +760,43 @@ export async function moveLeadOnBoardAction(leadId: string, status: ManualBoardM
 
 export async function updateLeadFieldAction(leadId: string, field: string, value: string) {
   if (!leadId || !field) throw new Error("leadId and field are required");
-  
-  const allowedFields = ["email", "phone", "whatsapp", "linkedin_url", "website"];
-  if (!allowedFields.includes(field)) {
+  if (!isEditableLeadField(field)) {
     throw new Error(`Unsupported field update: ${field}`);
   }
+  const normalizedValue = normalizeEditableLeadValue(field, value);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
+  const { data: lead, error: loadError } = await supabase
+    .from("leads")
+    .select(field)
+    .eq("id", leadId)
+    .maybeSingle();
+  if (loadError) throw new Error(loadError.message);
+  if (!lead) throw new Error("Lead not found");
+  const oldValue = (lead as Record<string, unknown>)[field] ?? null;
 
   const { error } = await supabase
     .from("leads")
-    .update({ [field]: value, updated_at: new Date().toISOString() })
+    .update({ [field]: normalizedValue, updated_at: new Date().toISOString() })
     .eq("id", leadId);
 
   if (error) throw new Error(error.message);
 
   await logCrmAction({
     actor,
-    actionType: "note_added",
+    actionType: "lead_field_updated",
     leadId,
-    detail: { event: "field_updated", field, value }
+    detail: {
+      field_changed: field,
+      old_value: oldValue,
+      new_value: normalizedValue,
+      actor_id: actor.userId,
+      performed_by: actor.displayName
+    }
   });
 
   revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/pipeline");
+  return { value: normalizedValue };
 }

@@ -13,6 +13,7 @@ interface Props {
 
 export function InlineEditableField({ leadId, field, initialValue, label }: Props) {
   const [isEditing, setIsEditing] = useState(false);
+  const [feedback, setFeedback] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
   const [optimisticValue, setOptimisticValue] = useOptimistic(
     initialValue,
     (state, newValue: string) => newValue
@@ -34,9 +35,14 @@ export function InlineEditableField({ leadId, field, initialValue, label }: Prop
     }
 
     startTransition(async () => {
-      setOptimisticValue(newValue);
-      setIsEditing(false);
-      await updateLeadFieldAction(leadId, field, newValue);
+      try {
+        const result = await updateLeadFieldAction(leadId, field, newValue);
+        setOptimisticValue(result.value == null ? "" : String(result.value));
+        setFeedback({ tone: "success", message: `${label} saved.` });
+        setIsEditing(false);
+      } catch (error) {
+        setFeedback({ tone: "danger", message: error instanceof Error ? error.message : `${label} update failed.` });
+      }
     });
   };
 
@@ -61,6 +67,11 @@ export function InlineEditableField({ leadId, field, initialValue, label }: Prop
             <X className="w-3 h-3" />
           </button>
         </form>
+        {feedback ? (
+          <p className={`mt-2 text-xs ${feedback.tone === "success" ? "text-emerald-300" : "text-red-300"}`}>
+            {feedback.message}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -79,6 +90,11 @@ export function InlineEditableField({ leadId, field, initialValue, label }: Prop
           <Edit2 className="w-3 h-3" />
         </button>
       </div>
+      {feedback ? (
+        <p className={`mt-2 text-xs ${feedback.tone === "success" ? "text-emerald-300" : "text-red-300"}`}>
+          {feedback.message}
+        </p>
+      ) : null}
     </div>
   );
 }
