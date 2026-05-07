@@ -155,6 +155,28 @@ export async function assignLeadAction(formData: FormData) {
   revalidatePath("/inbox");
 }
 
+export async function assignReplyAction(formData: FormData) {
+  const replyEventId = cleanText(formData.get("replyEventId"));
+  const leadId = cleanText(formData.get("leadId"));
+  const assignedTo = cleanText(formData.get("assignedTo"));
+  if (!replyEventId) throw new Error("replyEventId is required");
+
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase.from("reply_events").update({ assigned_to: assignedTo }).eq("id", replyEventId);
+  if (error) throw new Error(error.message);
+
+  await logCrmAction({
+    actor,
+    actionType: "assigned_to_founder",
+    leadId,
+    replyEventId,
+    detail: { assigned_to: assignedTo, scope: "reply_event" }
+  });
+  revalidatePath("/inbox");
+  if (leadId) revalidatePath(`/pipeline/${leadId}`);
+}
+
 export async function approveLeadAction(formData: FormData) {
   const leadId = cleanText(formData.get("leadId"));
   if (!leadId) throw new Error("leadId is required");
