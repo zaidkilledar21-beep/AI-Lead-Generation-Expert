@@ -63,6 +63,7 @@ export type CrmActionType =
   | "email_draft_approved"
   | "email_draft_rejected"
   | "manual_review_completed"
+  | "manual_board_move"
   | "campaign_created"
   | "campaign_updated"
   | "campaign_launched"

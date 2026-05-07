@@ -646,11 +646,37 @@ export async function moveLeadOnBoardAction(leadId: string, status: ManualBoardM
     throw new Error("Unsupported board transition");
   }
 
+  const actor = await requireAppActor();
+  const supabase = createSupabaseServiceClient();
+  const { data: lead, error: leadError } = await supabase
+    .from("leads")
+    .select("status")
+    .eq("id", leadId)
+    .maybeSingle();
+  if (leadError) throw new Error(leadError.message);
+  if (!lead) throw new Error("Lead not found");
+  const oldStatus = lead.status as string;
+  if (oldStatus === status) return;
+
   await updateCrmLeadStatus(leadId, status);
 
+  await logCrmAction({
+    actor,
+    actionType: "manual_board_move",
+    leadId,
+    detail: {
+      event_type: "manual_board_move",
+      old_status: oldStatus,
+      new_status: status,
+      metadata: {
+        source: "pipeline_kanban_board",
+        actor_id: actor.userId,
+        performed_by: actor.displayName
+      }
+    }
+  });
+
   if (status === "closed_won" || status === "closed_lost") {
-    const actor = await requireAppActor();
-    const supabase = createSupabaseServiceClient();
     const { error } = await supabase
       .from("leads")
       .update({

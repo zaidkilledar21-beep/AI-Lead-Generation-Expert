@@ -1,16 +1,20 @@
 "use client";
 
-import { useRef, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { DndContext, type DragEndEvent, useDraggable, useDroppable } from "@dnd-kit/core";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { Badge, bandTone } from "@/components/ui/badge";
 import { moveLeadOnBoardAction } from "@/lib/crm/actions";
-import { formatStatusLabel, MANUAL_BOARD_MOVE_STATUSES } from "@/lib/crm/status-contract";
+import { formatStatusLabel, MANUAL_BOARD_MOVE_STATUSES, WORKFLOW_OWNED_BOARD_STATUSES } from "@/lib/crm/status-contract";
 
 type Column = { key: string; label: string };
 
 function canDropTo(status: string) {
   return (MANUAL_BOARD_MOVE_STATUSES as readonly string[]).includes(status);
+}
+
+function isWorkflowOwnedStatus(status: string) {
+  return (WORKFLOW_OWNED_BOARD_STATUSES as readonly string[]).includes(status);
 }
 
 function LeadCard({ row, index }: Readonly<{ row: any; index: number }>) {
@@ -67,7 +71,6 @@ function BoardColumn({
   const droppable = canDropTo(column.key);
   const { isOver, setNodeRef } = useDroppable({
     id: column.key,
-    disabled: !droppable,
     data: { status: column.key }
   });
 
@@ -109,6 +112,7 @@ function BoardColumn({
 export function KanbanBoard({ columns, leads }: Readonly<{ columns: Column[]; leads: any[] }>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
+  const [guardrailMessage, setGuardrailMessage] = useState<string | null>(null);
 
   const { scrollXProgress } = useScroll({ container: containerRef });
   const rotateY = useTransform(scrollXProgress, [0, 1], [3, -3]);
@@ -117,15 +121,32 @@ export function KanbanBoard({ columns, leads }: Readonly<{ columns: Column[]; le
     const leadId = String(event.active.id);
     const targetStatus = String(event.over?.id ?? "");
     const fromStatus = String(event.active.data.current?.fromStatus ?? "");
-    if (!event.over || !canDropTo(targetStatus) || targetStatus === fromStatus) return;
+    if (!event.over) return;
+    if (!canDropTo(targetStatus)) {
+      if (isWorkflowOwnedStatus(targetStatus)) {
+        setGuardrailMessage("Workflow-owned: cannot manually drop here.");
+      }
+      return;
+    }
+    if (targetStatus === fromStatus) return;
 
+    setGuardrailMessage(null);
     startTransition(async () => {
-      await moveLeadOnBoardAction(leadId, targetStatus as any);
+      try {
+        await moveLeadOnBoardAction(leadId, targetStatus as any);
+      } catch (error) {
+        setGuardrailMessage(error instanceof Error ? error.message : "Board move failed.");
+      }
     });
   };
 
   return (
     <DndContext onDragEnd={onDragEnd}>
+      {guardrailMessage ? (
+        <div className="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          {guardrailMessage}
+        </div>
+      ) : null}
       <motion.section
         ref={containerRef}
         className={`flex gap-6 overflow-x-auto pb-8 pt-4 px-4 -mx-4 snap-x snap-mandatory ${isPending ? "opacity-80" : ""}`}

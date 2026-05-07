@@ -148,6 +148,10 @@ export const MANUAL_BOARD_MOVE_STATUSES = [
 
 export type ManualBoardMoveStatus = typeof MANUAL_BOARD_MOVE_STATUSES[number];
 
+export const WORKFLOW_OWNED_BOARD_STATUSES = LEAD_STATUSES.filter(
+  (status) => !(MANUAL_BOARD_MOVE_STATUSES as readonly string[]).includes(status)
+) as Array<Exclude<LeadLifecycleStatus, ManualBoardMoveStatus>>;
+
 export const LEAD_STATUS_LABELS: Record<LeadLifecycleStatus, string> = {
   new: "New",
   enriched: "Enriched",

@@ -7,7 +7,7 @@ import { ScoreBar } from "@/components/ui/score-bar";
 import { approveLeadAction, changeLeadStatusAction, bulkApproveLeadsAction, bulkAssignLeadsAction, bulkChangeLeadStatusAction } from "@/lib/crm/actions";
 import { useLeadSelection } from "@/lib/hooks/use-lead-selection";
 import { isTerminalLeadStatus } from "@/lib/crm/status-contract";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 
 type FounderProfile = {
   user_id: string;
@@ -42,25 +42,58 @@ function exportRows(rows: any[]) {
 export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: any[]; profiles: FounderProfile[] }>) {
   const { selectedArray, toggleSelection, toggleAll, clearSelection, isSelected, isAllSelected, count } = useLeadSelection(filtered);
   const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
+
+  const selectedCount = selectedArray.length;
+
+  function pluralize(countValue: number, singular: string, plural = `${singular}s`) {
+    return `${countValue} ${countValue === 1 ? singular : plural}`;
+  }
 
   const handleBulkApprove = () => {
+    const actionCount = selectedCount;
+    setFeedback(null);
     startTransition(async () => {
-      await bulkApproveLeadsAction(selectedArray);
-      clearSelection();
+      try {
+        await bulkApproveLeadsAction(selectedArray);
+        setFeedback({ tone: "success", message: `${pluralize(actionCount, "lead")} approved.` });
+        clearSelection();
+      } catch (error) {
+        setFeedback({ tone: "danger", message: `Bulk approve failed: ${error instanceof Error ? error.message : "Unknown error"}` });
+      }
     });
   };
 
   const handleBulkStatus = (status: "paused" | "unsubscribed" | "archived") => {
+    const actionCount = selectedCount;
+    setFeedback(null);
     startTransition(async () => {
-      await bulkChangeLeadStatusAction(selectedArray, status);
-      clearSelection();
+      try {
+        await bulkChangeLeadStatusAction(selectedArray, status);
+        const verb = status === "archived" ? "archived" : status === "paused" ? "paused" : "unsubscribed";
+        setFeedback({ tone: "success", message: `${pluralize(actionCount, "lead")} ${verb}.` });
+        clearSelection();
+      } catch (error) {
+        setFeedback({ tone: "danger", message: `Bulk ${status} failed: ${error instanceof Error ? error.message : "Unknown error"}` });
+      }
     });
   };
 
   const handleBulkAssign = (assignedTo: string) => {
+    const actionCount = selectedCount;
+    const assignee = assignedTo || null;
+    setFeedback(null);
     startTransition(async () => {
-      await bulkAssignLeadsAction(selectedArray, assignedTo || null);
-      clearSelection();
+      try {
+        await bulkAssignLeadsAction(selectedArray, assignee);
+        setFeedback({
+          tone: "success",
+          message: assignee ? `${pluralize(actionCount, "lead")} assigned to ${assignee}.` : `${pluralize(actionCount, "lead")} unassigned.`
+        });
+        clearSelection();
+      } catch (error) {
+        setFeedback({ tone: "danger", message: `Bulk assign failed: ${error instanceof Error ? error.message : "Unknown error"}` });
+      }
     });
   };
 
@@ -68,6 +101,15 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
 
   return (
     <section className="glass-panel overflow-hidden relative">
+      {feedback ? (
+        <div className={`m-4 rounded-xl border px-4 py-3 text-sm ${
+          feedback.tone === "success"
+            ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200"
+            : "border-red-500/25 bg-red-500/10 text-red-200"
+        }`}>
+          {feedback.message}
+        </div>
+      ) : null}
       <AnimatePresence>
         {count > 0 && (
           <motion.div 
@@ -119,7 +161,10 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                 onValueChange={(value) => handleBulkAssign(value === "__unassigned__" ? "" : value)}
               />
               <button
-                onClick={() => exportRows(selectedRows)}
+                onClick={() => {
+                  exportRows(selectedRows);
+                  setFeedback({ tone: "success", message: `${pluralize(selectedRows.length, "lead")} exported.` });
+                }}
                 className="px-4 py-2 text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 rounded-lg transition-colors border border-white/10"
               >
                 Export CSV
@@ -130,7 +175,7 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
       </AnimatePresence>
       <div className="p-6 border-b border-white/5">
         <h2 className="text-lg font-medium text-white/90">Lead list</h2>
-        <span className="text-sm text-white/40">Row actions are live; bulk actions are the next safe extension point.</span>
+        <span className="text-sm text-white/40">Row and bulk actions are live. Workflow-owned statuses remain protected.</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
