@@ -1,8 +1,24 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
-import { getAnalyticsData } from "@/lib/crm/queries";
+import { LinkButton } from "@/components/ui/button";
+import { AnalyticsDiagnosticsPanel } from "@/components/crm/analytics-diagnostics-panel";
+import { getAnalyticsData, getAnalyticsDiagnostics, type AnalyticsExportKind } from "@/lib/crm/queries";
 import { AnalyticsFilters } from "@/components/crm/analytics-filters";
 import { CountryPerformanceBar, DailyRollupChart, SequenceFunnelChart, ReplyBreakdownDonut, NichePerformanceBar } from "@/components/crm/analytics-charts";
+
+const EXPORTS: Array<{ kind: AnalyticsExportKind; label: string }> = [
+  { kind: "campaign-performance", label: "Campaign CSV" },
+  { kind: "daily-rollup", label: "Daily CSV" },
+  { kind: "sequence-funnel", label: "Sequence CSV" },
+  { kind: "reply-intent-breakdown", label: "Replies CSV" }
+];
+
+function analyticsExportHref(kind: AnalyticsExportKind, days: number, from?: string, to?: string) {
+  const params = new URLSearchParams({ kind, days: days > 90 ? "all" : String(days) });
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  return `/analytics/export?${params.toString()}`;
+}
 
 export default async function AnalyticsPage({
   searchParams
@@ -13,7 +29,10 @@ export default async function AnalyticsPage({
   const from = searchParams?.from;
   const to = searchParams?.to;
 
-  const analytics = await getAnalyticsData(days, from, to);
+  const [analytics, diagnostics] = await Promise.all([
+    getAnalyticsData(days, from, to),
+    getAnalyticsDiagnostics(days, from, to)
+  ]);
   const { comparison } = analytics;
 
   return (
@@ -21,12 +40,31 @@ export default async function AnalyticsPage({
       <PageHeader
         title="Analytics"
         description="Campaign performance, delivery throughput, reply performance, and sequence funnel health."
-        actions={<AnalyticsFilters from={from} to={to} days={days} />}
+        actions={
+          <div className="flex flex-col items-end gap-3">
+            <AnalyticsFilters from={from} to={to} days={days} />
+            <div className="flex flex-wrap justify-end gap-2">
+              {EXPORTS.map((item) => (
+                <LinkButton key={item.kind} href={analyticsExportHref(item.kind, days, from, to)} variant="secondary">
+                  {item.label}
+                </LinkButton>
+              ))}
+            </div>
+          </div>
+        }
       />
+
+      <section className="glass-panel p-4 text-sm text-white/60">
+        <span className="font-semibold text-white/85">Selected range:</span> {analytics.dateRange.label}
+        <span className="mx-2 text-white/20">|</span>
+        <span className="font-semibold text-white/85">Timezone assumption:</span> {analytics.dateRange.timezoneLabel}
+      </section>
 
       <section className="metric-grid">
         {analytics.metrics.map((metric) => <MetricCard key={metric.label} label={metric.label} value={metric.value} />)}
       </section>
+
+      <AnalyticsDiagnosticsPanel diagnostics={diagnostics} />
 
       {comparison && (
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
@@ -97,7 +135,7 @@ export default async function AnalyticsPage({
                   </tr>
                 ))}
                 {analytics.weeklySnapshot.length === 0 ? (
-                  <tr><td colSpan={5} className="muted text-center">No weekly activity in this range.</td></tr>
+                  <tr><td colSpan={5} className="muted text-center">No emails were sent in this date range.</td></tr>
                 ) : null}
               </tbody>
             </table>
@@ -130,7 +168,7 @@ export default async function AnalyticsPage({
                 </tr>
               ))}
               {analytics.campaigns.length === 0 ? (
-                <tr><td colSpan={8} className="muted text-center">No campaign analytics are available yet.</td></tr>
+                <tr><td colSpan={8} className="muted text-center">No active campaigns have lead activity in this range.</td></tr>
               ) : null}
             </tbody>
           </table>
@@ -156,7 +194,7 @@ export default async function AnalyticsPage({
                   </tr>
                 ))}
                 {analytics.daily.length === 0 ? (
-                  <tr><td colSpan={6} className="muted text-center">No daily rollup rows for this range.</td></tr>
+                  <tr><td colSpan={6} className="muted text-center">No emails were sent in this date range.</td></tr>
                 ) : null}
               </tbody>
             </table>
@@ -180,7 +218,7 @@ export default async function AnalyticsPage({
                   </tr>
                 ))}
                 {analytics.sequenceFunnel.length === 0 ? (
-                  <tr><td colSpan={6} className="muted text-center">No sequence steps have sent yet.</td></tr>
+                  <tr><td colSpan={6} className="muted text-center">No sequence funnel events are available yet.</td></tr>
                 ) : null}
               </tbody>
             </table>
