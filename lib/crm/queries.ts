@@ -2,6 +2,7 @@ import { createOptionalSupabaseServiceClient } from "@/lib/supabase/server";
 import { createSupabaseDashboardClient } from "@/lib/supabase/dashboard";
 import { getActiveDashboardUserRole } from "@/lib/app/auth";
 import { getCampaignReadiness } from "@/lib/app/campaigns";
+import { resolveAnalyticsDateRange } from "@/lib/crm/analytics-utils";
 import {
   HUMAN_REVIEW_REPLY_INTENTS,
   POSITIVE_REPLY_INTENTS,
@@ -11,6 +12,19 @@ import {
 } from "@/lib/crm/status-contract";
 import { previewText } from "@/lib/crm/inbox-utils";
 import type { AnalyticsCampaign, AnalyticsDaily, AnalyticsSequenceStep, CountryData, IntentData, NicheData, LeadProfile, WeeklySnapshot } from "@/lib/crm/types";
+
+export type AnalyticsExportKind = "campaign-performance" | "daily-rollup" | "sequence-funnel" | "reply-intent-breakdown";
+type OptionalSupabaseClient = ReturnType<typeof createOptionalSupabaseServiceClient>;
+type AnalyticsSupabaseClient = NonNullable<OptionalSupabaseClient>;
+type AnalyticsCampaignExportRow = {
+  campaignName: string;
+  niche: string;
+  status: string;
+  leadsDiscovered: number;
+  emailsSent: number;
+  replies: number;
+  positiveReplies: number;
+};
 
 /** Safely coerce an `unknown` DB value to string. Objects would produce `[object Object]` via String(), so we guard against that. */
 function toStr(value: unknown, fallback = ""): string {
@@ -687,31 +701,19 @@ export async function getLatestNotificationEvent() {
 }
 
 export async function getAnalyticsData(rangeDays = 30, from?: string, to?: string) {
+  const dateRange = resolveAnalyticsDateRange(rangeDays, from, to);
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) {
-    return { metrics: [], campaigns: [] as AnalyticsCampaign[], daily: [] as AnalyticsDaily[], sequenceFunnel: [] as AnalyticsSequenceStep[], comparison: null, replyIntentBreakdown: [] as IntentData[], performanceByNiche: [] as NicheData[], performanceByCountry: [] as CountryData[], weeklySnapshot: [] as WeeklySnapshot[] };
+    return { metrics: [], campaigns: [] as AnalyticsCampaign[], daily: [] as AnalyticsDaily[], sequenceFunnel: [] as AnalyticsSequenceStep[], comparison: null, replyIntentBreakdown: [] as IntentData[], performanceByNiche: [] as NicheData[], performanceByCountry: [] as CountryData[], weeklySnapshot: [] as WeeklySnapshot[], dateRange };
   }
 
-  const end = to ? new Date(to) : new Date();
-  const start = from ? new Date(from) : new Date();
-  if (!from) {
-    start.setDate(end.getDate() - (rangeDays - 1));
-  }
-  
-  const diff = end.getTime() - start.getTime();
-  const prevEnd = new Date(start.getTime() - 86400000);
-  const prevStart = new Date(prevEnd.getTime() - diff);
-
-  const since = start.toISOString().slice(0, 10);
-  const until = end.toISOString().slice(0, 10);
-  const prevSince = prevStart.toISOString().slice(0, 10);
-  const prevUntil = prevEnd.toISOString().slice(0, 10);
+  const { since, until, previousSince, previousUntil } = dateRange;
 
   const [homeMetrics, campaigns, daily, prevDaily, sequenceFunnel, replies, pipelineRows] = await Promise.all([
     getCrmHomeMetrics(),
     supabase.from("campaign_analytics").select("*").order("reply_rate", { ascending: false }),
     supabase.from("analytics_daily_rollup").select("*").gte("metric_date", since).lte("metric_date", until).order("metric_date"),
-    supabase.from("analytics_daily_rollup").select("*").gte("metric_date", prevSince).lte("metric_date", prevUntil).order("metric_date"),
+    supabase.from("analytics_daily_rollup").select("*").gte("metric_date", previousSince).lte("metric_date", previousUntil).order("metric_date"),
     supabase.from("sequence_step_funnel").select("*").order("band").order("step_number"),
     supabase.from("reply_events").select("intent_classification").gte("reply_received_at", since).lte("reply_received_at", until),
     getPipelineRows(1000)
@@ -816,6 +818,173 @@ export async function getAnalyticsData(rangeDays = 30, from?: string, to?: strin
     performanceByNiche: performanceByNiche as NicheData[],
     performanceByCountry,
     weeklySnapshot,
+    dateRange,
+  };
+}
+
+async function latestTimestamp(
+  supabase: AnalyticsSupabaseClient,
+  table: "leads" | "outreach_events" | "reply_events",
+  timestampColumn: string,
+  since: string,
+  nextDay: string,
+  eventType?: string
+) {
+  let query = supabase
+    .from(table)
+    .select(timestampColumn)
+    .gte(timestampColumn, since)
+    .lt(timestampColumn, nextDay)
+    .order(timestampColumn, { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (eventType && table === "outreach_events") {
+    query = supabase
+      .from(table)
+      .select(timestampColumn)
+      .eq("event_type", eventType)
+      .gte(timestampColumn, since)
+      .lt(timestampColumn, nextDay)
+      .order(timestampColumn, { ascending: false })
+      .limit(1)
+      .maybeSingle();
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return null;
+  return toStrOrNull((data as unknown as Record<string, unknown>)[timestampColumn]);
+}
+
+export async function getAnalyticsDiagnostics(rangeDays = 30, from?: string, to?: string) {
+  const dateRange = resolveAnalyticsDateRange(rangeDays, from, to);
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) {
+    return {
+      dateRange,
+      lastLeadDiscoveredAt: null,
+      lastEmailSentAt: null,
+      lastReplyAt: null,
+      workflowEventCount: null,
+      activeCampaignCount: null,
+      activeInboxCount: null
+    };
+  }
+
+  const { since, nextDay } = dateRange;
+  const [
+    lastLeadDiscoveredAt,
+    lastEmailSentAt,
+    lastReplyAt,
+    workflowEvents,
+    activeCampaigns,
+    activeInboxes
+  ] = await Promise.all([
+    latestTimestamp(supabase, "leads", "created_at", since, nextDay),
+    latestTimestamp(supabase, "outreach_events", "sent_at", since, nextDay, "email_sent"),
+    latestTimestamp(supabase, "reply_events", "reply_received_at", since, nextDay),
+    supabase.from("workflow_events").select("*", { count: "exact", head: true }).gte("created_at", since).lt("created_at", nextDay),
+    supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "active"),
+    supabase.from("inboxes").select("*", { count: "exact", head: true }).eq("active", true).eq("archived", false)
+  ]);
+
+  return {
+    dateRange,
+    lastLeadDiscoveredAt,
+    lastEmailSentAt,
+    lastReplyAt,
+    workflowEventCount: workflowEvents.error ? null : workflowEvents.count ?? 0,
+    activeCampaignCount: activeCampaigns.error ? null : activeCampaigns.count ?? 0,
+    activeInboxCount: activeInboxes.error ? null : activeInboxes.count ?? 0
+  };
+}
+
+export async function getAnalyticsExport(kind: AnalyticsExportKind, rangeDays = 30, from?: string, to?: string) {
+  const analytics = await getAnalyticsData(rangeDays, from, to);
+  const metadata = [
+    ["Export", kind],
+    ["Date range", analytics.dateRange.label],
+    ["Timezone", analytics.dateRange.timezoneLabel]
+  ] as const;
+
+  if (kind === "campaign-performance") {
+    const campaignsById = new Map(analytics.campaigns.map((campaign) => [campaign.campaign_id, campaign]));
+    const rowsByCampaign = analytics.daily.reduce((acc, row) => {
+      const key = row.campaign_id ?? "all";
+      const campaign = row.campaign_id ? campaignsById.get(row.campaign_id) : null;
+      const existing = acc.get(key) ?? {
+        campaignName: row.campaign_name ?? campaign?.name ?? "All campaigns",
+        niche: campaign?.primary_niche ?? "N/A",
+        status: campaign?.status ?? "N/A",
+        leadsDiscovered: 0,
+        emailsSent: 0,
+        replies: 0,
+        positiveReplies: 0
+      };
+      existing.leadsDiscovered += row.leads_discovered;
+      existing.emailsSent += row.emails_sent;
+      existing.replies += row.replies;
+      existing.positiveReplies += row.positive_replies;
+      acc.set(key, existing);
+      return acc;
+    }, new Map<string, AnalyticsCampaignExportRow>());
+
+    return {
+      filename: `campaign-performance-${analytics.dateRange.since}-${analytics.dateRange.until}.csv`,
+      metadata,
+      columns: [
+        { header: "Campaign", value: (row: AnalyticsCampaignExportRow) => row.campaignName },
+        { header: "Niche", value: (row: AnalyticsCampaignExportRow) => row.niche },
+        { header: "Status", value: (row: AnalyticsCampaignExportRow) => row.status },
+        { header: "Leads discovered", value: (row: AnalyticsCampaignExportRow) => row.leadsDiscovered },
+        { header: "Emails sent", value: (row: AnalyticsCampaignExportRow) => row.emailsSent },
+        { header: "Replies", value: (row: AnalyticsCampaignExportRow) => row.replies },
+        { header: "Positive replies", value: (row: AnalyticsCampaignExportRow) => row.positiveReplies }
+      ],
+      rows: Array.from(rowsByCampaign.values()).sort((a, b) => b.emailsSent - a.emailsSent)
+    };
+  }
+
+  if (kind === "daily-rollup") {
+    return {
+      filename: `daily-rollup-${analytics.dateRange.since}-${analytics.dateRange.until}.csv`,
+      metadata,
+      columns: [
+        { header: "Date", value: (row: AnalyticsDaily) => row.metric_date },
+        { header: "Campaign", value: (row: AnalyticsDaily) => row.campaign_name ?? "All campaigns" },
+        { header: "Leads discovered", value: (row: AnalyticsDaily) => row.leads_discovered },
+        { header: "Emails sent", value: (row: AnalyticsDaily) => row.emails_sent },
+        { header: "Replies", value: (row: AnalyticsDaily) => row.replies },
+        { header: "Positive replies", value: (row: AnalyticsDaily) => row.positive_replies }
+      ],
+      rows: analytics.daily
+    };
+  }
+
+  if (kind === "sequence-funnel") {
+    return {
+      filename: `sequence-funnel-${analytics.dateRange.since}-${analytics.dateRange.until}.csv`,
+      metadata,
+      columns: [
+        { header: "Sequence", value: (row: AnalyticsSequenceStep) => row.sequence_name },
+        { header: "Step", value: (row: AnalyticsSequenceStep) => row.step_number },
+        { header: "Sent", value: (row: AnalyticsSequenceStep) => row.sent },
+        { header: "Replies", value: (row: AnalyticsSequenceStep) => row.replies },
+        { header: "Positive replies", value: (row: AnalyticsSequenceStep) => row.positive_replies },
+        { header: "Reply rate", value: (row: AnalyticsSequenceStep) => row.reply_rate }
+      ],
+      rows: analytics.sequenceFunnel
+    };
+  }
+
+  return {
+    filename: `reply-intent-breakdown-${analytics.dateRange.since}-${analytics.dateRange.until}.csv`,
+    metadata,
+    columns: [
+      { header: "Intent", value: (row: IntentData) => row.name },
+      { header: "Replies", value: (row: IntentData) => row.value }
+    ],
+    rows: analytics.replyIntentBreakdown
   };
 }
 

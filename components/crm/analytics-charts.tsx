@@ -55,7 +55,7 @@ export const DailyRollupChart = memo(function DailyRollupChart({ data }: Readonl
     return [...rollup].sort((a, b) => new Date(a.metric_date).getTime() - new Date(b.metric_date).getTime());
   }, [data]);
 
-  if (aggregatedData.length === 0) return <EmptyChart label="No daily rollup data for this range." />;
+  if (aggregatedData.length === 0) return <EmptyChart label="No emails were sent in this date range." />;
 
   return (
     <div className="h-[300px] w-full mt-4">
@@ -119,7 +119,7 @@ export const SequenceFunnelChart = memo(function SequenceFunnelChart({ data }: R
     sequence_name: d.sequence_name,
   })), [data]);
 
-  if (chartData.length === 0) return <EmptyChart label="No sequence funnel data yet." />;
+  if (chartData.length === 0) return <EmptyChart label="No sequence funnel events are available yet." />;
 
   return (
     <div className="h-[300px] w-full mt-4">
@@ -144,7 +144,7 @@ export const ReplyBreakdownDonut = memo(function ReplyBreakdownDonut({ data }: R
     [data]
   );
 
-  if (coloredData.length === 0) return <EmptyChart label="No replies in this range." />;
+  if (coloredData.length === 0) return <EmptyChart label="No replies have been detected yet." />;
 
   return (
     <div className="h-[300px] w-full mt-4">
@@ -180,7 +180,7 @@ export const NichePerformanceBar = memo(function NichePerformanceBar({ data }: R
     positive: d.positive,
   })), [data]);
 
-  if (chartData.length === 0) return <EmptyChart label="No niche performance data yet." />;
+  if (chartData.length === 0) return <EmptyChart label="No active campaigns have lead activity in this range." />;
 
   return (
     <div className="h-[300px] w-full mt-4">
@@ -222,7 +222,7 @@ export const CountryPerformanceBar = memo(function CountryPerformanceBar({ data 
     positive: item.positive
   })), [data]);
 
-  if (chartData.length === 0) return <EmptyChart label="No country performance data yet." />;
+  if (chartData.length === 0) return <EmptyChart label="No active campaigns have lead activity in this range." />;
 
   return (
     <div className="h-[300px] w-full mt-4">
