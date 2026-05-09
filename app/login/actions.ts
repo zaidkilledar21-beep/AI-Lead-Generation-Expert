@@ -1,8 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import type { Route } from "next";
-import { DASHBOARD_READ_ROLES, getActiveDashboardUserRole } from "@/lib/app/auth";
+import { DASHBOARD_READ_ROLES, DashboardAuthError, getActiveDashboardUserRole } from "@/lib/app/auth";
+import { normalizeAppRedirectPath } from "@/lib/app/redirects";
 import { createSupabaseDashboardClient } from "@/lib/supabase/dashboard";
 
 export type LoginState = {
@@ -16,7 +16,7 @@ function str(value: FormDataEntryValue | null, fallback = ""): string {
 export async function signIn(_previousState: LoginState, formData: FormData): Promise<LoginState> {
   const email = str(formData.get("email"));
   const password = str(formData.get("password"));
-  const next = normalizeRedirectPath(str(formData.get("next"), "/"));
+  const next = normalizeAppRedirectPath(str(formData.get("next"), "/"));
   const supabase = await createSupabaseDashboardClient();
 
   if (!supabase) {
@@ -29,18 +29,31 @@ export async function signIn(_previousState: LoginState, formData: FormData): Pr
     return { error: error.message };
   }
 
-  try {
-    const role = data.user ? await getActiveDashboardUserRole(data.user.id) : null;
-    if (!role || !DASHBOARD_READ_ROLES.includes(role)) {
-      await supabase.auth.signOut();
-      return { error: "Dashboard access is not active" };
-    }
-  } catch {
-    await supabase.auth.signOut();
-    return { error: "Dashboard access is not active" };
+  if (!data.user) {
+    return { error: "Sign in succeeded but no dashboard session was returned. Please try again." };
   }
 
-  redirect(next as unknown as Route);
+  try {
+    const role = await getActiveDashboardUserRole(data.user.id);
+    if (!DASHBOARD_READ_ROLES.includes(role)) {
+      await supabase.auth.signOut();
+      return { error: "Dashboard access is forbidden for this account" };
+    }
+  } catch (error) {
+    if (error instanceof DashboardAuthError && error.code === "inactive") {
+      await supabase.auth.signOut();
+      return { error: "Dashboard access is inactive for this account" };
+    }
+
+    if (error instanceof DashboardAuthError && error.code === "forbidden") {
+      await supabase.auth.signOut();
+      return { error: "Dashboard access is forbidden for this account" };
+    }
+
+    return { error: "Unable to verify dashboard access. Please try again." };
+  }
+
+  redirect(next);
 }
 
 export async function signOut() {
@@ -49,10 +62,4 @@ export async function signOut() {
     await supabase.auth.signOut();
   }
   redirect("/login");
-}
-
-function normalizeRedirectPath(value: string): Route {
-  if (!value.startsWith("/") || value.startsWith("//")) return "/";
-  if (value.startsWith("/login")) return "/";
-  return value as unknown as Route;
 }

@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
+type CookieToSet = { name: string; value: string; options: CookieOptions };
+
 export async function createSupabaseDashboardClient() {
   const cookieStore = await cookies();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,21 +14,16 @@ export async function createSupabaseDashboardClient() {
 
   return createServerClient(url, anonKey, {
     cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
+      getAll() {
+        return cookieStore.getAll();
       },
-      set(name: string, value: string, options: CookieOptions) {
+      setAll(cookiesToSet: CookieToSet[]) {
         try {
-          cookieStore.set({ name, value, ...options });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
         } catch {
-          // Server Components cannot set cookies; Server Actions and Route Handlers can.
-        }
-      },
-      remove(name: string, options: CookieOptions) {
-        try {
-          cookieStore.set({ name, value: "", ...options });
-        } catch {
-          // Server Components cannot set cookies; Server Actions and Route Handlers can.
+          // Server Components cannot set cookies. Middleware, Server Actions, and Route Handlers persist refreshes.
         }
       }
     }
