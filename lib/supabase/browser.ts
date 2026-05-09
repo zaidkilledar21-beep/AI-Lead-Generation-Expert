@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
 export function createSupabaseBrowserClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,5 +12,5 @@ export function createSupabaseBrowserClient() {
     throw new Error("Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
 
-  return createClient(url, anonKey);
+  return createBrowserClient(url, anonKey);
 }

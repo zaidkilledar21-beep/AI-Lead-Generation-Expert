@@ -58,6 +58,17 @@ describe("middleware route protection", () => {
     expect(location.searchParams.get("next")).toBe("/pipeline?stage=scored");
   });
 
+  it("keeps authenticated users on protected routes", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://supabase.example.test");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon");
+    supabaseMock.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+
+    const response = await middleware(nextRequest("/pipeline"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("redirects authenticated users away from login", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://supabase.example.test");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon");

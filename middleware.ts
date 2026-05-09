@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = new Set(["/login"]);
+const PUBLIC_ROUTES = new Set(["/login", "/auth/callback"]);
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 export async function middleware(request: NextRequest) {
@@ -30,6 +30,9 @@ export async function middleware(request: NextRequest) {
       setAll(cookiesToSet: CookieToSet[]) {
         cookiesToSet.forEach(({ name, value, options }) => {
           request.cookies.set(name, value);
+        });
+        response = NextResponse.next({ request: { headers: requestHeaders } });
+        cookiesToSet.forEach(({ name, value, options }) => {
           response.cookies.set(name, value, options);
         });
       }
@@ -39,6 +42,13 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user }
   } = await supabase.auth.getUser();
+  const redirectWithSessionCookies = (url: URL) => {
+    const redirectResponse = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
+  };
 
   const isPublicRoute = PUBLIC_ROUTES.has(request.nextUrl.pathname);
 
@@ -47,11 +57,11 @@ export async function middleware(request: NextRequest) {
     loginUrl.pathname = "/login";
     loginUrl.search = "";
     loginUrl.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
-    return NextResponse.redirect(loginUrl);
+    return redirectWithSessionCookies(loginUrl);
   }
 
   if (user && request.nextUrl.pathname === "/login") {
-    return NextResponse.redirect(new URL("/", request.url));
+    return redirectWithSessionCookies(new URL("/", request.url));
   }
 
   return response;
@@ -61,6 +71,7 @@ export const config = {
   matcher: [
     "/",
     "/login",
+    "/auth/callback",
     "/campaigns/:path*",
     "/pipeline/:path*",
     "/review/:path*",
