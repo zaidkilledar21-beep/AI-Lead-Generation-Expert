@@ -117,17 +117,17 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
     <div className="two-column review-grid gap-6">
       <section className="flex flex-col gap-6">
         <section className="grid gap-3 md:grid-cols-3">
-          {manualItems.length === 0 ? <div className="record-card text-sm text-white/45">No urgent manual reviews.</div> : null}
-          {draftItems.length === 0 ? <div className="record-card text-sm text-white/45">No draft approvals pending.</div> : null}
-          {replyItems.length === 0 ? <div className="record-card text-sm text-white/45">No reply reviews pending.</div> : null}
+          {manualItems.length === 0 ? <div className="record-card border border-white/10 bg-white/[0.04] p-4 text-sm font-medium text-white/60">No urgent manual reviews.</div> : null}
+          {draftItems.length === 0 ? <div className="record-card border border-white/10 bg-white/[0.04] p-4 text-sm font-medium text-white/60">No draft approvals pending.</div> : null}
+          {replyItems.length === 0 ? <div className="record-card border border-white/10 bg-white/[0.04] p-4 text-sm font-medium text-white/60">No reply reviews pending.</div> : null}
         </section>
         {groups.map((group) => {
           const groupItems = items.filter((item) => group.match(item.priority));
 
           return (
-            <section className="glass-panel p-4 rounded-2xl border border-white/5" key={group.title}>
+            <section className="glass-panel p-5 rounded-2xl border border-white/10" key={group.title}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-medium text-white">{group.title}</h2>
+                <h2 className="text-lg font-semibold text-white">{group.title}</h2>
                 <Badge tone={group.title === "Urgent" ? "danger" : "muted"}>{groupItems.length}</Badge>
               </div>
               <div className="flex flex-col gap-3">
@@ -136,7 +136,8 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                 ) : null}
                 <AnimatePresence mode="popLayout">
                   {groupItems.map((item) => (
-                    <motion.div
+                    <motion.button
+                      type="button"
                       layout
                       initial={{ opacity: 0, scale: 0.95, y: 10 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -146,24 +147,30 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
                       className={`
-                        p-4 rounded-xl cursor-pointer border transition-colors duration-200
-                        ${selectedId === item.id ? "border-[var(--brand)] bg-[var(--brand)]/10" : "border-white/5 bg-white/5"}
+                        w-full p-4 rounded-xl cursor-pointer border text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand
+                        ${selectedId === item.id ? "border-[var(--brand)] bg-[var(--brand)]/12 shadow-[0_12px_34px_rgba(0,0,0,0.20)]" : "border-white/10 bg-white/[0.045]"}
                       `}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <strong className="text-zinc-100">{item.businessName}</strong>
+                      <div className="flex justify-between items-start gap-3 mb-3">
+                        <strong className="text-sm font-semibold leading-tight text-white">{item.businessName}</strong>
                         <Badge tone={item.priority === "high" || item.priority === "urgent" ? "danger" : "warning"}>
                           {item.priority}
                         </Badge>
                       </div>
-                      <div className="mb-2">
+                      <div className="mb-3 flex flex-wrap gap-2">
                         <Badge tone="info">{sourceLabel(item.source)}</Badge>
+                        {item.band ? <Badge tone="muted">Band {item.band}</Badge> : null}
+                        {item.score != null ? <Badge tone="muted">Score {item.score}</Badge> : null}
                       </div>
-                      <p className="text-sm text-zinc-400 line-clamp-2 mb-2">{reviewReasonLabel(item)}</p>
-                      <div className="text-xs font-mono text-zinc-500">
+                      <p className="text-sm text-zinc-300 leading-relaxed line-clamp-2 mb-3">{reviewReasonLabel(item)}</p>
+                      <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
+                        <span>{item.campaignName ?? "No campaign"}</span>
+                        <span>{[item.city, item.country].filter(Boolean).join(", ") || "Unknown geo"}</span>
+                      </div>
+                      <div className="mt-2 text-xs font-mono text-zinc-500">
                         {item.createdAt ? new Date(item.createdAt).toLocaleString() : "--"}
                       </div>
-                    </motion.div>
+                    </motion.button>
                   ))}
                 </AnimatePresence>
               </div>
@@ -173,9 +180,10 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
       </section>
 
       <aside className="sticky top-6">
-        <div className="glass-panel rounded-2xl border border-white/5 h-full min-h-[400px]">
-          <div className="p-4 border-b border-white/5">
-            <h2 className="text-lg font-medium text-white">Review Workspace</h2>
+        <div className="glass-panel rounded-2xl border border-white/10 h-full min-h-[400px]">
+          <div className="p-5 border-b border-white/10 bg-white/[0.03]">
+            <h2 className="text-lg font-semibold text-white">Review Workspace</h2>
+            <p className="mt-1 text-xs text-white/45">Approve, reject, regenerate, or close the selected item.</p>
           </div>
           <div className="p-6">
             <AnimatePresence mode="wait">
@@ -187,9 +195,9 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                   exit={{ opacity: 0, x: -20 }}
                   className="flex flex-col gap-6"
                 >
-                  <div className="glass-card p-6 rounded-xl border border-white/10 shadow-2xl">
-                    <h3 className="text-2xl font-semibold text-white mb-4">{selected.businessName}</h3>
-                    <div className="flex gap-2 mb-4">
+                  <div className="glass-card p-6 rounded-xl border border-white/12 shadow-2xl">
+                    <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">{selected.businessName}</h3>
+                    <div className="flex flex-wrap gap-2 mb-4">
                       <Badge tone={selected.priority === "urgent" || selected.priority === "high" ? "danger" : "warning"}>
                         {selected.priority}
                       </Badge>
@@ -197,7 +205,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       {selected.leadStatus ? <Badge tone="muted">{selected.leadStatus}</Badge> : null}
                       {selected.band ? <Badge tone="muted">Band {selected.band}</Badge> : null}
                     </div>
-                    <div className="text-zinc-300 mb-4 bg-black/20 p-4 rounded-lg border border-white/5">
+                    <div className="text-sm text-zinc-200 leading-relaxed mb-4 bg-black/25 p-4 rounded-lg border border-white/10">
                       {reviewReasonLabel(selected)}
                     </div>
                     {selected.draftSubject ? (
@@ -216,16 +224,22 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       </ActionFeedbackForm>
                     ) : null}
                     {selected.replyExcerpt ? (
-                      <div className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5">
+                      <div className="text-sm text-zinc-300 mb-4 bg-white/[0.055] p-4 rounded-lg border border-white/10">
                         <strong className="block text-zinc-200 mb-2">{selected.intent ? formatReplyIntentLabel(selected.intent) : "Reply"}</strong>
                         <p className="line-clamp-4 whitespace-pre-wrap">{selected.replyExcerpt}</p>
                       </div>
                     ) : null}
-                    <div className="grid grid-cols-2 gap-3 text-sm text-zinc-500 mb-4">
-                      <div>Score: <span className="text-zinc-300">{selected.score ?? "--"}</span></div>
-                      <div>Campaign: <span className="text-zinc-300">{selected.campaignName ?? "--"}</span></div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
+                      <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                        <span className="block text-[10px] font-bold uppercase tracking-widest text-zinc-500">Score</span>
+                        <span className="mt-1 block font-semibold text-zinc-200">{selected.score ?? "--"}</span>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                        <span className="block text-[10px] font-bold uppercase tracking-widest text-zinc-500">Campaign</span>
+                        <span className="mt-1 block font-semibold text-zinc-200">{selected.campaignName ?? "--"}</span>
+                      </div>
                     </div>
-                    <div className="text-sm text-zinc-500 flex items-center gap-2">
+                    <div className="text-sm text-zinc-400 flex items-center gap-2">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                       {[selected.city, selected.country].filter(Boolean).join(", ") || "Unknown geo"}
                     </div>
