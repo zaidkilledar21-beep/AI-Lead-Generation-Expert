@@ -117,6 +117,13 @@ const boardColumns = [
   { key: "closed_lost", label: "Closed Lost" }
 ];
 
+const metricHrefByLabel: Record<string, string> = {
+  Pipeline: "/pipeline",
+  "Priority Leads": "/pipeline?band=A",
+  "Unhandled Replies": "/inbox?tab=unhandled",
+  "Open Reviews": "/review?status=pending"
+};
+
 export default async function PipelinePage({
   searchParams
 }: Readonly<{
@@ -171,7 +178,13 @@ export default async function PipelinePage({
 
       <section className="metric-grid" aria-label="Pipeline metrics">
         {metrics.map((metric) => (
-          <MetricCard key={metric.label} label={metric.label} value={metric.value} />
+          <MetricCard
+            key={metric.label}
+            label={metric.label}
+            value={metric.value}
+            href={metricHrefByLabel[metric.label]}
+            ariaLabel={`Open ${metric.label.toLowerCase()} view`}
+          />
         ))}
       </section>
 
@@ -200,9 +213,15 @@ export default async function PipelinePage({
               <span className="opacity-60 mr-1">D:</span> {summary.bandD}
             </Badge>
             <div className="w-px h-6 bg-white/10 mx-2" />
-            <Badge tone="warning" className="px-3 py-1.5 border-amber-500/40 animate-pulse">
-              {summary.awaitingReview} Action Required
-            </Badge>
+            <a
+              href="/pipeline?review=pending"
+              className="inline-flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+              aria-label={`Open ${summary.awaitingReview} leads requiring action`}
+            >
+              <Badge tone="warning" className="px-3 py-1.5 border-amber-500/45 bg-amber-500/15 text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.12)] hover:border-amber-300/70 hover:bg-amber-500/20 transition-colors cursor-pointer">
+                {summary.awaitingReview} Action Required
+              </Badge>
+            </a>
           </div>
         </div>
       </section>
@@ -407,26 +426,35 @@ export default async function PipelinePage({
             </div>
           </form>
 
-          {savedFilters.length > 0 && (
-            <div className="saved-filter-row">
-              <span className="text-[10px] font-bold text-muted uppercase tracking-widest w-full mb-1">Saved Views</span>
-              {savedFilters.map((filter) => (
-                <div className="saved-filter-chip group" key={filter.id}>
-                  <a href={`/pipeline?${new URLSearchParams(filter.filters as Record<string, string>).toString()}`} className="hover:text-brand transition-colors">
-                    {filter.name}
-                  </a>
-                  <form action={deleteFilterAction}>
-                    <input type="hidden" name="id" value={filter.id} />
-                    <button className="text-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" type="submit">
-                      <XCircle className="w-3 h-3" />
-                    </button>
-                  </form>
-                </div>
-              ))}
+          <div className="saved-view-panel">
+            <div className="saved-view-header">
+              <div>
+                <h3>Saved views</h3>
+                <p>Reuse focused pipeline filters without rebuilding this search.</p>
+              </div>
+              <span>{savedFilters.length} saved</span>
             </div>
-          )}
+            {savedFilters.length > 0 ? (
+              <div className="saved-filter-row">
+                {savedFilters.map((filter) => (
+                  <div className="saved-filter-chip group" key={filter.id}>
+                    <a href={`/pipeline?${new URLSearchParams(filter.filters as Record<string, string>).toString()}`} className="hover:text-white transition-colors">
+                      {filter.name}
+                    </a>
+                    <form action={deleteFilterAction}>
+                      <input type="hidden" name="id" value={filter.id} />
+                      <button className="text-white/45 hover:text-red-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100" type="submit" aria-label={`Delete saved view ${filter.name}`}>
+                        <XCircle className="w-3 h-3" />
+                      </button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="saved-view-empty">No saved views yet.</p>
+            )}
 
-          <form action={saveFilterAction} className="save-filter-form border-t border-white/5 pt-4">
+          <form action={saveFilterAction} className="save-filter-form">
             <input type="hidden" name="viewKey" value="pipeline" />
             <input
               type="hidden"
@@ -448,6 +476,7 @@ export default async function PipelinePage({
               </button>
             </div>
           </form>
+          </div>
         </div>
       </section>
 
