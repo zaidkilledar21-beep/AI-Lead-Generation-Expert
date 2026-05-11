@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.vercel/
+.git/
+.venv/
+.venv-graphify/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.log
+.env
+.env.*
+docs/obsidian-vault/.obsidian/
