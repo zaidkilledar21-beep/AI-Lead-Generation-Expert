@@ -7,36 +7,38 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Frontend-only visual polish pass for pipeline, inbox, and review queue surfaces.
+- None. Awaiting next planned implementation task.
 
 ## Current module / PR
-- Frontend Visual Polish Plan.
-- Supabase SSR auth/session hardening remains on the branch.
+- Production readiness / Codex workflow optimization.
 
 ## Last completed work
-- Improved metric card contrast and added clickable metric-card affordances.
-- Made the pipeline action-required summary link to pending-action leads.
-- Polished saved-view layout, reply cards, and review/lead cards.
-- Converted review queue item cards to keyboard-accessible buttons.
-- Preserved backend, schema, auth, n8n, and sending behavior.
+- Created and populated `docs/obsidian-vault/` with concise CRM knowledge graph notes.
+- Added relationships across modules, app routes, components, CRM queries/actions, Supabase tables, n8n workflows, risks, validation commands, and decisions.
+- Preserved Obsidian wikilinks and avoided secrets, raw code blocks, runtime code changes, schema changes, auth changes, n8n changes, and sending behavior changes.
+- Populated the Obsidian CRM knowledge vault under `docs/obsidian-vault/`.
 
 ## Files changed recently
-- `components/ui/metric-card.tsx`
-- `app/pipeline/page.tsx`
-- `app/globals.css`
-- `components/crm/inbox-view.tsx`
-- `components/crm/review-board.tsx`
+- `docs/obsidian-vault/00_Index/CRM Knowledge Graph Index.md`
+- `docs/obsidian-vault/01_Architecture/*`
+- `docs/obsidian-vault/02_Modules/*`
+- `docs/obsidian-vault/03_Data/*`
+- `docs/obsidian-vault/04_Workflows/*`
+- `docs/obsidian-vault/05_Code_Map/*`
+- `docs/obsidian-vault/06_Risks/*`
+- `docs/obsidian-vault/07_Plans/README.md`
+- `docs/obsidian-vault/08_Decisions/Architecture Decisions.md`
 - `status.md`
 
 ## Current blocker
-- Manual authenticated UI smoke could not fully inspect protected pages without a dashboard session; unauthenticated probes correctly redirected to `/login`.
+- None for the documentation pass.
 
 ## Validation status
-- lint: passed
-- typecheck: passed
-- tests: passed
-- build: passed
-- static analysis / Sonar: no repo-local Sonar script is configured; targeted scans found no new unsafe regex, polling loops, `dangerouslySetInnerHTML`, or client-side secrets from this polish pass
+- lint: not run for docs-only vault update
+- typecheck: not run for docs-only vault update
+- tests: not run for docs-only vault update
+- build: not run for docs-only vault update
+- static analysis / Sonar: not run for docs-only vault update; docs were checked for obvious secret-like values before final response
 
 ## Known risks
 - Avoid duplicated handlers/helpers.
@@ -47,4 +49,4 @@ AI Automation CRM / Lead Generation Dashboard
 - Preserve Supabase RLS and dashboard_users authorization.
 
 ## Next step
-- Perform authenticated browser smoke review after a dashboard session is available, then merge or report any visual regressions.
+- Use the Obsidian vault index, `status.md`, and the relevant `plans/*.md` file as starting context for the next Codex implementation task.
