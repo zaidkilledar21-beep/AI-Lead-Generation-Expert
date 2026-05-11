@@ -11,6 +11,8 @@ export const metadata = {
   description: "Internal AI automation outreach CRM"
 };
 
+const bodyClassName = "min-h-screen bg-[var(--bg)] text-white antialiased";
+
 export default async function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
@@ -20,7 +22,7 @@ export default async function RootLayout({
   if (isPublicRoute) {
     return (
       <html lang="en">
-        <body className="antialiased">{children}</body>
+        <body className={bodyClassName}>{children}</body>
       </html>
     );
   }
@@ -35,11 +37,14 @@ export default async function RootLayout({
 
     return (
       <html lang="en">
-        <body className="antialiased">
-          <main className="auth-page">
-            <section className="auth-panel">
-              <h1>Access denied</h1>
-              <p className="muted">Your dashboard account is inactive or does not have access to this CRM route.</p>
+        <body className={bodyClassName}>
+          <main className="crm-state-shell">
+            <section className="crm-state-panel auth-panel">
+              <div className="crm-state-badge">Access restricted</div>
+              <div className="crm-state-hero">
+                <h1>Access denied</h1>
+                <p>Your dashboard account is inactive or does not have access to this CRM route.</p>
+              </div>
             </section>
           </main>
         </body>
@@ -51,7 +56,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className="antialiased">
+      <body className={bodyClassName}>
         <CrmShell
           initialInboxUnhandled={navSnapshot.inboxUnhandled}
           initialReviewPending={navSnapshot.reviewPending}
