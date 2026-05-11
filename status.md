@@ -7,46 +7,42 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- None. Awaiting next planned implementation task.
+- Frontend visual polish pass for the CRM, focused on shared surfaces, shell chrome, dense screens, and loading/error states.
 
 ## Current module / PR
-- Production readiness / Codex workflow optimization.
+- Frontend open design final pass.
 
 ## Last completed work
-- Created and populated `docs/obsidian-vault/` with concise CRM knowledge graph notes.
-- Added relationships across modules, app routes, components, CRM queries/actions, Supabase tables, n8n workflows, risks, validation commands, and decisions.
-- Preserved Obsidian wikilinks and avoided secrets, raw code blocks, runtime code changes, schema changes, auth changes, n8n changes, and sending behavior changes.
-- Populated the Obsidian CRM knowledge vault under `docs/obsidian-vault/`.
+- Normalized the shared CRM visual layer in `app/globals.css` so panels, cards, buttons, badges, inputs, tables, empty states, score bars, and detail grids share one dark surface language.
+- Removed the redundant root font override from `app/layout.tsx` so the CSS-defined typography baseline is consistent.
+- Tightened the CRM shell, score visualizer, tooltip, and progress bar primitives to reduce visual drift.
+- Added global `app/loading.tsx` and `app/error.tsx` fallback shells for cleaner loading/error states.
 
 ## Files changed recently
-- `docs/obsidian-vault/00_Index/CRM Knowledge Graph Index.md`
-- `docs/obsidian-vault/01_Architecture/*`
-- `docs/obsidian-vault/02_Modules/*`
-- `docs/obsidian-vault/03_Data/*`
-- `docs/obsidian-vault/04_Workflows/*`
-- `docs/obsidian-vault/05_Code_Map/*`
-- `docs/obsidian-vault/06_Risks/*`
-- `docs/obsidian-vault/07_Plans/README.md`
-- `docs/obsidian-vault/08_Decisions/Architecture Decisions.md`
+- `app/globals.css`
+- `app/layout.tsx`
+- `app/loading.tsx`
+- `app/error.tsx`
+- `components/crm/crm-shell.tsx`
+- `components/crm/score-visualizer.tsx`
+- `components/ui/glass-tooltip.tsx`
+- `components/ui/score-bar.tsx`
 - `status.md`
 
 ## Current blocker
 - None for the documentation pass.
 
 ## Validation status
-- lint: not run for docs-only vault update
-- typecheck: not run for docs-only vault update
-- tests: not run for docs-only vault update
-- build: not run for docs-only vault update
-- static analysis / Sonar: not run for docs-only vault update; docs were checked for obvious secret-like values before final response
+- lint: passed (`npm run lint`)
+- typecheck: passed (`npm run typecheck`)
+- tests: failed in `vitest` config load with `spawn EPERM` from Vite externalize-deps
+- build: failed after compile with `spawn EPERM` from Next/Turbopack
+- static analysis / Sonar: not run; no additional analyzer available in this workspace
 
 ## Known risks
-- Avoid duplicated handlers/helpers.
-- Avoid unsafe regex from user input.
-- Avoid unbounded client-side filtering or scans.
-- Avoid exposing secrets client-side.
-- Avoid direct reply sending unless explicitly implemented and approved.
-- Preserve Supabase RLS and dashboard_users authorization.
+- Shared CSS changes ripple across most CRM routes, so any visual regressions will be broad rather than isolated.
+- `npm test` and `npm run build` currently fail on this Windows workspace with `spawn EPERM`, which appears environmental rather than code-related.
+- Dense route pages still carry some inline utility styling and may need a follow-up cleanup pass if a stricter visual unification is desired.
 
 ## Next step
-- Use the Obsidian vault index, `status.md`, and the relevant `plans/*.md` file as starting context for the next Codex implementation task.
+- Run a manual browser pass on the core CRM routes and, if needed, tighten the remaining route-level utility classes that still diverge from the shared surface system.

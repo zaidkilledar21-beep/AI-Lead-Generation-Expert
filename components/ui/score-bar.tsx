@@ -5,7 +5,14 @@ export function ScoreBar({ value, max = 100, band }: Readonly<{ value?: number |
   const percent = max > 0 ? (bounded / max) * 100 : 0;
 
   return (
-    <div className="score-bar" aria-label={`Score ${bounded} of ${max}`}>
+    <div
+      className="score-bar"
+      role="progressbar"
+      aria-label={`Score ${bounded} of ${max}`}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={bounded}
+    >
       <span className={`score-bar-fill ${bandTone(band)}`} style={{ width: `${percent}%` }} />
     </div>
   );
