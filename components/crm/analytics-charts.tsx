@@ -208,7 +208,7 @@ export const NichePerformanceBar = memo(function NichePerformanceBar({ data }: R
 
 function EmptyChart({ label }: Readonly<{ label: string }>) {
   return (
-    <div className="h-[300px] w-full mt-4 rounded-xl border border-dashed border-white/10 flex items-center justify-center text-sm text-white/35">
+    <div className="crm-state-card h-[300px] w-full mt-4 flex items-center justify-center px-6 text-center text-sm text-white/45">
       {label}
     </div>
   );

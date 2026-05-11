@@ -54,7 +54,7 @@ export default async function AnalyticsPage({
         }
       />
 
-      <section className="glass-panel p-4 text-sm text-white/60">
+      <section className="crm-state-card flex flex-wrap items-center gap-2 text-sm text-white/60">
         <span className="font-semibold text-white/85">Selected range:</span> {analytics.dateRange.label}
         <span className="mx-2 text-white/20">|</span>
         <span className="font-semibold text-white/85">Timezone assumption:</span> {analytics.dateRange.timezoneLabel}
@@ -68,7 +68,7 @@ export default async function AnalyticsPage({
 
       {comparison && (
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-          <div className="glass-panel p-6 flex flex-col gap-1 border-t border-t-purple-500/20">
+          <div className="crm-state-card p-6 flex flex-col gap-1">
             <div className="text-xs font-bold text-white/40 uppercase tracking-widest">Outreach Volume</div>
             <div className="flex items-baseline gap-3">
               <span className="text-3xl font-bold text-white/90">{comparison.emails.current.toLocaleString()}</span>
@@ -79,7 +79,7 @@ export default async function AnalyticsPage({
             <div className="text-[10px] text-white/20">vs {comparison.emails.prev.toLocaleString()} last period</div>
           </div>
           
-          <div className="glass-panel p-6 flex flex-col gap-1 border-t border-t-emerald-500/20">
+          <div className="crm-state-card p-6 flex flex-col gap-1">
             <div className="text-xs font-bold text-white/40 uppercase tracking-widest">Total Replies</div>
             <div className="flex items-baseline gap-3">
               <span className="text-3xl font-bold text-white/90">{comparison.replies.current.toLocaleString()}</span>
@@ -90,7 +90,7 @@ export default async function AnalyticsPage({
             <div className="text-[10px] text-white/20">vs {comparison.replies.prev.toLocaleString()} last period</div>
           </div>
           
-          <div className="glass-panel p-6 flex flex-col gap-1 border-t border-t-amber-500/20">
+          <div className="crm-state-card p-6 flex flex-col gap-1">
             <div className="text-xs font-bold text-white/40 uppercase tracking-widest">Positive Interest</div>
             <div className="flex items-baseline gap-3">
               <span className="text-3xl font-bold text-white/90">{comparison.positive.current.toLocaleString()}</span>

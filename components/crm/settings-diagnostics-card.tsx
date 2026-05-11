@@ -35,7 +35,7 @@ export function SettingsDiagnosticsCard({
       <div className="panel-body">
         <div className="grid gap-3">
           {diagnostics.messages.map((message) => (
-            <div key={message} className="rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-sm text-white/75">
+            <div key={message} className="crm-state-card text-sm text-white/75">
               {message}
             </div>
           ))}
