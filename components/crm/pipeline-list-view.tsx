@@ -109,38 +109,43 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
         }`}>
           {feedback.message}
         </div>
-      ) : null}
+        ) : null}
       <AnimatePresence>
         {count > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="absolute top-0 left-0 right-0 z-10 p-4 bg-brand/10 backdrop-blur-xl border-b border-brand/20 flex items-center justify-between"
+            className="absolute inset-x-0 top-0 z-10 crm-toolbar rounded-none border-x-0 border-t-0 border-b border-brand/20 bg-brand/8 px-4 py-3 shadow-none backdrop-blur-xl"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-white/90">{count} selected</span>
-              <button onClick={clearSelection} className="text-xs text-brand hover:text-brand-light transition-colors">Clear</button>
+              <button type="button" onClick={clearSelection} className="ui-button ui-button-ghost h-8 px-3 text-xs">
+                Clear
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <button 
+                type="button"
                 onClick={handleBulkApprove} 
                 disabled={isPending}
-                className="px-4 py-2 text-xs font-medium bg-brand hover:bg-brand-light text-white rounded-lg transition-colors shadow-lg shadow-brand/20 disabled:opacity-50"
+                className="ui-button ui-button-primary h-8 px-4 text-xs disabled:opacity-50"
               >
                 Approve Selected
               </button>
               <button 
+                type="button"
                 onClick={() => handleBulkStatus("paused")} 
                 disabled={isPending}
-                className="px-4 py-2 text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 rounded-lg transition-colors border border-white/10 disabled:opacity-50"
+                className="ui-button ui-button-secondary h-8 px-4 text-xs disabled:opacity-50"
               >
                 Pause Selected
               </button>
               <button 
+                type="button"
                 onClick={() => handleBulkStatus("archived")} 
                 disabled={isPending}
-                className="px-4 py-2 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/20 disabled:opacity-50"
+                className="ui-button ui-button-danger h-8 px-4 text-xs disabled:opacity-50"
               >
                 Archive Selected
               </button>
@@ -161,11 +166,12 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                 onValueChange={(value) => handleBulkAssign(value === "__unassigned__" ? "" : value)}
               />
               <button
+                type="button"
                 onClick={() => {
                   exportRows(selectedRows);
                   setFeedback({ tone: "success", message: `${pluralize(selectedRows.length, "lead")} exported.` });
                 }}
-                className="px-4 py-2 text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 rounded-lg transition-colors border border-white/10"
+                className="ui-button ui-button-secondary h-8 px-4 text-xs"
               >
                 Export CSV
               </button>
@@ -173,9 +179,15 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="p-6 border-b border-white/5">
-        <h2 className="text-lg font-medium text-white/90">Lead list</h2>
-        <span className="text-sm text-white/40">Row and bulk actions are live. Workflow-owned statuses remain protected.</span>
+      <div className="crm-toolbar rounded-none border-x-0 border-t-0 border-b border-white/5 bg-transparent px-6 py-5 shadow-none">
+        <div>
+          <h2 className="text-lg font-medium text-white/90">Lead list</h2>
+          <span className="text-sm text-white/40">Row and bulk actions stay live while workflow-owned statuses remain protected.</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge tone="muted" className="px-3 py-1.5">{filtered.length} rows</Badge>
+          <Badge tone="muted" className="px-3 py-1.5">{selectedCount} selected</Badge>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
@@ -264,7 +276,7 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                     ) : canApprove ? (
                       <form action={approveLeadAction}>
                         <input type="hidden" name="leadId" value={row.id} />
-                        <button className="px-3 py-1.5 text-xs font-medium bg-brand hover:bg-brand-light text-white rounded-lg transition-colors shadow-lg shadow-brand/20" type="submit">
+                        <button className="ui-button ui-button-primary h-8 px-3 text-xs" type="submit">
                           Approve
                         </button>
                       </form>
@@ -276,7 +288,7 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                         <form action={changeLeadStatusAction}>
                           <input type="hidden" name="leadId" value={row.id} />
                           <input type="hidden" name="status" value="paused" />
-                          <button className="px-3 py-1.5 text-xs font-medium bg-white/5 hover:bg-white/10 text-white/80 rounded-lg transition-colors border border-white/10" type="submit">
+                          <button className="ui-button ui-button-secondary h-8 px-3 text-xs" type="submit">
                             Pause
                           </button>
                         </form>
@@ -285,7 +297,7 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                         <form action={changeLeadStatusAction}>
                           <input type="hidden" name="leadId" value={row.id} />
                           <input type="hidden" name="status" value="archived" />
-                          <button className="px-3 py-1.5 text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/20" type="submit">
+                          <button className="ui-button ui-button-danger h-8 px-3 text-xs" type="submit">
                             Archive
                           </button>
                         </form>

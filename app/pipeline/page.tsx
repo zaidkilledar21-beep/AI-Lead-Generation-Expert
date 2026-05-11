@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/crm/page-header";
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { CrmDateField } from "@/components/ui/crm-date-field";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -137,6 +138,9 @@ export default async function PipelinePage({
   const countries = [...new Set(rows.map((row) => row.country).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const niches = [...new Set(rows.map((row) => row.niche).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const view = resolvedParams.view === "board" ? "board" : "list";
+  const hasActiveFilters = Object.entries(resolvedParams).some(
+    ([key, value]) => key !== "view" && typeof value === "string" && value.length > 0
+  );
   const campaignOptions = campaigns.map((row) => ({
     value: row.campaignId ?? "",
     label: row.campaignName ?? "Unnamed campaign",
@@ -233,9 +237,9 @@ export default async function PipelinePage({
             <h2>Filters</h2>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-xs font-medium px-2 py-1 bg-white/5 border border-white/10 rounded text-muted">{filtered.length} leads found</span>
-            {Object.keys(resolvedParams).length > 0 && (
-              <LinkButton href="/pipeline" variant="ghost" className="text-xs h-7 px-2">
+            <Badge tone="muted" className="px-3 py-1.5">{filtered.length} leads found</Badge>
+            {hasActiveFilters && (
+              <LinkButton href="/pipeline" variant="ghost" className="h-8 px-3 text-xs border border-white/10 hover:border-brand/35">
                 <XCircle className="w-3 h-3" />
                 Clear
               </LinkButton>
@@ -432,18 +436,25 @@ export default async function PipelinePage({
                 <h3>Saved views</h3>
                 <p>Reuse focused pipeline filters without rebuilding this search.</p>
               </div>
-              <span>{savedFilters.length} saved</span>
+              <Badge tone="muted" className="px-3 py-1.5">{savedFilters.length} saved</Badge>
             </div>
             {savedFilters.length > 0 ? (
               <div className="saved-filter-row">
                 {savedFilters.map((filter) => (
                   <div className="saved-filter-chip group" key={filter.id}>
-                    <a href={`/pipeline?${new URLSearchParams(filter.filters as Record<string, string>).toString()}`} className="hover:text-white transition-colors">
+                    <a
+                      href={`/pipeline?${new URLSearchParams(filter.filters as Record<string, string>).toString()}`}
+                      className="min-w-0 truncate text-white/85 hover:text-white transition-colors"
+                    >
                       {filter.name}
                     </a>
                     <form action={deleteFilterAction}>
                       <input type="hidden" name="id" value={filter.id} />
-                      <button className="text-white/45 hover:text-red-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100" type="submit" aria-label={`Delete saved view ${filter.name}`}>
+                      <button
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/45 transition-colors hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200"
+                        type="submit"
+                        aria-label={`Delete saved view ${filter.name}`}
+                      >
                         <XCircle className="w-3 h-3" />
                       </button>
                     </form>
@@ -480,8 +491,33 @@ export default async function PipelinePage({
         </div>
       </section>
 
-
-      {view === "board" ? (
+      {filtered.length === 0 ? (
+        <section className="panel">
+          <div className="p-6 md:p-8">
+            <EmptyState
+              title={rows.length === 0 ? "No pipeline leads yet" : "No leads match these filters"}
+              description={
+                rows.length === 0
+                  ? "Add a campaign or import leads to populate the pipeline workspace."
+                  : hasActiveFilters
+                    ? "Clear or relax the current filters to bring matching leads back into view."
+                    : "The current pipeline view has no records to show."
+              }
+              action={
+                rows.length === 0 ? (
+                  <LinkButton href="/campaigns/new" variant="secondary" className="h-10 px-4">
+                    Create campaign
+                  </LinkButton>
+                ) : (
+                  <LinkButton href="/pipeline" variant="secondary" className="h-10 px-4">
+                    Clear filters
+                  </LinkButton>
+                )
+              }
+            />
+          </div>
+        </section>
+      ) : view === "board" ? (
         <KanbanBoard columns={boardColumns} leads={filtered} />
       ) : (
         <PipelineListView filtered={filtered} profiles={settings.profiles} />
