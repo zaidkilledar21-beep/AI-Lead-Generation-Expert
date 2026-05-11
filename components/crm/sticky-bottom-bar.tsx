@@ -19,10 +19,10 @@ export function StickyBottomBar({ children }: { children: React.ReactNode }) {
         initial={{ y: "100%", opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: "100%", opacity: 0 }}
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="fixed bottom-6 left-1/2 z-50 w-full max-w-5xl -translate-x-1/2 px-4"
+        transition={{ type: "spring", damping: 30, stiffness: 250 }}
+        className="fixed bottom-8 left-1/2 z-50 w-full max-w-4xl -translate-x-1/2 px-6"
       >
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/12 bg-black/72 p-4 shadow-2xl shadow-brand/10 backdrop-blur-2xl">
+        <div className="flex items-center justify-between gap-6 rounded-[22px] border border-white/15 bg-black/60 p-3 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6),0_16px_32px_-8px_rgba(130,81,238,0.15)] backdrop-blur-3xl">
           {children}
         </div>
       </motion.div>
