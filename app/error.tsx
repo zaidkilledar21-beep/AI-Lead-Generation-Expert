@@ -3,11 +3,13 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
-export default function Error({
+type RouteError = Error & { digest?: string };
+
+export default function AppErrorBoundary({
   error,
   reset
 }: Readonly<{
-  error: Error & { digest?: string };
+  error: RouteError;
   reset: () => void;
 }>) {
   useEffect(() => {
@@ -23,16 +25,26 @@ export default function Error({
               !
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Something went wrong</h1>
-              <p className="mt-1 text-sm text-white/55">The CRM hit an unexpected error. Retry to reload the current surface.</p>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                Something went wrong
+              </h1>
+              <p className="mt-1 text-sm text-white/55">
+                The CRM hit an unexpected error. Retry to reload the current surface.
+              </p>
             </div>
           </div>
+
           <div className="mt-6 rounded-2xl border border-white/8 bg-white/[0.03] p-4 text-sm text-white/70">
             {error.message || "An unexpected error prevented this view from rendering."}
           </div>
+
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button type="button" onClick={reset}>Try again</Button>
-            <a className="ui-button ui-button-secondary" href="/pipeline">Go to pipeline</a>
+            <Button type="button" onClick={reset}>
+              Try again
+            </Button>
+            <a className="ui-button ui-button-secondary" href="/pipeline">
+              Go to pipeline
+            </a>
           </div>
         </section>
       </div>
