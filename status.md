@@ -13,8 +13,10 @@ AI Automation CRM / Lead Generation Dashboard
 - Frontend UI upgrade implementation, with the pipeline redesign as the active PR.
 
 ## Last completed work
+- Materially overhauled the CRM Lead Detail UI/UX, introducing a high-impact "Lead Hero" summary, re-grouping dense information into clearer "Identity & Profile" and "Scoring & Hypothesis" sections, and refining the timeline into a premium activity feed.
+- Refined the Sticky Action Bar and Draft Review Editor for better hierarchy, clarity, and enterprise-grade polish (inspired by Notion, Linear, and Stripe).
+- Normalized typography and spacing across the Lead Detail route to improve scanning speed and operational confidence.
 - Applied a visible pipeline redesign that introduced a Linear-inspired hero/control surface, segmented list/board switcher, stronger filter hierarchy, premium saved-view UX, and cleaner board/list scanning surfaces.
-- Applied a focused lead-detail visual polish pass that reworked the page into clearer sections, reduced density in the profile/score/timeline/replies areas, and tightened the sticky action bar and draft review surfaces.
 - Normalized the shared CRM visual layer in `app/globals.css` so panels, cards, buttons, badges, inputs, tables, empty states, score bars, and detail grids share one dark surface language.
 - Removed the redundant root font override from `app/layout.tsx` so the CSS-defined typography baseline is consistent.
 - Tightened the CRM shell, score visualizer, tooltip, and progress bar primitives to reduce visual drift.
