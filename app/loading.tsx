@@ -1,23 +1,26 @@
 export default function Loading() {
   return (
-    <main className="min-h-screen bg-[var(--bg)] px-6 py-10 text-white">
-      <div className="mx-auto flex min-h-[70vh] w-full max-w-3xl items-center justify-center">
-        <section className="crm-surface w-full max-w-xl p-8">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-[var(--accent)]/20 border border-[var(--accent)]/20" />
-            <div className="space-y-1">
-              <div className="h-4 w-32 rounded-full bg-white/12 animate-pulse" />
-              <div className="h-3 w-52 rounded-full bg-white/8 animate-pulse" />
-            </div>
-          </div>
-          <div className="mt-8 grid gap-3">
-            <div className="h-16 rounded-2xl border border-white/8 bg-white/[0.03] animate-pulse" />
-            <div className="h-16 rounded-2xl border border-white/8 bg-white/[0.03] animate-pulse" />
-            <div className="h-16 rounded-2xl border border-white/8 bg-white/[0.03] animate-pulse" />
-          </div>
-          <p className="mt-6 text-sm text-white/45">Loading CRM surfaces and operational data.</p>
-        </section>
-      </div>
+    <main className="crm-state-shell">
+      <section className="crm-state-panel">
+        <div className="crm-state-badge">Loading workspace</div>
+        <div className="crm-state-hero">
+          <h1>Preparing the CRM control center</h1>
+          <p>Loading live routes, navigation state, and operational data so the workspace opens with the correct context.</p>
+        </div>
+
+        <div className="crm-state-skeleton" aria-hidden="true">
+          <div className="crm-state-row" />
+          <div className="crm-state-row" />
+          <div className="crm-state-row" />
+        </div>
+
+        <div className="crm-state-actions">
+          <div className="ui-button ui-button-secondary">Syncing navigation</div>
+          <div className="ui-button ui-button-ghost">Restoring session</div>
+        </div>
+
+        <p className="crm-state-meta">Operational surfaces load in the background.</p>
+      </section>
     </main>
   );
 }
