@@ -100,9 +100,9 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
   const selectedRows = filtered.filter((row) => selectedArray.includes(row.id));
 
   return (
-    <section className="glass-panel overflow-hidden relative">
+    <section className="pipeline-table-shell pipeline-panel crm-surface relative">
       {feedback ? (
-        <div className={`m-4 rounded-xl border px-4 py-3 text-sm ${
+        <div className={`m-4 rounded-2xl border px-4 py-3 text-sm ${
           feedback.tone === "success"
             ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200"
             : "border-red-500/25 bg-red-500/10 text-red-200"
@@ -116,15 +116,16 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="absolute inset-x-0 top-0 z-10 crm-toolbar rounded-none border-x-0 border-t-0 border-b border-brand/20 bg-brand/8 px-4 py-3 shadow-none backdrop-blur-xl"
+            className="pipeline-selection-rail z-10 px-4 py-3"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-white/90">{count} selected</span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm font-semibold text-white/90">{count} selected</span>
+              <Badge tone="muted" className="px-3 py-1.5">{selectedRows.length} visible</Badge>
               <button type="button" onClick={clearSelection} className="ui-button ui-button-ghost h-8 px-3 text-xs">
-                Clear
+                Clear selection
               </button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button 
                 type="button"
                 onClick={handleBulkApprove} 
@@ -179,17 +180,17 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="crm-toolbar rounded-none border-x-0 border-t-0 border-b border-white/5 bg-transparent px-6 py-5 shadow-none">
+      <div className="pipeline-table-toolbar">
         <div>
-          <h2 className="text-lg font-medium text-white/90">Lead list</h2>
-          <span className="text-sm text-white/40">Row and bulk actions stay live while workflow-owned statuses remain protected.</span>
+          <h2>Lead list</h2>
+          <p>Rows stay dense enough to scan, while bulk actions remain one click away.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="pipeline-table-toolbar-actions">
           <Badge tone="muted" className="px-3 py-1.5">{filtered.length} rows</Badge>
           <Badge tone="muted" className="px-3 py-1.5">{selectedCount} selected</Badge>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="table-wrap">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-white/5 text-sm text-white/40">
@@ -214,8 +215,10 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="p-10 text-center text-white/40">
-                  No leads match the current filters.
+                <td colSpan={9} className="p-8">
+                  <div className="pipeline-board-empty">
+                    No leads match the current filters. Clear a few filters or switch the workflow view to bring leads back into scope.
+                  </div>
                 </td>
               </tr>
             ) : null}
@@ -228,7 +231,7 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
               return (
               <motion.tr
                 key={row.id}
-                className={`border-b hover:bg-white/[0.02] transition-colors group ${isSelected(row.id) ? "bg-brand/5 border-brand/20" : "border-white/5"}`}
+                className={`border-b transition-colors group ${isSelected(row.id) ? "is-selected border-brand/20" : "border-white/5 hover:bg-white/[0.02]"}`}
                 initial={{ opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
@@ -243,10 +246,12 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                   />
                 </td>
                 <td className="p-4">
-                  <a href={`/pipeline/${row.id}`} className="block font-medium text-white/90 group-hover:text-brand transition-colors">
-                    {row.businessName}
-                  </a>
-                  <div className="text-sm text-white/40 mt-1">
+                  <div className="pipeline-row-primary">
+                    <a href={`/pipeline/${row.id}`} className="transition-colors group-hover:text-brand">
+                      {row.businessName}
+                    </a>
+                  </div>
+                  <div className="pipeline-row-meta mt-1">
                     {[row.city, row.country].filter(Boolean).join(", ") || "Unknown geo"}
                   </div>
                 </td>
@@ -258,19 +263,19 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                   <ScoreBar value={row.score ?? 0} band={row.effectiveBand ?? undefined} />
                 </td>
                 <td className="p-4"><Badge tone="info">{row.status}</Badge></td>
-                <td className="p-4 text-sm text-white/60">{row.campaignName ?? <span className="text-white/30">Unassigned</span>}</td>
+                <td className="p-4 text-sm text-white/70">{row.campaignName ?? <span className="text-white/30">Unassigned</span>}</td>
                 <td className="p-4">
                   <div className="flex flex-col items-start gap-1">
                     {row.latestReplyIntent ? <Badge tone="warning">{row.latestReplyIntent}</Badge> : <span className="text-sm text-white/30">No reply</span>}
                     {row.hasUnhandledReply && <div className="text-xs text-white/50">Unhandled</div>}
                   </div>
                 </td>
-                <td className="p-4 text-sm text-white/60">{row.assignedTo ?? <span className="text-white/30">Unassigned</span>}</td>
+                <td className="p-4 text-sm text-white/70">{row.assignedTo ?? <span className="text-white/30">Unassigned</span>}</td>
                 <td className="p-4">
                   {row.hasPendingReview ? <Badge tone="danger">Pending</Badge> : <Badge tone="muted">Reviewed</Badge>}
                 </td>
                 <td className="p-4">
-                  <div className="flex flex-col gap-2">
+                  <div className="pipeline-row-actions">
                     {row.approvedForOutreach ? (
                       <Badge tone="success">Approved</Badge>
                     ) : canApprove ? (
@@ -297,11 +302,11 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                         <form action={changeLeadStatusAction}>
                           <input type="hidden" name="leadId" value={row.id} />
                           <input type="hidden" name="status" value="archived" />
-                          <button className="ui-button ui-button-danger h-8 px-3 text-xs" type="submit">
-                            Archive
-                          </button>
-                        </form>
-                      ) : null}
+                        <button className="ui-button ui-button-danger h-8 px-3 text-xs" type="submit">
+                          Archive
+                        </button>
+                      </form>
+                    ) : null}
                     </div>
                   </div>
                 </td>
