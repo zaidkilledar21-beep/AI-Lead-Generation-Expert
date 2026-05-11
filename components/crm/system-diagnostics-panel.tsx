@@ -29,7 +29,7 @@ export function SystemDiagnosticsPanel({ diagnostics }: Readonly<{ diagnostics: 
       </div>
       <div className="panel-body grid gap-3 md:grid-cols-2">
         {diagnosticRows.map((row) => (
-          <div key={row.key} className="record-card">
+          <div key={row.key} className="crm-state-card">
             <div className="metric-label">{row.label}</div>
             <div className="text-sm text-white/80">{diagnostics[row.key]}</div>
           </div>

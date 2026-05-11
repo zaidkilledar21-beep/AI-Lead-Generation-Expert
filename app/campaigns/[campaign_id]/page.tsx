@@ -52,7 +52,7 @@ export default async function CampaignDetailPage({
         </div>
         <div className="panel-body grid gap-3">
           {[...detail.readiness.blockers, ...detail.readiness.warnings, ...detail.readiness.info].map((item) => (
-            <div key={`${item.severity}-${item.label}-${item.message}`} className="rounded-xl border border-white/8 bg-black/20 px-4 py-3 text-sm">
+            <div key={`${item.severity}-${item.label}-${item.message}`} className="crm-state-card text-sm">
               <div className="flex items-center justify-between gap-3">
                 <strong>{item.label}</strong>
                 <Badge tone={item.severity === "blocker" ? "danger" : item.severity === "warning" ? "warning" : "info"}>

@@ -121,7 +121,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
           <div className="glass-panel group">
             <div className="p-6 border-b border-white/5"><h2 className="text-lg font-medium text-white/90">ICP score</h2></div>
             <div className="p-6">
-              <div className="flex flex-col md:flex-row items-center gap-8 bg-black/20 rounded-xl p-6 border border-white/5">
+              <div className="crm-state-card flex flex-col md:flex-row items-center gap-8">
                 <div className="shrink-0">
                   <ScoreVisualizer score={lead.score ?? 0} band={lead.effectiveBand} />
                 </div>
@@ -194,7 +194,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                       <Icon className="w-4 h-4 text-brand" />
                     </div>
                     <strong className="block text-white/90 font-medium mb-1">{item.label}</strong>
-                    <span className="block text-sm text-white/50 bg-white/5 p-3 rounded-lg border border-white/5 mt-2">{item.detail}</span>
+                    <span className="block text-sm text-white/55 record-card mt-2">{item.detail}</span>
                     {item.at ? <time className="block text-xs font-mono text-brand/60 mt-2">{new Date(item.at).toLocaleString()}</time> : null}
                   </div>
                 );
@@ -225,9 +225,9 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium text-white/60">Reason</span>
-                  <input name="reason" placeholder="Why override this band?" className="bg-black/20 border border-white/10 rounded-lg p-2 text-white/90 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all" />
+                  <input name="reason" placeholder="Why override this band?" className="field" />
                 </label>
-                <button type="submit" className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/80 transition-all font-medium text-sm">Override band</button>
+                <button type="submit" className="ui-button ui-button-secondary">Override band</button>
               </LeadActionForm>
               <hr />
               <div className="button-row">
@@ -269,7 +269,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                   </div>
                   <p>{reply.summary ?? reply.reply_body ?? "Reply received"}</p>
                   <div className="muted">{reply.suggested_next_action ?? "No suggested next action."}</div>
-                  <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                  <div className="mt-3 record-card">
                     <div className="metric-label mb-1">AI reply draft</div>
                     <p className="whitespace-pre-wrap text-sm text-white/75">{reply.ai_draft_reply ?? "No AI reply draft was generated for this reply."}</p>
                   </div>
@@ -317,7 +317,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
       <StickyBottomBar>
         <div className="flex items-center gap-3 w-full">
           {lead.approvedForOutreach ? (
-            <div className="flex-1 text-center text-sm font-medium text-green-400 bg-green-400/10 py-2 rounded-xl border border-green-400/20">
+            <div className="crm-state-card flex-1 text-center text-sm font-medium text-green-400 py-2 border-green-400/20">
               <CheckCircle className="w-4 h-4 inline-block mr-2" />
               Approved
             </div>

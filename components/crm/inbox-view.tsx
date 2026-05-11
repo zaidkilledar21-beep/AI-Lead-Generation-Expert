@@ -142,7 +142,7 @@ export function InboxView({
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05, type: "spring", stiffness: 300, damping: 30 }}
-                  className={`m-3 mb-0 rounded-xl border p-4 transition-all relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                className={`m-3 mb-0 crm-state-card p-4 transition-all relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                     isSelected
                       ? "border-brand/45 bg-brand/10 shadow-[0_12px_34px_rgba(0,0,0,0.22)]"
                       : "border-white/8 bg-white/[0.035] hover:border-white/16 hover:bg-white/[0.06]"
@@ -303,7 +303,7 @@ export function InboxView({
 
               {/* AI Insights Panel */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-5 bg-brand/10 border border-brand/25 rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                <div className="crm-state-card p-5 border-brand/25 bg-brand/10">
                   <div className="flex items-center gap-2 mb-2">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-brand">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -315,7 +315,7 @@ export function InboxView({
                   </div>
                 </div>
                 
-                <div className="p-5 bg-blue-500/10 border border-blue-500/25 rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                <div className="crm-state-card p-5 border-blue-500/25 bg-blue-500/10">
                   <div className="flex items-center gap-2 mb-2">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-400">
                       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
@@ -332,7 +332,7 @@ export function InboxView({
               </div>
 
               {/* AI Draft Section */}
-              <div className="bg-brand/5 border border-brand/25 rounded-2xl p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <div className="crm-state-card p-6 border-brand/25 bg-brand/5">
                 <div className="flex items-center justify-between mb-4 pb-4 border-b border-brand/10">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded bg-brand/20 flex items-center justify-center">
@@ -357,7 +357,7 @@ export function InboxView({
               </div>
 
               {/* Handled Form */}
-              <ActionFeedbackForm action={markReplyHandledAction} successMessage="Reply marked handled." className="bg-black/40 border border-white/10 p-6 rounded-2xl mt-auto">
+              <ActionFeedbackForm action={markReplyHandledAction} successMessage="Reply marked handled." className="crm-state-card p-6 mt-auto">
                 <input type="hidden" name="replyEventId" value={selected.id} />
                 <input type="hidden" name="leadId" value={selected.leadId} />
                 <div className="flex flex-col gap-4">
@@ -365,7 +365,7 @@ export function InboxView({
                     name="notes" 
                     rows={3} 
                     placeholder="Add a closing note for this interaction..." 
-                    className="bg-white/5 border border-white/10 rounded-xl p-3 text-white/90 placeholder:text-white/20 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all resize-none text-sm"
+                    className="field resize-none text-sm"
                   />
                   <div className="flex justify-between items-center">
                     <p className="text-[10px] text-white/30 italic">Marking as handled will remove this from the active inbox.</p>

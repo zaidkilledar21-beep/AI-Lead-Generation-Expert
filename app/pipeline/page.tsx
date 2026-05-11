@@ -189,7 +189,7 @@ export default async function PipelinePage({
       </section>
 
       <section className="panel mb-8">
-        <div className="panel-header bg-white/[0.02]">
+        <div className="panel-header">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
               <Hash className="w-4 h-4 text-brand" />
@@ -243,7 +243,7 @@ export default async function PipelinePage({
           </div>
         </div>
         <div className="panel-body">
-          <form className="filter-grid bg-white/[0.02] p-5 rounded-xl border border-white/5 shadow-inner">
+          <form className="filter-grid">
             <div className="field-group lg:col-span-2">
               <label htmlFor="filter-q" className="field-label flex items-center gap-2">
                 <Search className="w-3 h-3" /> Keyword Search
@@ -251,7 +251,7 @@ export default async function PipelinePage({
               <div className="relative group">
                 <input 
                   id="filter-q" 
-                  className="field w-full bg-black/40 border-white/10 focus:border-brand/50 focus:ring-1 focus:ring-brand/20 rounded-lg px-4 py-2.5 text-sm transition-all" 
+                  className="field w-full" 
                   name="q" 
                   placeholder="Entity, email, or locale..." 
                   defaultValue={resolvedParams.q ?? ""} 

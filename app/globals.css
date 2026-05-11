@@ -90,8 +90,8 @@ body {
     border: 1px solid var(--border);
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.035);
-    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.24);
-    backdrop-filter: blur(18px);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(16px);
   }
 
   .glass {
@@ -667,11 +667,14 @@ body {
 
   .empty-state {
     color: var(--muted);
-    padding: 40px 24px;
+    padding: 36px 22px;
     text-align: center;
     display: grid;
     gap: 10px;
     place-items: center;
+    background: rgba(255, 255, 255, 0.02);
+    border-style: dashed;
+    text-wrap: pretty;
   }
 
   .empty-state h3 {
@@ -717,14 +720,14 @@ body {
   .filter-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 18px;
-    align-items: flex-end;
+    gap: 16px;
+    align-items: start;
   }
 
   .field-group {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
 
   .field-label {
@@ -745,6 +748,8 @@ body {
     gap: 14px;
     margin-top: 22px;
     padding: 16px;
+    background: rgba(255, 255, 255, 0.025);
+    border-style: dashed;
   }
 
   .saved-view-header {
@@ -868,13 +873,21 @@ body {
     display: grid;
     gap: 10px;
     padding: 16px;
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .crm-state-card {
     padding: 16px;
+    background: rgba(255, 255, 255, 0.028);
+    box-shadow: none;
   }
 
   .crm-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+    flex-wrap: wrap;
     padding: 14px 16px;
   }
 

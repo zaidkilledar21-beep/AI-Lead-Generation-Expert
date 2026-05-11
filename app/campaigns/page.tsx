@@ -45,8 +45,8 @@ export default async function CampaignsPage({
           <span className="muted">{filtered.length} of {campaigns.length} campaigns</span>
         </div>
         <form className="panel-body form-grid">
-          <label>
-            <span>Status</span>
+          <label className="field-group">
+            <span className="field-label">Status</span>
             <CrmSelect
               name="status"
               defaultValue={status}
@@ -61,8 +61,8 @@ export default async function CampaignsPage({
               ]}
             />
           </label>
-          <label>
-            <span>Source</span>
+          <label className="field-group">
+            <span className="field-label">Source</span>
             <CrmSelect
               name="source"
               defaultValue={source}
@@ -73,9 +73,9 @@ export default async function CampaignsPage({
               ]}
             />
           </label>
-          <label>
-            <span>Search</span>
-            <input name="q" defaultValue={searchParams?.q ?? ""} placeholder="Name, niche, country, city" />
+          <label className="field-group">
+            <span className="field-label">Search</span>
+            <input className="field" name="q" defaultValue={searchParams?.q ?? ""} placeholder="Name, niche, country, city" />
           </label>
           <div className="button-row self-end">
             <button className="ui-button ui-button-secondary" type="submit">Apply</button>

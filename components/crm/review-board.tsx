@@ -117,15 +117,15 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
     <div className="two-column review-grid gap-6">
       <section className="flex flex-col gap-6">
         <section className="grid gap-3 md:grid-cols-3">
-          {manualItems.length === 0 ? <div className="record-card border border-white/10 bg-white/[0.04] p-4 text-sm font-medium text-white/60">No urgent manual reviews.</div> : null}
-          {draftItems.length === 0 ? <div className="record-card border border-white/10 bg-white/[0.04] p-4 text-sm font-medium text-white/60">No draft approvals pending.</div> : null}
-          {replyItems.length === 0 ? <div className="record-card border border-white/10 bg-white/[0.04] p-4 text-sm font-medium text-white/60">No reply reviews pending.</div> : null}
+          {manualItems.length === 0 ? <div className="crm-state-card p-4 text-sm font-medium text-white/60">No urgent manual reviews.</div> : null}
+          {draftItems.length === 0 ? <div className="crm-state-card p-4 text-sm font-medium text-white/60">No draft approvals pending.</div> : null}
+          {replyItems.length === 0 ? <div className="crm-state-card p-4 text-sm font-medium text-white/60">No reply reviews pending.</div> : null}
         </section>
         {groups.map((group) => {
           const groupItems = items.filter((item) => group.match(item.priority));
 
           return (
-            <section className="glass-panel p-5 rounded-2xl border border-white/10" key={group.title}>
+            <section className="panel p-5" key={group.title}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-white">{group.title}</h2>
                 <Badge tone={group.title === "Urgent" ? "danger" : "muted"}>{groupItems.length}</Badge>
@@ -180,7 +180,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
       </section>
 
       <aside className="sticky top-6">
-        <div className="glass-panel rounded-2xl border border-white/10 h-full min-h-[400px]">
+        <div className="panel h-full min-h-[400px]">
           <div className="p-5 border-b border-white/10 bg-white/[0.03]">
             <h2 className="text-lg font-semibold text-white">Review Workspace</h2>
             <p className="mt-1 text-xs text-white/45">Approve, reject, regenerate, or close the selected item.</p>
@@ -195,7 +195,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                   exit={{ opacity: 0, x: -20 }}
                   className="flex flex-col gap-6"
                 >
-                  <div className="glass-card p-6 rounded-xl border border-white/12 shadow-2xl">
+                  <div className="crm-state-card p-6">
                     <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">{selected.businessName}</h3>
                     <div className="flex flex-wrap gap-2 mb-4">
                       <Badge tone={selected.priority === "urgent" || selected.priority === "high" ? "danger" : "warning"}>
@@ -205,11 +205,11 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       {selected.leadStatus ? <Badge tone="muted">{selected.leadStatus}</Badge> : null}
                       {selected.band ? <Badge tone="muted">Band {selected.band}</Badge> : null}
                     </div>
-                    <div className="text-sm text-zinc-200 leading-relaxed mb-4 bg-black/25 p-4 rounded-lg border border-white/10">
+                    <div className="record-card text-sm text-zinc-200 leading-relaxed mb-4">
                       {reviewReasonLabel(selected)}
                     </div>
                     {selected.draftSubject ? (
-                      <ActionFeedbackForm action={updateEmailDraftAction} successMessage="Draft edits saved." className="text-sm text-zinc-400 mb-4 bg-white/5 p-4 rounded-lg border border-white/5 space-y-3">
+                      <ActionFeedbackForm action={updateEmailDraftAction} successMessage="Draft edits saved." className="crm-state-card text-sm text-zinc-400 mb-4 space-y-3">
                         <input type="hidden" name="draftId" value={selected.sourceId} />
                         <input type="hidden" name="leadId" value={selected.leadId} />
                         <label className="flex flex-col gap-1">
@@ -224,17 +224,17 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                       </ActionFeedbackForm>
                     ) : null}
                     {selected.replyExcerpt ? (
-                      <div className="text-sm text-zinc-300 mb-4 bg-white/[0.055] p-4 rounded-lg border border-white/10">
+                      <div className="record-card text-sm text-zinc-300 mb-4">
                         <strong className="block text-zinc-200 mb-2">{selected.intent ? formatReplyIntentLabel(selected.intent) : "Reply"}</strong>
                         <p className="line-clamp-4 whitespace-pre-wrap">{selected.replyExcerpt}</p>
                       </div>
                     ) : null}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
-                      <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                      <div className="crm-state-card p-3">
                         <span className="block text-[10px] font-bold uppercase tracking-widest text-zinc-500">Score</span>
                         <span className="mt-1 block font-semibold text-zinc-200">{selected.score ?? "--"}</span>
                       </div>
-                      <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                      <div className="crm-state-card p-3">
                         <span className="block text-[10px] font-bold uppercase tracking-widest text-zinc-500">Campaign</span>
                         <span className="mt-1 block font-semibold text-zinc-200">{selected.campaignName ?? "--"}</span>
                       </div>
