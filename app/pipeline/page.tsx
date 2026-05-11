@@ -15,7 +15,6 @@ import {
   Plus, 
   LayoutGrid, 
   List, 
-  Filter, 
   Globe, 
   Tag, 
   Briefcase, 
@@ -146,6 +145,7 @@ export default async function PipelinePage({
     label: row.campaignName ?? "Unnamed campaign",
     description: row.campaignNiche ?? undefined
   }));
+  const campaignCount = campaigns.length;
   const nicheOptions = niches.map((niche) => ({ value: niche, label: niche }));
   const countryOptions = countries.map((country) => ({ value: country, label: country }));
   const ownerOptions = [
@@ -168,17 +168,87 @@ export default async function PipelinePage({
               <Plus className="w-4 h-4 text-brand" />
               <span className="font-semibold">New campaign</span>
             </LinkButton>
-            <LinkButton 
-              href={view === "board" ? "/pipeline" : "/pipeline?view=board"}
-              variant="ghost"
-              className="h-10 px-5 gap-3 border border-white/10 hover:border-brand/40"
-            >
-              {view === "board" ? <List className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
-              <span className="font-semibold">{view === "board" ? "List view" : "Board view"}</span>
-            </LinkButton>
+            <div className="pipeline-view-toggle" aria-label="Pipeline view switch">
+              <LinkButton
+                href="/pipeline"
+                variant={view === "list" ? "secondary" : "ghost"}
+                className="h-10 px-4 gap-2"
+              >
+                <List className="w-4 h-4" />
+                <span className="font-semibold">List</span>
+              </LinkButton>
+              <LinkButton
+                href="/pipeline?view=board"
+                variant={view === "board" ? "secondary" : "ghost"}
+                className="h-10 px-4 gap-2"
+              >
+                <LayoutGrid className="w-4 h-4" />
+                <span className="font-semibold">Board</span>
+              </LinkButton>
+            </div>
           </>
         }
       />
+
+      <section className="pipeline-hero crm-surface mb-6">
+        <div className="pipeline-hero-shell">
+          <div className="space-y-5">
+            <div className="pipeline-eyebrow">
+              <span className="pipeline-eyebrow-dot" />
+              Workflow control
+            </div>
+            <div className="space-y-4">
+              <h2 className="pipeline-title">
+                Prioritize the next move without losing workflow context.
+              </h2>
+              <p className="pipeline-copy">
+                Linear-inspired clarity for lead triage, review states, reply intent, and campaign context. Use the filtered list when you want precision, switch to board view when stage movement is the goal.
+              </p>
+            </div>
+            <div className="pipeline-chip-row" aria-label="Pipeline summary">
+              <div className="pipeline-chip">
+                <span>Visible leads</span>
+                <strong>{filtered.length}</strong>
+              </div>
+              <div className="pipeline-chip">
+                <span>Awaiting review</span>
+                <strong>{summary.awaitingReview}</strong>
+              </div>
+              <div className="pipeline-chip">
+                <span>Saved views</span>
+                <strong>{savedFilters.length}</strong>
+              </div>
+              <div className="pipeline-chip">
+                <span>Campaigns</span>
+                <strong>{campaignCount}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="pipeline-hero-stats" aria-label="Pipeline quick stats">
+            <div className="pipeline-hero-stat">
+              <label>Workflow mode</label>
+              <strong>{view === "board" ? "Board" : "List"}</strong>
+              <span>{view === "board" ? "Move leads across stages with drag and drop." : "Scan rows, triage actions, and bulk-operate quickly."}</span>
+            </div>
+            <div className="pipeline-hero-stat">
+              <label>Filtered scope</label>
+              <strong>{filtered.length.toString().padStart(2, "0")}</strong>
+              <span>{hasActiveFilters ? "Current filters are narrowing the working set." : "No active filters are trimming the working set."}</span>
+            </div>
+            <div className="pipeline-hero-stat">
+              <label>Review queue</label>
+              <strong>{summary.awaitingReview.toString().padStart(2, "0")}</strong>
+              <span>These leads still need a human decision before outbound moves on.</span>
+            </div>
+            <div className="pipeline-hero-stat">
+              <label>Priority A</label>
+              <strong>{summary.bandA.toString().padStart(2, "0")}</strong>
+              <span>Top-band leads stay visible so the team can act without hunting.</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="metric-grid" aria-label="Pipeline metrics">
         {metrics.map((metric) => (
@@ -192,302 +262,281 @@ export default async function PipelinePage({
         ))}
       </section>
 
-      <section className="panel mb-8">
-        <div className="panel-header">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
-              <Hash className="w-4 h-4 text-brand" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-white/80">Segment Summary</h2>
-              <p className="text-[10px] text-white/40 font-mono">Real-time lead distribution across bands</p>
-            </div>
+      <section className="pipeline-panel pipeline-filter-shell crm-surface mb-8">
+        <div className="pipeline-panel-header">
+          <div>
+            <h2>Pipeline controls</h2>
+            <p>Search, segment, and save workflow slices without giving up the context of the full pipeline.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <Badge tone="band-a" className="px-3 py-1.5 border-brand/20 bg-brand/5">
-              <span className="opacity-60 mr-1">A:</span> {summary.bandA}
-            </Badge>
-            <Badge tone="band-b" className="px-3 py-1.5 border-blue-500/20 bg-blue-500/5">
-              <span className="opacity-60 mr-1">B:</span> {summary.bandB}
-            </Badge>
-            <Badge tone="band-c" className="px-3 py-1.5 border-amber-500/20 bg-amber-500/5">
-              <span className="opacity-60 mr-1">C:</span> {summary.bandC}
-            </Badge>
-            <Badge tone="band-d" className="px-3 py-1.5 border-white/10 bg-white/5">
-              <span className="opacity-60 mr-1">D:</span> {summary.bandD}
-            </Badge>
-            <div className="w-px h-6 bg-white/10 mx-2" />
-            <a
-              href="/pipeline?review=pending"
-              className="inline-flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-              aria-label={`Open ${summary.awaitingReview} leads requiring action`}
-            >
-              <Badge tone="warning" className="px-3 py-1.5 border-amber-500/45 bg-amber-500/15 text-amber-100 shadow-[0_0_24px_rgba(245,158,11,0.12)] hover:border-amber-300/70 hover:bg-amber-500/20 transition-colors cursor-pointer">
-                {summary.awaitingReview} Action Required
-              </Badge>
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-muted" />
-            <h2>Filters</h2>
-          </div>
-          <div className="flex items-center gap-4">
-            <Badge tone="muted" className="px-3 py-1.5">{filtered.length} leads found</Badge>
-            {hasActiveFilters && (
-              <LinkButton href="/pipeline" variant="ghost" className="h-8 px-3 text-xs border border-white/10 hover:border-brand/35">
-                <XCircle className="w-3 h-3" />
-                Clear
+          <div className="pipeline-panel-actions">
+            <Badge tone="muted" className="px-3 py-1.5">{filtered.length} leads in view</Badge>
+            <Badge tone="muted" className="px-3 py-1.5">{summary.bandA} priority A</Badge>
+            <Badge tone="warning" className="px-3 py-1.5">{summary.awaitingReview} need review</Badge>
+            {hasActiveFilters ? (
+              <LinkButton href="/pipeline" variant="ghost" className="h-9 px-4 border border-white/10 hover:border-brand/35">
+                <XCircle className="w-3.5 h-3.5" />
+                Reset filters
               </LinkButton>
-            )}
+            ) : null}
           </div>
         </div>
-        <div className="panel-body">
-          <form className="filter-grid">
-            <div className="field-group lg:col-span-2">
-              <label htmlFor="filter-q" className="field-label flex items-center gap-2">
-                <Search className="w-3 h-3" /> Keyword Search
-              </label>
-              <div className="relative group">
-                <input 
-                  id="filter-q" 
-                  className="field w-full" 
-                  name="q" 
-                  placeholder="Entity, email, or locale..." 
-                  defaultValue={resolvedParams.q ?? ""} 
+
+        <div className="pipeline-filter-grid">
+          <form className="pipeline-filter-core">
+            <div className="pipeline-filter-grid-core">
+              <div className="field-group col-span-2">
+                <label htmlFor="filter-q" className="field-label flex items-center gap-2">
+                  <Search className="w-3 h-3" /> Keyword search
+                </label>
+                <input
+                  id="filter-q"
+                  className="field w-full"
+                  name="q"
+                  placeholder="Business, email, city, campaign..."
+                  defaultValue={resolvedParams.q ?? ""}
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="filter-band" className="field-label flex items-center gap-2">
+                  <Tag className="w-3 h-3" /> Lead band
+                </label>
+                <CrmSelect
+                  name="band"
+                  defaultValue={resolvedParams.band ?? ""}
+                  placeholder="All bands"
+                  options={["A", "B", "C", "D"].map((band) => ({ value: band, label: `Band ${band}` }))}
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="filter-status" className="field-label flex items-center gap-2">
+                  <CheckCircle className="w-3 h-3" /> Lifecycle status
+                </label>
+                <CrmSelect
+                  name="status"
+                  defaultValue={resolvedParams.status ?? ""}
+                  placeholder="All statuses"
+                  options={statusOptions}
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="filter-campaign" className="field-label flex items-center gap-2">
+                  <Briefcase className="w-3 h-3" /> Campaign
+                </label>
+                <CrmSelect
+                  name="campaign"
+                  defaultValue={resolvedParams.campaign ?? ""}
+                  placeholder="All campaigns"
+                  emptyState="No campaigns are available in the current pipeline set."
+                  options={campaignOptions}
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="filter-niche" className="field-label flex items-center gap-2">
+                  <Hash className="w-3 h-3" /> Market niche
+                </label>
+                <CrmSelect
+                  name="niche"
+                  defaultValue={resolvedParams.niche ?? ""}
+                  placeholder="All niches"
+                  emptyState="No niches available in the current pipeline set."
+                  options={nicheOptions}
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="filter-country" className="field-label flex items-center gap-2">
+                  <Globe className="w-3 h-3" /> Geography
+                </label>
+                <CrmSelect
+                  name="country"
+                  defaultValue={resolvedParams.country ?? ""}
+                  placeholder="All countries"
+                  emptyState="No countries available in the current pipeline set."
+                  options={countryOptions}
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="filter-reply" className="field-label flex items-center gap-2">
+                  <MessageSquare className="w-3 h-3" /> Reply intent
+                </label>
+                <CrmSelect
+                  name="reply"
+                  defaultValue={resolvedParams.reply ?? ""}
+                  placeholder="Any intent"
+                  options={[
+                    { value: "no_reply", label: "No reply" },
+                    { value: "has_reply", label: "Has reply" },
+                    { value: "positive", label: "Positive interest" },
+                    { value: "objection", label: "Objection / review" }
+                  ]}
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="filter-review" className="field-label flex items-center gap-2">
+                  <User className="w-3 h-3" /> Review state
+                </label>
+                <CrmSelect
+                  name="review"
+                  defaultValue={resolvedParams.review ?? ""}
+                  placeholder="All states"
+                  options={[
+                    { value: "pending", label: "Pending" },
+                    { value: "reviewed", label: "Reviewed" }
+                  ]}
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="filter-owner" className="field-label flex items-center gap-2">
+                  <User className="w-3 h-3" /> Assigned owner
+                </label>
+                <CrmSelect
+                  name="assigned"
+                  defaultValue={resolvedParams.assigned ?? ""}
+                  placeholder="All owners"
+                  emptyState="No founder profiles configured."
+                  options={ownerOptions}
                 />
               </div>
             </div>
 
-            <div className="field-group">
-              <label htmlFor="filter-band" className="field-label flex items-center gap-2">
-                <Tag className="w-3 h-3" /> Lead Band
-              </label>
-              <CrmSelect
-                name="band"
-                defaultValue={resolvedParams.band ?? ""}
-                placeholder="All Bands"
-                options={["A", "B", "C", "D"].map((band) => ({ value: band, label: `Band ${band}` }))}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-status" className="field-label flex items-center gap-2">
-                <CheckCircle className="w-3 h-3" /> Lifecycle Status
-              </label>
-              <CrmSelect
-                name="status"
-                defaultValue={resolvedParams.status ?? ""}
-                placeholder="All Statuses"
-                options={statusOptions}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-campaign" className="field-label flex items-center gap-2">
-                <Briefcase className="w-3 h-3" /> Active Campaign
-              </label>
-              <CrmSelect
-                name="campaign"
-                defaultValue={resolvedParams.campaign ?? ""}
-                placeholder="All Campaigns"
-                emptyState="No campaigns are available in the current pipeline set."
-                options={campaignOptions}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-niche" className="field-label flex items-center gap-2">
-                <Hash className="w-3 h-3" /> Market Niche
-              </label>
-              <CrmSelect
-                name="niche"
-                defaultValue={resolvedParams.niche ?? ""}
-                placeholder="All Niches"
-                emptyState="No niches available in the current pipeline set."
-                options={nicheOptions}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-country" className="field-label flex items-center gap-2">
-                <Globe className="w-3 h-3" /> Geography
-              </label>
-              <CrmSelect
-                name="country"
-                defaultValue={resolvedParams.country ?? ""}
-                placeholder="All Countries"
-                emptyState="No countries available in the current pipeline set."
-                options={countryOptions}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-reply" className="field-label flex items-center gap-2">
-                <MessageSquare className="w-3 h-3" /> Reply Intent
-              </label>
-              <CrmSelect
-                name="reply"
-                defaultValue={resolvedParams.reply ?? ""}
-                placeholder="Any Intent"
-                options={[
-                  { value: "no_reply", label: "No Reply" },
-                  { value: "has_reply", label: "Has Reply" },
-                  { value: "positive", label: "Positive Interest" },
-                  { value: "objection", label: "Objection / Review" }
-                ]}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-review" className="field-label flex items-center gap-2">
-                <User className="w-3 h-3" /> Review State
-              </label>
-              <CrmSelect
-                name="review"
-                defaultValue={resolvedParams.review ?? ""}
-                placeholder="All States"
-                options={[
-                  { value: "pending", label: "Pending" },
-                  { value: "reviewed", label: "Reviewed" }
-                ]}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-owner" className="field-label flex items-center gap-2">
-                <User className="w-3 h-3" /> Assigned Owner
-              </label>
-              <CrmSelect
-                name="assigned"
-                defaultValue={resolvedParams.assigned ?? ""}
-                placeholder="All Owners"
-                emptyState="No founder profiles configured."
-                options={ownerOptions}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-min-score" className="field-label">Min score</label>
-              <input id="filter-min-score" className="field" name="min_score" type="number" min="0" max="100" defaultValue={resolvedParams.min_score ?? ""} />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-max-score" className="field-label">Max score</label>
-              <input id="filter-max-score" className="field" name="max_score" type="number" min="0" max="100" defaultValue={resolvedParams.max_score ?? ""} />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-created-from" className="field-label">Created from</label>
-              <CrmDateField name="created_from" defaultValue={resolvedParams.created_from ?? ""} placeholder="Created from" />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-created-to" className="field-label">Created to</label>
-              <CrmDateField name="created_to" defaultValue={resolvedParams.created_to ?? ""} placeholder="Created to" />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-sort" className="field-label">Sort</label>
-              <CrmSelect
-                name="sort"
-                defaultValue={resolvedParams.sort ?? "activity"}
-                options={[
-                  { value: "activity", label: "Last activity" },
-                  { value: "business", label: "Business" },
-                  { value: "score", label: "Score" },
-                  { value: "status", label: "Status" },
-                  { value: "campaign", label: "Campaign" },
-                  { value: "reply", label: "Reply" },
-                  { value: "owner", label: "Owner" },
-                  { value: "created", label: "Created" }
-                ]}
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="filter-dir" className="field-label">Direction</label>
-              <CrmSelect
-                name="dir"
-                defaultValue={resolvedParams.dir ?? "desc"}
-                options={[
-                  { value: "desc", label: "Descending" },
-                  { value: "asc", label: "Ascending" }
-                ]}
-              />
-            </div>
-
             <input type="hidden" name="view" value={view} />
-            
-            <div className="field-group flex justify-end h-full mt-2 lg:col-span-full">
-              <button className="ui-button ui-button-primary w-full md:w-auto px-8 h-[44px] shadow-lg shadow-brand/20 font-bold tracking-wide rounded-lg" type="submit">
-                APPLY FILTERS
+
+            <div className="button-row justify-end pt-2">
+              <button className="ui-button ui-button-primary h-11 px-6" type="submit">
+                Apply filters
               </button>
             </div>
           </form>
 
-          <div className="saved-view-panel">
-            <div className="saved-view-header">
-              <div>
-                <h3>Saved views</h3>
-                <p>Reuse focused pipeline filters without rebuilding this search.</p>
+          <aside className="pipeline-filter-side">
+            <div className="pipeline-filter-meta">
+              <div className="pipeline-filter-meta-header">
+                <div>
+                  <h3>Filter depth</h3>
+                  <p>Use score and date windows for precision slices; keep them off when scanning broadly.</p>
+                </div>
+                <Badge tone="muted" className="px-3 py-1.5">{summary.total} total</Badge>
               </div>
-              <Badge tone="muted" className="px-3 py-1.5">{savedFilters.length} saved</Badge>
+
+              <div className="stack-list">
+                <div className="field-group">
+                  <label htmlFor="filter-min-score" className="field-label">Min score</label>
+                  <input id="filter-min-score" className="field" name="min_score" type="number" min="0" max="100" defaultValue={resolvedParams.min_score ?? ""} />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="filter-max-score" className="field-label">Max score</label>
+                  <input id="filter-max-score" className="field" name="max_score" type="number" min="0" max="100" defaultValue={resolvedParams.max_score ?? ""} />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="filter-created-from" className="field-label">Created from</label>
+                  <CrmDateField name="created_from" defaultValue={resolvedParams.created_from ?? ""} placeholder="Created from" />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="filter-created-to" className="field-label">Created to</label>
+                  <CrmDateField name="created_to" defaultValue={resolvedParams.created_to ?? ""} placeholder="Created to" />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="filter-sort" className="field-label">Sort</label>
+                  <CrmSelect
+                    name="sort"
+                    defaultValue={resolvedParams.sort ?? "activity"}
+                    options={[
+                      { value: "activity", label: "Last activity" },
+                      { value: "business", label: "Business" },
+                      { value: "score", label: "Score" },
+                      { value: "status", label: "Status" },
+                      { value: "campaign", label: "Campaign" },
+                      { value: "reply", label: "Reply" },
+                      { value: "owner", label: "Owner" },
+                      { value: "created", label: "Created" }
+                    ]}
+                  />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="filter-dir" className="field-label">Direction</label>
+                  <CrmSelect
+                    name="dir"
+                    defaultValue={resolvedParams.dir ?? "desc"}
+                    options={[
+                      { value: "desc", label: "Descending" },
+                      { value: "asc", label: "Ascending" }
+                    ]}
+                  />
+                </div>
+              </div>
             </div>
-            {savedFilters.length > 0 ? (
-              <div className="saved-filter-row">
-                {savedFilters.map((filter) => (
-                  <div className="saved-filter-chip group" key={filter.id}>
-                    <a
-                      href={`/pipeline?${new URLSearchParams(filter.filters as Record<string, string>).toString()}`}
-                      className="min-w-0 truncate text-white/85 hover:text-white transition-colors"
-                    >
-                      {filter.name}
-                    </a>
-                    <form action={deleteFilterAction}>
-                      <input type="hidden" name="id" value={filter.id} />
-                      <button
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/45 transition-colors hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200"
-                        type="submit"
-                        aria-label={`Delete saved view ${filter.name}`}
+
+            <div className="pipeline-saved-views">
+              <div className="pipeline-saved-views-header">
+                <div>
+                  <h3>Saved views</h3>
+                  <p>Jump back to focused pipeline slices without rebuilding the query.</p>
+                </div>
+                <Badge tone="muted" className="px-3 py-1.5">{savedFilters.length} saved</Badge>
+              </div>
+              {savedFilters.length > 0 ? (
+                <div className="pipeline-saved-views-row">
+                  {savedFilters.map((filter) => (
+                    <div className="pipeline-saved-view group" key={filter.id}>
+                      <a
+                        href={`/pipeline?${new URLSearchParams(filter.filters as Record<string, string>).toString()}`}
+                        className="min-w-0 truncate text-white/85 hover:text-white transition-colors"
                       >
-                        <XCircle className="w-3 h-3" />
-                      </button>
-                    </form>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="saved-view-empty">No saved views yet.</p>
-            )}
-
-          <form action={saveFilterAction} className="save-filter-form">
-            <input type="hidden" name="viewKey" value="pipeline" />
-            <input
-              type="hidden"
-              name="filters"
-              value={JSON.stringify(
-                Object.fromEntries(Object.entries(resolvedParams).filter(([, value]) => typeof value === "string" && value.length > 0))
+                        {filter.name}
+                      </a>
+                      <form action={deleteFilterAction}>
+                        <input type="hidden" name="id" value={filter.id} />
+                        <button
+                          className="inline-flex h-6 w-6 items-center justify-center border border-white/10 bg-white/5 text-white/45 hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200"
+                          type="submit"
+                          aria-label={`Delete saved view ${filter.name}`}
+                        >
+                          <XCircle className="w-3 h-3" />
+                        </button>
+                      </form>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="saved-view-empty">No saved views yet.</p>
               )}
-            />
-            <div className="field-group relative flex-1">
-              <label htmlFor="save-view-name" className="field-label">Save view</label>
-              <div className="relative">
-                <Save className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-                <input id="save-view-name" className="field pl-9" name="name" placeholder="Name this view..." required />
-              </div>
+
+              <form action={saveFilterAction} className="save-filter-form">
+                <input type="hidden" name="viewKey" value="pipeline" />
+                <input
+                  type="hidden"
+                  name="filters"
+                  value={JSON.stringify(
+                    Object.fromEntries(Object.entries(resolvedParams).filter(([, value]) => typeof value === "string" && value.length > 0))
+                  )}
+                />
+                <div className="field-group relative flex-1">
+                  <label htmlFor="save-view-name" className="field-label">Save view</label>
+                  <div className="relative">
+                    <Save className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+                    <input id="save-view-name" className="field pl-9" name="name" placeholder="Name this view..." required />
+                  </div>
+                </div>
+                <div className="flex items-end">
+                  <button className="ui-button ui-button-secondary whitespace-nowrap h-[40px]" type="submit">
+                    Save current view
+                  </button>
+                </div>
+              </form>
             </div>
-            <div className="flex items-end">
-              <button className="ui-button ui-button-secondary whitespace-nowrap h-[40px]" type="submit">
-                Save Current View
-              </button>
-            </div>
-          </form>
-          </div>
+          </aside>
         </div>
       </section>
 
