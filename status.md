@@ -15,6 +15,8 @@ AI Automation CRM / Lead Generation Dashboard
 ## Last completed work
 - Materially overhauled the CRM Lead Detail UI/UX, introducing a high-impact "Lead Hero" summary, re-grouping dense information into clearer "Identity & Profile" and "Scoring & Hypothesis" sections, and refining the timeline into a premium activity feed.
 - Refined the Sticky Action Bar and Draft Review Editor for better hierarchy, clarity, and enterprise-grade polish (inspired by Notion, Linear, and Stripe).
+- Resolved Sonar quality gate issues by refactoring the Lead Detail page into modular sub-components, reducing cognitive complexity and eliminating nested ternaries.
+- Fixed a redundant conditional CSS class in the Draft Review Editor.
 - Normalized typography and spacing across the Lead Detail route to improve scanning speed and operational confidence.
 - Applied a visible pipeline redesign that introduced a Linear-inspired hero/control surface, segmented list/board switcher, stronger filter hierarchy, premium saved-view UX, and cleaner board/list scanning surfaces.
 - Normalized the shared CRM visual layer in `app/globals.css` so panels, cards, buttons, badges, inputs, tables, empty states, score bars, and detail grids share one dark surface language.

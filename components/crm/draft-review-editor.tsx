@@ -36,7 +36,7 @@ export function DraftReviewEditor({
   const statusLabel = draft.approval_status ?? "pending";
 
   return (
-    <div className={`crm-state-card overflow-hidden bg-black/10 border-white/5 ${compact ? "p-0" : "p-0"}`}>
+    <div className={`crm-state-card overflow-hidden bg-black/10 border-white/5 p-0`}>
       <div className={`flex items-start justify-between gap-4 border-b border-white/5 ${compact ? "p-4" : "p-6"}`}>
         <div className="min-w-0">
           <span className="metric-label text-brand-light/70 uppercase tracking-widest text-[10px]">Communication Draft</span>
