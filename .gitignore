@@ -51,3 +51,7 @@ tmp-scripts/
 docs/obsidian-vault/**/.obsidian/
 graphify-out/cache/
 graphify-out/.graphify_analysis.json
+
+# Generated local Graphify / Obsidian artifacts
+docs/obsidian-vault/10_Graphify/
+graphify-out/
