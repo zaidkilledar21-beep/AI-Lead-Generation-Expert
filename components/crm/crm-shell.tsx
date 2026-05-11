@@ -148,14 +148,14 @@ export function CrmShell({
             <input 
               id="global-search" 
               name="q" 
-              className="pl-10 bg-white/5 border border-white/10 rounded-xl focus:bg-white/10 focus:border-[var(--accent)] transition-all h-10 w-full text-sm placeholder-zinc-500 shadow-inner"
+              className="field pl-10"
               placeholder="Search business, email, niche, city..." 
             />
           </form>
 
           <div className="topbar-actions ml-auto">
             <motion.button 
-              className={`global-pause flex items-center gap-2 font-medium transition-colors ${optimisticPaused ? 'text-red-400 bg-red-400/10 border border-red-400/20 px-3 py-1.5 rounded-md' : 'text-zinc-300 hover:text-white'}`}
+              className={`global-pause flex items-center gap-2 font-medium ${optimisticPaused ? "text-red-200" : "text-white/84"}`}
               type="button" 
               onClick={handleTogglePause}
               disabled={isPending}
@@ -167,7 +167,7 @@ export function CrmShell({
               <span>{optimisticPaused ? "Resume Outreach" : "Global Pause"}</span>
             </motion.button>
             <motion.a 
-              className="notification-button relative" 
+              className="notification-button relative border border-white/10 bg-white/5" 
               aria-label="View notifications"
               href="/settings/notifications"
               whileHover={{ scale: 1.05 }}
@@ -176,7 +176,7 @@ export function CrmShell({
               <Bell className="w-4 h-4 text-zinc-300" />
             </motion.a>
             <motion.div 
-              className="founder-chip font-medium border-white/10 cursor-pointer" 
+              className="founder-chip font-medium border border-white/10 bg-white/5 cursor-pointer" 
               aria-label="Logged in founder"
               whileHover={{ scale: 1.05, backgroundColor: 'rgba(255,255,255,0.1)' }}
             >

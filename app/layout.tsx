@@ -2,12 +2,9 @@ import { CrmShell } from "@/components/crm/crm-shell";
 import { DashboardAuthError, requireDashboardActor } from "@/lib/app/auth";
 import { getCrmNavSnapshot } from "@/lib/dashboard/queries";
 import { PageTransition } from "@/components/ui/page-transition";
-import { Inter } from "next/font/google";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "Outreach CRM",
@@ -22,7 +19,7 @@ export default async function RootLayout({
 
   if (isPublicRoute) {
     return (
-      <html lang="en" className={inter.className}>
+      <html lang="en">
         <body className="antialiased">{children}</body>
       </html>
     );
@@ -37,7 +34,7 @@ export default async function RootLayout({
     }
 
     return (
-      <html lang="en" className={inter.className}>
+      <html lang="en">
         <body className="antialiased">
           <main className="auth-page">
             <section className="auth-panel">
@@ -53,7 +50,7 @@ export default async function RootLayout({
   const navSnapshot = await getCrmNavSnapshot();
 
   return (
-    <html lang="en" className={inter.className}>
+    <html lang="en">
       <body className="antialiased">
         <CrmShell
           initialInboxUnhandled={navSnapshot.inboxUnhandled}
