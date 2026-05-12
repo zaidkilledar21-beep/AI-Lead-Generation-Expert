@@ -7,12 +7,13 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Fixed Sonar duplication in the Inbox + Review Queue overhaul by extracting a shared triage summary header.
+- Precision layout/alignment polish for Inbox + Review Queue.
 
 ## Current module / PR
-- Frontend UI upgrade implementation, with the Inbox + Review overhaul active and a duplication-fix patch applied.
+- Frontend UI upgrade implementation, with the Inbox + Review layout-polish pass active after the Sonar duplication fix.
 
 ## Last completed work
+- Tightened the Inbox and Review Queue layout geometry: header controls now live inside the shared triage summary shell, inbox/review panels stretch more evenly, review queue metadata cards are balanced, and the inbox timeline is denser with clearer anchoring.
 - Extracted a shared `TriageSummaryHeader` component for the Inbox and Review route hero/stat blocks to remove Sonar-flagged duplication without changing UX or behavior.
 - Materially overhauled the Inbox and Review Queue experience with a premium control-center header, clearer filter/tabs hierarchy, more expressive triage cards, stronger reply/workspace context, and premium empty states.
 - Materially overhauled the Campaigns experience with a premium discovery-control hero, saved-view quick filters, card-based roster scanning, a higher-clarity detail workspace, stronger readiness framing, and Campaigns-only loading/error shells.
@@ -32,8 +33,9 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
-- `plans/inbox-review-duplication-fix.md`
+- `plans/inbox-review-layout-polish.md`
 - `components/crm/triage/triage-summary-header.tsx`
+- `plans/inbox-review-duplication-fix.md`
 - `plans/inbox-review-ui-overhaul.md`
 - `app/inbox/page.tsx`
 - `app/review/page.tsx`
@@ -60,4 +62,4 @@ AI Automation CRM / Lead Generation Dashboard
 - The CRM still has several dense operational surfaces that should be improved incrementally rather than with a broad redesign.
 
 ## Next step
-- Re-run Sonar/quality gate checks on the Inbox + Review routes, then browser QA the two surfaces if the quality gate is clear.
+- Run browser QA on `/inbox` and `/review` at desktop and tablet widths, then rerun Sonar/quality gate checks if needed.

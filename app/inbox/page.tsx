@@ -88,58 +88,59 @@ export default async function InboxPage({
             { label: "Review", value: inboxStats.review, note: "Human gate", tone: "danger" },
             { label: "AI ready", value: inboxStats.actionable, note: "Drafts + next steps", tone: "success" }
           ]}
+          controls={(
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,520px)] lg:items-start">
+              <div className="flex flex-wrap gap-2">
+                {tabs.map((item) => {
+                  const active = tab === item.id;
+                  return (
+                    <a
+                      key={item.id}
+                      href={tabHref(item.id, query, sort)}
+                      className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors ${
+                        active
+                          ? item.tone === "danger"
+                            ? "border-rose-400/35 bg-rose-500/15 text-rose-200"
+                            : item.tone === "warning"
+                              ? "border-amber-400/35 bg-amber-500/15 text-amber-100"
+                              : item.tone === "success"
+                                ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-100"
+                                : "border-brand/30 bg-brand/15 text-white"
+                          : "border-white/8 bg-white/[0.03] text-white/60 hover:border-white/14 hover:bg-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-white/60">
+                        {item.count}
+                      </span>
+                    </a>
+                  );
+                })}
+              </div>
+
+              <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
+                <input type="hidden" name="tab" value={tab} />
+                <input
+                  name="q"
+                  defaultValue={searchParams?.q ?? ""}
+                  placeholder="Search sender, business, campaign, summary..."
+                  className="field"
+                />
+                <CrmSelect
+                  name="sort"
+                  defaultValue={sort}
+                  options={[
+                    { value: "newest", label: "Newest first" },
+                    { value: "oldest", label: "Oldest first" },
+                    { value: "business", label: "Business A-Z" },
+                    { value: "intent", label: "Intent A-Z" }
+                  ]}
+                />
+                <button className="ui-button ui-button-secondary" type="submit">Apply</button>
+              </form>
+            </div>
+          )}
         />
-
-        <div className="grid gap-4 border-b border-white/8 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,520px)] lg:items-end">
-          <div className="flex flex-wrap gap-2">
-            {tabs.map((item) => {
-              const active = tab === item.id;
-              return (
-                <a
-                  key={item.id}
-                  href={tabHref(item.id, query, sort)}
-                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors ${
-                    active
-                      ? item.tone === "danger"
-                        ? "border-rose-400/35 bg-rose-500/15 text-rose-200"
-                        : item.tone === "warning"
-                          ? "border-amber-400/35 bg-amber-500/15 text-amber-100"
-                          : item.tone === "success"
-                            ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-100"
-                            : "border-brand/30 bg-brand/15 text-white"
-                      : "border-white/8 bg-white/[0.03] text-white/60 hover:border-white/14 hover:bg-white/[0.06] hover:text-white"
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-white/60">
-                    {item.count}
-                  </span>
-                </a>
-              );
-            })}
-          </div>
-
-          <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
-            <input type="hidden" name="tab" value={tab} />
-            <input
-              name="q"
-              defaultValue={searchParams?.q ?? ""}
-              placeholder="Search sender, business, campaign, summary..."
-              className="field"
-            />
-            <CrmSelect
-              name="sort"
-              defaultValue={sort}
-              options={[
-                { value: "newest", label: "Newest first" },
-                { value: "oldest", label: "Oldest first" },
-                { value: "business", label: "Business A-Z" },
-                { value: "intent", label: "Intent A-Z" }
-              ]}
-            />
-            <button className="ui-button ui-button-secondary" type="submit">Apply</button>
-          </form>
-        </div>
       </section>
       
       <InboxView 

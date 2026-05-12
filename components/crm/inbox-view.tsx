@@ -133,8 +133,8 @@ export function InboxView({
   }
 
   return (
-    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(340px,0.96fr)_minmax(0,1.04fr)]">
-      <section className="crm-state-card overflow-hidden">
+    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,0.94fr)_minmax(0,1.06fr)] lg:items-stretch">
+      <section className="crm-state-card flex h-full flex-col overflow-hidden">
         <div className="border-b border-white/8 p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -175,7 +175,7 @@ export function InboxView({
           </div>
         </div>
 
-        <div className="max-h-[74vh] overflow-y-auto p-3">
+        <div className="flex-1 overflow-y-auto p-4">
           <div className="flex flex-col gap-2">
             {filtered.map((thread, i) => {
               const isSelected = selected?.id === thread.id;
@@ -198,7 +198,7 @@ export function InboxView({
                   initial={{ opacity: 0, x: -18 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.03, type: "spring", stiffness: 320, damping: 28 }}
-                  className={`group relative block overflow-hidden rounded-[22px] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                  className={`group relative block overflow-hidden rounded-2xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                     isSelected
                       ? "border-brand/35 bg-brand/10 shadow-[0_18px_36px_rgba(0,0,0,0.24)]"
                       : "border-white/8 bg-white/[0.035] hover:border-white/14 hover:bg-white/[0.055]"
@@ -265,10 +265,10 @@ export function InboxView({
         </div>
       </section>
 
-      <aside className="grid gap-6">
+      <aside className="grid h-full gap-6">
         {selected ? (
           <>
-            <section className="crm-state-card overflow-hidden">
+            <section className="crm-state-card flex h-full flex-col overflow-hidden">
               <div className="border-b border-white/8 p-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
@@ -310,8 +310,8 @@ export function InboxView({
                 </div>
               </div>
 
-              <div className="grid gap-4 border-b border-white/8 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
-                <div className="rounded-2xl border border-brand/15 bg-brand/10 p-4">
+              <div className="grid gap-4 border-b border-white/8 p-5 sm:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)] sm:items-stretch">
+                <div className="min-h-[156px] rounded-2xl border border-brand/15 bg-brand/10 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-brand-light/70">Suggested next action</span>
                     <Badge tone="success" className="px-2.5 py-0.5 text-[10px] uppercase">Ready</Badge>
@@ -321,7 +321,7 @@ export function InboxView({
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <div className="min-h-[156px] rounded-2xl border border-white/8 bg-black/20 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">Ownership</span>
                     <Badge tone={selected.isUnhandled ? "warning" : "success"} className="px-2.5 py-0.5 text-[10px] uppercase">
@@ -353,11 +353,12 @@ export function InboxView({
                 <h4 className="text-sm font-semibold tracking-[-0.02em] text-white">Conversation timeline</h4>
                 <p className="mt-1 text-xs leading-5 text-white/45">Lead and inbox context, ordered by the most recent activity.</p>
               </div>
-              <div className="space-y-3 p-5">
+              <div className="relative space-y-2.5 p-5 before:absolute before:bottom-5 before:top-5 before:left-6 before:w-px before:bg-white/6">
                 {messages.length > 0 ? messages.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.type === "sent" ? "justify-end" : "justify-start"}`}>
+                  <div key={msg.id} className={`relative flex ${msg.type === "sent" ? "justify-end" : "justify-start"} pl-5`}>
+                    <span className={`absolute left-[14px] top-4 h-2 w-2 rounded-full border border-white/10 ${msg.type === "sent" ? "bg-brand/70" : "bg-white/20"}`} />
                     <div
-                      className={`max-w-[88%] rounded-[20px] border px-4 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)] ${
+                      className={`max-w-[84%] rounded-[20px] border px-4 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.16)] ${
                         msg.type === "sent"
                           ? "border-brand/22 bg-brand/10 text-brand-light"
                           : "border-white/10 bg-white/[0.05] text-white/84"
