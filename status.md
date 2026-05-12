@@ -7,12 +7,13 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Completed the Inbox + Review Queue UI overhaul for the CRM.
+- Fixed Sonar duplication in the Inbox + Review Queue overhaul by extracting a shared triage summary header.
 
 ## Current module / PR
-- Frontend UI upgrade implementation, with the Inbox + Review overhaul as the active PR.
+- Frontend UI upgrade implementation, with the Inbox + Review overhaul active and a duplication-fix patch applied.
 
 ## Last completed work
+- Extracted a shared `TriageSummaryHeader` component for the Inbox and Review route hero/stat blocks to remove Sonar-flagged duplication without changing UX or behavior.
 - Materially overhauled the Inbox and Review Queue experience with a premium control-center header, clearer filter/tabs hierarchy, more expressive triage cards, stronger reply/workspace context, and premium empty states.
 - Materially overhauled the Campaigns experience with a premium discovery-control hero, saved-view quick filters, card-based roster scanning, a higher-clarity detail workspace, stronger readiness framing, and Campaigns-only loading/error shells.
 - Materially overhauled the CRM Lead Detail UI/UX, introducing a high-impact "Lead Hero" summary, re-grouping dense information into clearer "Identity & Profile" and "Scoring & Hypothesis" sections, and refining the timeline into a premium activity feed.
@@ -31,10 +32,12 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `plans/inbox-review-duplication-fix.md`
+- `components/crm/triage/triage-summary-header.tsx`
 - `plans/inbox-review-ui-overhaul.md`
 - `app/inbox/page.tsx`
-- `components/crm/inbox-view.tsx`
 - `app/review/page.tsx`
+- `components/crm/inbox-view.tsx`
 - `components/crm/review-board.tsx`
 - `components/crm/draft-review-editor.tsx`
 - `status.md`
@@ -57,4 +60,4 @@ AI Automation CRM / Lead Generation Dashboard
 - The CRM still has several dense operational surfaces that should be improved incrementally rather than with a broad redesign.
 
 ## Next step
-- Browser QA the Inbox and Review routes, then decide whether the next pass should target analytics/settings or additional shared polish.
+- Re-run Sonar/quality gate checks on the Inbox + Review routes, then browser QA the two surfaces if the quality gate is clear.
