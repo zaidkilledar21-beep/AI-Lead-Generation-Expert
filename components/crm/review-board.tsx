@@ -148,8 +148,8 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
   }
 
   return (
-    <div className="mt-6 grid gap-6 two-column review-grid">
-      <section className="flex flex-col gap-6">
+    <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,0.98fr)_minmax(360px,1.02fr)] xl:items-stretch">
+      <section className="flex h-full flex-col gap-6">
         <section className="grid gap-3 md:grid-cols-3">
           <div className="crm-state-card p-4">
             <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">Urgent</span>
@@ -209,7 +209,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                         whileTap={{ scale: 0.98 }}
                         key={item.id}
                         onClick={() => setSelectedId(item.id)}
-                        className={`group mb-2 flex w-full flex-col gap-3 rounded-[22px] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                        className={`group mb-2 flex w-full flex-col gap-3 rounded-2xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                           isSelected
                             ? "border-brand/35 bg-brand/10 shadow-[0_18px_36px_rgba(0,0,0,0.24)]"
                             : "border-white/8 bg-white/[0.04] hover:border-white/14 hover:bg-white/[0.06]"
@@ -260,8 +260,8 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
         })}
       </section>
 
-      <aside className="sticky top-6">
-        <div className="crm-state-card h-full min-h-[420px] overflow-hidden">
+      <aside className="sticky top-6 self-start">
+        <div className="crm-state-card flex h-full min-h-[420px] flex-col overflow-hidden">
           <div className="border-b border-white/8 bg-white/[0.03] p-5">
             <h2 className="text-lg font-semibold tracking-[-0.02em] text-white">Review workspace</h2>
             <p className="mt-1 text-xs leading-5 text-white/45">Approve, reject, regenerate, or close the selected item.</p>
@@ -288,7 +288,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                           {selected.band ? <Badge tone="muted">Band {selected.band}</Badge> : null}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <div className="grid min-w-[240px] grid-cols-2 gap-3 sm:min-w-[360px] sm:grid-cols-3">
                         {[
                           { label: "Score", value: selected.score ?? "--" },
                           { label: "Campaign", value: selected.campaignName ?? "--" },
