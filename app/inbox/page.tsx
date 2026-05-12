@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/crm/page-header";
+import { TriageSummaryHeader } from "@/components/crm/triage/triage-summary-header";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { getInboxThreads, getLeadDetail, getSettingsData } from "@/lib/crm/queries";
 import { InboxView } from "@/components/crm/inbox-view";
@@ -52,42 +53,93 @@ export default async function InboxPage({
     return new Date(b.receivedAt ?? 0).getTime() - new Date(a.receivedAt ?? 0).getTime();
   });
 
+  const inboxStats = {
+    total: threads.length,
+    unhandled: threads.filter((thread) => thread.isUnhandled).length,
+    review: threads.filter((thread) => thread.requiresHumanReview).length,
+    actionable: threads.filter((thread) => Boolean(thread.suggestedNextAction || thread.aiDraftReply)).length
+  };
+
+  const tabs = [
+    { id: "all", label: "All", count: inboxStats.total, tone: "default" },
+    { id: "unhandled", label: "Unhandled", count: inboxStats.unhandled, tone: "warning" },
+    { id: "positive", label: "Positive", count: threads.filter((thread) => (POSITIVE_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "")).length, tone: "success" },
+    { id: "objections", label: "Objections", count: threads.filter((thread) => (OBJECTION_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "")).length, tone: "danger" },
+    { id: "neutral", label: "Neutral", count: threads.filter((thread) => (NEUTRAL_REPLY_INTENTS as readonly string[]).includes(thread.intent ?? "")).length, tone: "default" },
+    { id: "ooo", label: "OOO", count: threads.filter((thread) => thread.intent === "out_of_office").length, tone: "muted" },
+    { id: "bounced", label: "Bounced", count: threads.filter((thread) => thread.intent === "bounce").length, tone: "muted" },
+    { id: "review", label: "Needs review", count: inboxStats.review, tone: "danger" }
+  ] as const;
+
   const selected = filtered.find((thread) => thread.id === searchParams?.thread) ?? filtered[0] ?? null;
   const leadDetails = selected ? await getLeadDetail(selected.leadId) : null;
 
   return (
     <>
       <PageHeader title="Inbox" description="Shared founder inbox with full reply context, suggested next action, and one-click handling." />
-      <section className="glass-panel group">
-        <div className="p-6 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h2 className="text-lg font-medium text-white/90">Views</h2>
+      <section className="crm-state-card overflow-hidden">
+        <TriageSummaryHeader
+          eyebrow="Shared founder operations inbox"
+          title="Resolve replies with context, urgency, and a clear next action."
+          description="Unhandled replies, AI suggestions, and human follow-ups are surfaced together so the right conversation gets the right response first."
+          stats={[
+            { label: "Visible", value: inboxStats.total, note: "In this view", tone: "default" },
+            { label: "Unhandled", value: inboxStats.unhandled, note: "Needs attention", tone: "warning" },
+            { label: "Review", value: inboxStats.review, note: "Human gate", tone: "danger" },
+            { label: "AI ready", value: inboxStats.actionable, note: "Drafts + next steps", tone: "success" }
+          ]}
+        />
+
+        <div className="grid gap-4 border-b border-white/8 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,520px)] lg:items-end">
           <div className="flex flex-wrap gap-2">
-            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "all" ? "bg-white/10 text-white" : "bg-transparent hover:bg-white/5 text-white/60"}`} href={tabHref("all", query, sort)}>All</a>
-            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "unhandled" ? "bg-brand/20 text-brand" : "bg-transparent hover:bg-white/5 text-white/60"}`} href={tabHref("unhandled", query, sort)}>Unhandled</a>
-            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "positive" ? "bg-blue-500/20 text-blue-400" : "bg-transparent hover:bg-white/5 text-white/60"}`} href={tabHref("positive", query, sort)}>Positive</a>
-            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "objections" ? "bg-orange-500/20 text-orange-400" : "bg-transparent hover:bg-white/5 text-white/60"}`} href={tabHref("objections", query, sort)}>Objections</a>
-            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "neutral" ? "bg-white/10 text-white" : "bg-transparent hover:bg-white/5 text-white/60"}`} href={tabHref("neutral", query, sort)}>Neutral</a>
-            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "ooo" ? "bg-purple-500/20 text-purple-400" : "bg-transparent hover:bg-white/5 text-white/60"}`} href={tabHref("ooo", query, sort)}>OOO</a>
-            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "bounced" ? "bg-gray-500/20 text-gray-400" : "bg-transparent hover:bg-white/5 text-white/60"}`} href={tabHref("bounced", query, sort)}>Bounced</a>
-            <a className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === "review" ? "bg-red-500/20 text-red-400" : "bg-transparent hover:bg-white/5 text-white/60"}`} href={tabHref("review", query, sort)}>Needs review</a>
+            {tabs.map((item) => {
+              const active = tab === item.id;
+              return (
+                <a
+                  key={item.id}
+                  href={tabHref(item.id, query, sort)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors ${
+                    active
+                      ? item.tone === "danger"
+                        ? "border-rose-400/35 bg-rose-500/15 text-rose-200"
+                        : item.tone === "warning"
+                          ? "border-amber-400/35 bg-amber-500/15 text-amber-100"
+                          : item.tone === "success"
+                            ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-100"
+                            : "border-brand/30 bg-brand/15 text-white"
+                      : "border-white/8 bg-white/[0.03] text-white/60 hover:border-white/14 hover:bg-white/[0.06] hover:text-white"
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-white/60">
+                    {item.count}
+                  </span>
+                </a>
+              );
+            })}
           </div>
+
+          <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
+            <input type="hidden" name="tab" value={tab} />
+            <input
+              name="q"
+              defaultValue={searchParams?.q ?? ""}
+              placeholder="Search sender, business, campaign, summary..."
+              className="field"
+            />
+            <CrmSelect
+              name="sort"
+              defaultValue={sort}
+              options={[
+                { value: "newest", label: "Newest first" },
+                { value: "oldest", label: "Oldest first" },
+                { value: "business", label: "Business A-Z" },
+                { value: "intent", label: "Intent A-Z" }
+              ]}
+            />
+            <button className="ui-button ui-button-secondary" type="submit">Apply</button>
+          </form>
         </div>
-        <form className="p-6 pt-0 flex flex-col md:flex-row gap-3">
-          <input type="hidden" name="tab" value={tab} />
-          <input name="q" defaultValue={searchParams?.q ?? ""} placeholder="Search sender, business, campaign, summary..." className="field flex-1" />
-          <CrmSelect
-            name="sort"
-            defaultValue={sort}
-            className="md:w-56"
-            options={[
-              { value: "newest", label: "Newest first" },
-              { value: "oldest", label: "Oldest first" },
-              { value: "business", label: "Business A-Z" },
-              { value: "intent", label: "Intent A-Z" }
-            ]}
-          />
-          <button className="ui-button ui-button-secondary" type="submit">Apply</button>
-        </form>
       </section>
       
       <InboxView 
