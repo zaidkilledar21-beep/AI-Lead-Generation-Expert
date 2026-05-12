@@ -7,12 +7,13 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Implementing the global shell / first impression overhaul for the CRM.
+- Implementing the Campaigns experience overhaul for the CRM.
 
 ## Current module / PR
-- Frontend UI upgrade implementation, with the global shell overhaul as the active PR.
+- Frontend UI upgrade implementation, with the Campaigns overhaul as the active PR.
 
 ## Last completed work
+- Materially overhauled the Campaigns experience with a premium discovery-control hero, saved-view quick filters, card-based roster scanning, a higher-clarity detail workspace, stronger readiness framing, and Campaigns-only loading/error shells.
 - Materially overhauled the CRM Lead Detail UI/UX, introducing a high-impact "Lead Hero" summary, re-grouping dense information into clearer "Identity & Profile" and "Scoring & Hypothesis" sections, and refining the timeline into a premium activity feed.
 - Refined the Sticky Action Bar and Draft Review Editor for better hierarchy, clarity, and enterprise-grade polish (inspired by Notion, Linear, and Stripe).
 - Resolved Sonar quality gate issues by refactoring the Lead Detail page into modular sub-components, reducing cognitive complexity and eliminating nested ternaries.
@@ -29,11 +30,14 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
-- `app/layout.tsx`
-- `components/crm/crm-shell.tsx`
+- `plans/campaigns-ui-overhaul.md`
+- `app/campaigns/page.tsx`
+- `app/campaigns/[campaign_id]/page.tsx`
+- `app/campaigns/[campaign_id]/campaign-detail-controls.tsx`
+- `app/campaigns/new/page.tsx`
+- `app/campaigns/loading.tsx`
+- `app/campaigns/error.tsx`
 - `app/globals.css`
-- `app/loading.tsx`
-- `app/error.tsx`
 - `status.md`
 
 ## Current blocker
@@ -54,4 +58,4 @@ AI Automation CRM / Lead Generation Dashboard
 - The CRM still has several dense operational surfaces that should be improved incrementally rather than with a broad redesign.
 
 ## Next step
-- If you want the next visible upgrade, move from the global shell to campaigns or inbox/review as the next route-level pass.
+- Inspect the campaigns routes in a browser, then decide whether the import flow or campaign edit form needs a follow-up pass.

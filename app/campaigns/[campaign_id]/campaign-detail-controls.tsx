@@ -35,16 +35,27 @@ export function CampaignDetailControls({
   const nextStatus: "active" | "paused" = status === "active" ? "paused" : "active";
 
   return (
-    <div className="grid gap-3">
-      <div className="button-row">
+    <div className="campaign-controls-stack">
+      <div className="campaign-controls-primary">
         <Button
           type="button"
-          disabled={isPending || manualRunBlocked}
+          disabled={isPending || manualRunBlocked || isArchived}
           onClick={() => runAction(() => triggerCampaignManualRun(campaignId))}
         >
-          {isPending ? "Working..." : "Trigger manual n8n discovery run"}
+          {isArchived ? "Archived" : manualRunBlocked ? "Readiness blocked" : isPending ? "Working..." : "Trigger manual discovery run"}
         </Button>
-        <a className="ui-button ui-button-secondary" href={`/campaigns/${campaignId}/import`}>Import leads</a>
+        <p className="campaign-controls-note">
+          {isArchived
+            ? "Archived campaigns keep history but cannot be run again."
+            : manualRunBlocked
+            ? "Run readiness is blocking manual execution. Clear the blockers above before re-running."
+            : "Manual discovery respects the campaign readiness checks and current global pause state."}
+        </p>
+      </div>
+      <div className="campaign-controls-secondary">
+        <a className="ui-button ui-button-secondary" href={`/campaigns/${campaignId}/import`}>
+          Import leads
+        </a>
         {!isArchived ? (
           <Button
             type="button"
@@ -59,14 +70,13 @@ export function CampaignDetailControls({
           type="button"
           variant="secondary"
           disabled={isPending}
-          onClick={() => runAction(
-            () => duplicateCampaignAction(campaignId),
-            (newCampaignId) => {
+          onClick={() =>
+            runAction(() => duplicateCampaignAction(campaignId), (newCampaignId) => {
               if (typeof newCampaignId === "string") {
                 window.location.href = `/campaigns/${newCampaignId}`;
               }
-            }
-          )}
+            })
+          }
         >
           Duplicate
         </Button>
