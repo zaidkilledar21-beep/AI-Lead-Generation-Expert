@@ -37,7 +37,7 @@ function buildHref(
     q?: string;
   }>
 ) {
-  const url = new URL(base, "http://local");
+  const url = new URL(base, "https://local");
   if (params.status) url.searchParams.set("status", params.status);
   if (params.source) url.searchParams.set("source", params.source);
   if (params.q) url.searchParams.set("q", params.q);
