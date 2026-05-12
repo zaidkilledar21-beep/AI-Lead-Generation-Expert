@@ -7,12 +7,13 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Implementing the Campaigns experience overhaul for the CRM.
+- Completed the Inbox + Review Queue UI overhaul for the CRM.
 
 ## Current module / PR
-- Frontend UI upgrade implementation, with the Campaigns overhaul as the active PR.
+- Frontend UI upgrade implementation, with the Inbox + Review overhaul as the active PR.
 
 ## Last completed work
+- Materially overhauled the Inbox and Review Queue experience with a premium control-center header, clearer filter/tabs hierarchy, more expressive triage cards, stronger reply/workspace context, and premium empty states.
 - Materially overhauled the Campaigns experience with a premium discovery-control hero, saved-view quick filters, card-based roster scanning, a higher-clarity detail workspace, stronger readiness framing, and Campaigns-only loading/error shells.
 - Materially overhauled the CRM Lead Detail UI/UX, introducing a high-impact "Lead Hero" summary, re-grouping dense information into clearer "Identity & Profile" and "Scoring & Hypothesis" sections, and refining the timeline into a premium activity feed.
 - Refined the Sticky Action Bar and Draft Review Editor for better hierarchy, clarity, and enterprise-grade polish (inspired by Notion, Linear, and Stripe).
@@ -30,14 +31,12 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
-- `plans/campaigns-ui-overhaul.md`
-- `app/campaigns/page.tsx`
-- `app/campaigns/[campaign_id]/page.tsx`
-- `app/campaigns/[campaign_id]/campaign-detail-controls.tsx`
-- `app/campaigns/new/page.tsx`
-- `app/campaigns/loading.tsx`
-- `app/campaigns/error.tsx`
-- `app/globals.css`
+- `plans/inbox-review-ui-overhaul.md`
+- `app/inbox/page.tsx`
+- `components/crm/inbox-view.tsx`
+- `app/review/page.tsx`
+- `components/crm/review-board.tsx`
+- `components/crm/draft-review-editor.tsx`
 - `status.md`
 
 ## Current blocker
@@ -53,9 +52,9 @@ AI Automation CRM / Lead Generation Dashboard
 - Next.js emitted a deprecation warning for `middleware.ts` during build, but this was not changed in the shell pass
 
 ## Known risks
-- The global shell pass should stay tightly scoped so it does not reopen the broader route-level work.
+- The inbox/review overhaul should stay tightly scoped so it does not reopen the broader route-level work.
 - `graphify` CLI access is currently blocked in this workspace by a readonly SQLite database error.
 - The CRM still has several dense operational surfaces that should be improved incrementally rather than with a broad redesign.
 
 ## Next step
-- Inspect the campaigns routes in a browser, then decide whether the import flow or campaign edit form needs a follow-up pass.
+- Browser QA the Inbox and Review routes, then decide whether the next pass should target analytics/settings or additional shared polish.
