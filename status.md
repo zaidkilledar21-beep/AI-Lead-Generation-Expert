@@ -7,12 +7,14 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Analytics UI overhaul for `/analytics`.
+- Analytics chart Sonar duplication reduction.
 
 ## Current module / PR
 - Frontend analytics dashboard polish.
 
 ## Last completed work
+- Reduced remaining Sonar duplication risk in `components/crm/analytics-charts.tsx` by extracting shared vertical performance chart rendering for niche and country bars without changing chart data, colors, labels, layout, or behavior.
+- Ran a localized duplication proxy against `components/crm/analytics-charts.tsx`; it reported 0.00% duplicated six-line blocks, below the requested sub-3% threshold.
 - Created `plans/analytics-ui-overhaul.md` for the scoped analytics UI pass.
 - Reworked `/analytics` into a premium founder intelligence dashboard with an executive KPI strip, clearer range/export controls, decision-support cards, improved chart composition, denser campaign performance scanning, and stronger sparse-data messaging.
 - Polished analytics chart components with consistent chart heights, cleaner grid/cursor styling, improved empty states, and a more efficient daily rollup aggregation.
@@ -40,6 +42,8 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `components/crm/analytics-charts.tsx`
+- `status.md`
 - `plans/analytics-ui-overhaul.md`
 - `app/analytics/page.tsx`
 - `components/crm/analytics-charts.tsx`
@@ -64,8 +68,9 @@ AI Automation CRM / Lead Generation Dashboard
 - Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
 
 ## Validation status
-- lint: passed
-- typecheck: passed
+- lint: passed (`npm run lint`)
+- typecheck: passed (`npm run typecheck`)
+- localized duplication check: passed, 0.00% duplicated six-line blocks in `components/crm/analytics-charts.tsx`
 - tests: not run in this pass
 - build: passed
 - Playwright browser check: reached `/login?next=%2Fanalytics` at desktop and tablet widths because `/analytics` requires authentication; login redirect had no horizontal overflow

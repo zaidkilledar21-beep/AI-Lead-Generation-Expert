@@ -27,6 +27,14 @@ const BAR_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
 const HORIZONTAL_BAR_RADIUS: [number, number, number, number] = [0, 4, 4, 0];
 const ANIMATION_DURATION = 1200;
 
+type VerticalBar = {
+  dataKey: string;
+  name: string;
+  fill: string;
+};
+
+type VerticalChartRow = Record<string, string | number>;
+
 function LegendLabel(value: string) {
   return <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">{value}</span>;
 }
@@ -43,6 +51,36 @@ function ChartFrame({ children }: Readonly<{ children: ReactNode }>) {
 
 function ChartGrid({ horizontal }: Readonly<{ horizontal?: boolean }>) {
   return <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} horizontal={horizontal} vertical={false} />;
+}
+
+function VerticalPerformanceChart({
+  data,
+  bars
+}: Readonly<{
+  data: VerticalChartRow[];
+  bars: VerticalBar[];
+}>) {
+  return (
+    <ChartFrame>
+      <BarChart layout="vertical" data={data} margin={{ top: 14, right: 28, left: 42, bottom: 0 }}>
+        <ChartGrid horizontal={true} />
+        <XAxis type="number" stroke="#A1A1AA" fontSize={10} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="name" stroke="#A1A1AA" fontSize={10} tickLine={false} axisLine={false} width={80} />
+        <Tooltip content={<GlassTooltip />} cursor={BAR_CURSOR} />
+        {bars.map((bar) => (
+          <Bar
+            key={bar.dataKey}
+            dataKey={bar.dataKey}
+            name={bar.name}
+            fill={bar.fill}
+            radius={HORIZONTAL_BAR_RADIUS}
+            animationDuration={ANIMATION_DURATION}
+            barSize={12}
+          />
+        ))}
+      </BarChart>
+    </ChartFrame>
+  );
 }
 
 interface AggregatedDailyData {
@@ -190,19 +228,13 @@ export const NichePerformanceBar = memo(function NichePerformanceBar({ data }: R
 
   if (chartData.length === 0) return <EmptyChart label="No active campaigns have lead activity in this range." />;
 
-  return (
-    <ChartFrame>
-      <BarChart layout="vertical" data={chartData} margin={{ top: 14, right: 28, left: 42, bottom: 0 }}>
-        <ChartGrid horizontal={true} />
-        <XAxis type="number" stroke="#A1A1AA" fontSize={10} tickLine={false} axisLine={false} />
-        <YAxis type="category" dataKey="name" stroke="#A1A1AA" fontSize={10} tickLine={false} axisLine={false} width={80} />
-        <Tooltip content={<GlassTooltip />} cursor={BAR_CURSOR} />
-        <Bar dataKey="replies" name="Total Replies" fill="#8B5CF6" radius={HORIZONTAL_BAR_RADIUS} animationDuration={ANIMATION_DURATION} barSize={12} />
-        <Bar dataKey="positive" name="Positive" fill="#10B981" radius={HORIZONTAL_BAR_RADIUS} animationDuration={ANIMATION_DURATION} barSize={12} />
-      </BarChart>
-    </ChartFrame>
-  );
+  return <VerticalPerformanceChart data={chartData} bars={NICHE_PERFORMANCE_BARS} />;
 });
+
+const NICHE_PERFORMANCE_BARS: VerticalBar[] = [
+  { dataKey: "replies", name: "Total Replies", fill: "#8B5CF6" },
+  { dataKey: "positive", name: "Positive", fill: "#10B981" }
+];
 
 export const CountryPerformanceBar = memo(function CountryPerformanceBar({ data }: Readonly<{ data: CountryData[] }>) {
   const chartData = useMemo(
@@ -218,19 +250,13 @@ export const CountryPerformanceBar = memo(function CountryPerformanceBar({ data 
 
   if (chartData.length === 0) return <EmptyChart label="No active campaigns have lead activity in this range." />;
 
-  return (
-    <ChartFrame>
-      <BarChart layout="vertical" data={chartData} margin={{ top: 14, right: 28, left: 42, bottom: 0 }}>
-        <ChartGrid horizontal={true} />
-        <XAxis type="number" stroke="#A1A1AA" fontSize={10} tickLine={false} axisLine={false} />
-        <YAxis type="category" dataKey="name" stroke="#A1A1AA" fontSize={10} tickLine={false} axisLine={false} width={80} />
-        <Tooltip content={<GlassTooltip />} cursor={BAR_CURSOR} />
-        <Bar dataKey="leads" name="Leads" fill="#3B82F6" radius={HORIZONTAL_BAR_RADIUS} animationDuration={ANIMATION_DURATION} barSize={12} />
-        <Bar dataKey="replies" name="Replies" fill="#10B981" radius={HORIZONTAL_BAR_RADIUS} animationDuration={ANIMATION_DURATION} barSize={12} />
-      </BarChart>
-    </ChartFrame>
-  );
+  return <VerticalPerformanceChart data={chartData} bars={COUNTRY_PERFORMANCE_BARS} />;
 });
+
+const COUNTRY_PERFORMANCE_BARS: VerticalBar[] = [
+  { dataKey: "leads", name: "Leads", fill: "#3B82F6" },
+  { dataKey: "replies", name: "Replies", fill: "#10B981" }
+];
 
 function EmptyChart({ label }: Readonly<{ label: string }>) {
   return (
