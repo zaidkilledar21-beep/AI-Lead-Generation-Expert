@@ -7,12 +7,19 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Precision layout/alignment polish for Inbox + Review Queue.
+- Analytics UI overhaul for `/analytics`.
 
 ## Current module / PR
-- Frontend UI upgrade implementation, with the Inbox + Review layout-polish pass active after the Sonar duplication fix.
+- Frontend analytics dashboard polish.
 
 ## Last completed work
+- Created `plans/analytics-ui-overhaul.md` for the scoped analytics UI pass.
+- Reworked `/analytics` into a premium founder intelligence dashboard with an executive KPI strip, clearer range/export controls, decision-support cards, improved chart composition, denser campaign performance scanning, and stronger sparse-data messaging.
+- Polished analytics chart components with consistent chart heights, cleaner grid/cursor styling, improved empty states, and a more efficient daily rollup aggregation.
+- Tightened analytics filters and diagnostics into compact operator-style control/telemetry surfaces.
+- Refreshed `graphify-out/graph.json` and `graphify-out/GRAPH_REPORT.md` with the current codebase state via `graphify update .`.
+- Re-exported `docs/obsidian-vault/10_Graphify/` from the refreshed graph with `scripts/export_graphify_to_obsidian.py`.
+- Confirmed the updated graph and Obsidian layer capture the shared shell, campaigns, inbox, and review route/component relationships.
 - Tightened the Inbox and Review Queue layout geometry: header controls now live inside the shared triage summary shell, inbox/review panels stretch more evenly, review queue metadata cards are balanced, and the inbox timeline is denser with clearer anchoring.
 - Extracted a shared `TriageSummaryHeader` component for the Inbox and Review route hero/stat blocks to remove Sonar-flagged duplication without changing UX or behavior.
 - Materially overhauled the Inbox and Review Queue experience with a premium control-center header, clearer filter/tabs hierarchy, more expressive triage cards, stronger reply/workspace context, and premium empty states.
@@ -33,6 +40,15 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `plans/analytics-ui-overhaul.md`
+- `app/analytics/page.tsx`
+- `components/crm/analytics-charts.tsx`
+- `components/crm/analytics-filters.tsx`
+- `components/crm/analytics-diagnostics-panel.tsx`
+- `status.md`
+- `graphify-out/graph.json`
+- `graphify-out/GRAPH_REPORT.md`
+- `docs/obsidian-vault/10_Graphify/Graphify Index.md`
 - `plans/inbox-review-layout-polish.md`
 - `components/crm/triage/triage-summary-header.tsx`
 - `plans/inbox-review-duplication-fix.md`
@@ -45,21 +61,22 @@ AI Automation CRM / Lead Generation Dashboard
 - `status.md`
 
 ## Current blocker
-- Build validation is blocked by an environment-level `spawn EPERM` failure after Next.js compiles.
+- Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
 
 ## Validation status
 - lint: passed
 - typecheck: passed
 - tests: not run in this pass
-- build: failed after compile with `spawn EPERM`
-- Graphify CLI queries were previously blocked by `SqliteError: attempt to write a readonly database`
-- Graphify JSON and the generated design-system docs were used to shortlist the route/component set for the plan and implementation
-- Next.js emitted a deprecation warning for `middleware.ts` during build, but this was not changed in the shell pass
+- build: passed
+- Playwright browser check: reached `/login?next=%2Fanalytics` at desktop and tablet widths because `/analytics` requires authentication; login redirect had no horizontal overflow
+- Playwright setup: installed the missing Chromium browser binary with `npx playwright install chromium`
+- Graphify update/export: not run after this analytics UI change
+- Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
-- The inbox/review overhaul should stay tightly scoped so it does not reopen the broader route-level work.
-- `graphify` CLI access is currently blocked in this workspace by a readonly SQLite database error.
+- The authenticated analytics layout still needs a browser pass with a valid dashboard session to visually confirm real data density and chart/table alignment.
 - The CRM still has several dense operational surfaces that should be improved incrementally rather than with a broad redesign.
+- Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
-- Run browser QA on `/inbox` and `/review` at desktop and tablet widths, then rerun Sonar/quality gate checks if needed.
+- Run authenticated browser QA on `/analytics`, then refresh Graphify and the Obsidian Graphify layer if the analytics structure is accepted.
