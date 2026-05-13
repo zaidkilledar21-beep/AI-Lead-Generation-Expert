@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChangeEvent, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { CrmDateField } from "@/components/ui/crm-date-field";
 import { CrmSelect } from "@/components/ui/crm-select";
@@ -15,7 +16,7 @@ export function AnalyticsFilters({
 }>) {
   const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const params = new URLSearchParams();
@@ -31,10 +32,10 @@ export function AnalyticsFilters({
     router.push(`/analytics?${params.toString()}`);
   };
 
-  const handleAutoSubmit = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleAutoSubmit = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const form = e.target.form;
     if (form) {
-      // If it's the 'days' preset, clear custom dates
+      // Preset changes should not keep stale custom date inputs.
       if (e.target.name === "days") {
         const fromInput = form.querySelector('input[name="from"]') as HTMLInputElement;
         const toInput = form.querySelector('input[name="to"]') as HTMLInputElement;
@@ -46,32 +47,37 @@ export function AnalyticsFilters({
   };
 
   return (
-    <form className="flex flex-wrap items-end gap-4" onSubmit={handleSubmit}>
-      <div className="flex flex-wrap items-end gap-3">
-        <span className="field-label mb-3">Custom Range</span>
-        <CrmDateField
-          name="from"
-          defaultValue={from}
-          placeholder="Start date"
-          className="w-48"
-          onChange={handleAutoSubmit}
-        />
-        <span className="text-white/20">to</span>
-        <CrmDateField
-          name="to"
-          defaultValue={to}
-          placeholder="End date"
-          className="w-48"
-          onChange={handleAutoSubmit}
-        />
+    <form
+      className="flex w-full flex-col gap-3 rounded-lg border border-white/10 bg-black/20 p-3 md:w-auto md:flex-row md:items-end"
+      onSubmit={handleSubmit}
+    >
+      <div className="grid gap-2">
+        <span className="field-label">Custom range</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <CrmDateField
+            name="from"
+            defaultValue={from}
+            placeholder="Start date"
+            className="w-full sm:w-40"
+            onChange={handleAutoSubmit}
+          />
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-white/25">to</span>
+          <CrmDateField
+            name="to"
+            defaultValue={to}
+            placeholder="End date"
+            className="w-full sm:w-40"
+            onChange={handleAutoSubmit}
+          />
+        </div>
       </div>
-      <div className="hidden h-10 w-px bg-white/10 md:block" />
-      <div className="flex flex-wrap items-end gap-3">
-        <span className="field-label mb-3">Presets</span>
+      <div className="hidden h-14 w-px bg-white/10 md:block" />
+      <div className="grid gap-2">
+        <span className="field-label">Preset</span>
         <CrmSelect
-          name="days" 
+          name="days"
           defaultValue={days > 90 ? "all" : String(days)}
-          className="w-40"
+          className="w-full sm:w-40"
           options={[
             ...[7, 14, 30, 60, 90].map((value) => ({ value: String(value), label: `${value} days` })),
             { value: "all", label: "All time" }

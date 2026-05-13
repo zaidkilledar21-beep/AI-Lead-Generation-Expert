@@ -29,14 +29,17 @@ export function AnalyticsDiagnosticsPanel({
 
   return (
     <section className="panel glass-panel mt-6">
-      <div className="panel-header">
-        <h2>Analytics diagnostics</h2>
+      <div className="panel-header items-start">
+        <div>
+          <h2>Analytics diagnostics</h2>
+          <p>Freshness checks for the data feeding this dashboard.</p>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-3 md:divide-x md:divide-y-0">
         {rows.map(([label, value]) => (
-          <div key={label} className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-white/35">{label}</div>
-            <div className="mt-2 text-sm font-semibold text-white/85">{formatDiagnosticValue(value)}</div>
+          <div key={label} className="min-h-[92px] bg-white/[0.012] p-4">
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">{label}</div>
+            <div className="mt-2 text-sm font-semibold leading-6 text-white/85">{formatDiagnosticValue(value)}</div>
           </div>
         ))}
       </div>
