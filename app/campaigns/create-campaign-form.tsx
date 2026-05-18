@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useState, useTransition, type ChangeEvent, type FormEvent } from "react";
+import { useFormState } from "react-dom";
 import { createCampaign } from "./actions";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, ChevronLeft, CheckCircle2, Rocket, Target, Settings, Info, AlertCircle } from "lucide-react";
@@ -11,8 +11,7 @@ import { CrmDateField } from "@/components/ui/crm-date-field";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { toBandSequenceOptions, toInboxOptions } from "./select-options";
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
+function SubmitButton({ pending }: Readonly<{ pending: boolean }>) {
   return (
     <button 
       className="ui-button ui-button-primary px-8 h-12 text-base font-bold shadow-brand/30 shadow-lg w-full md:w-auto" 
@@ -48,6 +47,195 @@ const previewSchema = z.object({
 
 type PreviewData = z.infer<typeof previewSchema>;
 
+type CampaignWizardState = {
+  name: string;
+  status: string;
+  description: string;
+  assigned_inbox_id: string;
+  tags: string;
+  notes: string;
+  primary_niche: string;
+  lead_source: string;
+  niche_keywords: string;
+  target_countries: string;
+  target_cities: string;
+  exclude_cities: string;
+  language_of_business: string;
+  min_score_band_a: string;
+  sequence_band_a: string;
+  min_score_band_b: string;
+  sequence_band_b: string;
+  sequence_band_c: string;
+  confidence_required: string;
+  min_google_rating: string;
+  min_review_count: string;
+  min_automation_opportunity: string;
+  min_ability_to_pay: string;
+  min_reachability: string;
+  run_frequency: string;
+  next_run_at: string;
+  max_leads_per_run: string;
+  max_candidates_per_day: string;
+  max_details_calls_per_day: string;
+  max_total_places_calls_per_day: string;
+  exclude_chains: boolean;
+  exclude_already_discovered: boolean;
+  auto_approve_band_b: boolean;
+  require_approval_band_a: boolean;
+  crawl_website: boolean;
+  timezone: string;
+};
+
+const initialCampaignState: CampaignWizardState = {
+  name: "",
+  status: "draft",
+  description: "",
+  assigned_inbox_id: "",
+  tags: "",
+  notes: "",
+  primary_niche: "",
+  lead_source: "google_places",
+  niche_keywords: "",
+  target_countries: "",
+  target_cities: "",
+  exclude_cities: "",
+  language_of_business: "",
+  min_score_band_a: "76",
+  sequence_band_a: "",
+  min_score_band_b: "51",
+  sequence_band_b: "",
+  sequence_band_c: "",
+  confidence_required: "medium",
+  min_google_rating: "3.5",
+  min_review_count: "5",
+  min_automation_opportunity: "13",
+  min_ability_to_pay: "9",
+  min_reachability: "6",
+  run_frequency: "manual",
+  next_run_at: "",
+  max_leads_per_run: "100",
+  max_candidates_per_day: "75",
+  max_details_calls_per_day: "100",
+  max_total_places_calls_per_day: "150",
+  exclude_chains: false,
+  exclude_already_discovered: true,
+  auto_approve_band_b: false,
+  require_approval_band_a: true,
+  crawl_website: true,
+  timezone: "Asia/Karachi"
+};
+
+const textFieldNames = [
+  "name",
+  "status",
+  "description",
+  "assigned_inbox_id",
+  "tags",
+  "notes",
+  "primary_niche",
+  "lead_source",
+  "niche_keywords",
+  "target_countries",
+  "target_cities",
+  "exclude_cities",
+  "language_of_business",
+  "min_score_band_a",
+  "sequence_band_a",
+  "min_score_band_b",
+  "sequence_band_b",
+  "sequence_band_c",
+  "confidence_required",
+  "min_google_rating",
+  "min_review_count",
+  "min_automation_opportunity",
+  "min_ability_to_pay",
+  "min_reachability",
+  "run_frequency",
+  "next_run_at",
+  "max_leads_per_run",
+  "max_candidates_per_day",
+  "max_details_calls_per_day",
+  "max_total_places_calls_per_day",
+  "timezone"
+] as const;
+
+const booleanFieldNames = [
+  "exclude_chains",
+  "exclude_already_discovered",
+  "auto_approve_band_b",
+  "require_approval_band_a",
+  "crawl_website"
+] as const;
+
+type TextFieldName = (typeof textFieldNames)[number];
+type BooleanFieldName = (typeof booleanFieldNames)[number];
+
+function buildCampaignFormData(values: CampaignWizardState) {
+  const formData = new FormData();
+  textFieldNames.forEach((field) => formData.set(field, values[field]));
+  booleanFieldNames.forEach((field) => formData.set(field, values[field] ? "on" : "off"));
+  return formData;
+}
+
+function toPreviewData(values: CampaignWizardState): PreviewData {
+  return {
+    name: values.name,
+    status: values.status,
+    primary_niche: values.primary_niche,
+    target_countries: values.target_countries,
+    run_frequency: values.run_frequency,
+    max_leads_per_run: values.max_leads_per_run,
+    lead_source: values.lead_source
+  };
+}
+
+function positiveIntegerInRange(value: string, min: number, max: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max;
+}
+
+function numberInRange(value: string, min: number, max: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max;
+}
+
+function validateStep(step: number, values: CampaignWizardState): string | null {
+  if (step === 1) {
+    if (!values.name.trim()) return "Campaign name is required.";
+    return null;
+  }
+
+  if (step === 2) {
+    if (!values.primary_niche.trim()) return "Primary niche is required.";
+    if (!values.target_countries.trim()) return "Target countries are required.";
+    if (!values.lead_source.trim()) return "Lead source is required.";
+    return null;
+  }
+
+  if (step === 3) {
+    if (!numberInRange(values.min_score_band_a, 0, 100)) return "Min score for Band A must be between 0 and 100.";
+    if (!numberInRange(values.min_score_band_b, 0, 100)) return "Min score for Band B must be between 0 and 100.";
+    if (Number(values.min_score_band_b) > Number(values.min_score_band_a)) return "Min score for Band B cannot exceed Band A.";
+    if (!numberInRange(values.min_google_rating, 0, 5)) return "Min Google rating must be between 0 and 5.";
+    if (!numberInRange(values.min_review_count, 0, Number.MAX_SAFE_INTEGER)) return "Min review count must be zero or greater.";
+    if (!numberInRange(values.min_automation_opportunity, 0, 20)) return "Min automation opportunity must be between 0 and 20.";
+    if (!numberInRange(values.min_ability_to_pay, 0, 15)) return "Min ability to pay must be between 0 and 15.";
+    if (!numberInRange(values.min_reachability, 0, 10)) return "Min reachability must be between 0 and 10.";
+    return null;
+  }
+
+  if (step === 4) {
+    if (!values.run_frequency.trim()) return "Run frequency is required.";
+    if (!positiveIntegerInRange(values.max_leads_per_run, 1, 1000)) return "Max leads per run must be between 1 and 1000.";
+    if (!positiveIntegerInRange(values.max_candidates_per_day, 1, 75)) return "Max candidates per day must be between 1 and 75.";
+    if (!positiveIntegerInRange(values.max_details_calls_per_day, 1, 100)) return "Max Places details calls per day must be between 1 and 100.";
+    if (!positiveIntegerInRange(values.max_total_places_calls_per_day, 1, 150)) return "Max total Places calls per day must be between 1 and 150.";
+    return null;
+  }
+
+  return [1, 2, 3, 4].map((stepNumber) => validateStep(stepNumber, values)).find(Boolean) ?? null;
+}
+
 export function CreateCampaignForm({
   sequences = [],
   inboxes = [],
@@ -58,62 +246,79 @@ export function CreateCampaignForm({
   profiles?: Array<{ user_id: string }>;
 }>) {
   const [state, action] = useFormState(createCampaign, { error: null as string | null });
+  const [isPending, startTransition] = useTransition();
   const [currentStep, setCurrentStep] = useState(1);
+  const [formValues, setFormValues] = useState<CampaignWizardState>(initialCampaignState);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const activeInboxes = inboxes.filter((inbox) => inbox.active === true);
   const activeSequences = sequences.filter((sequence) => sequence.active === true);
   const inboxOptions = toInboxOptions(activeInboxes);
   const bandAOptions = toBandSequenceOptions(activeSequences, "A");
   const bandBOptions = toBandSequenceOptions(activeSequences, "B");
   const bandCOptions = toBandSequenceOptions(activeSequences, "C");
-  
-  // Basic validation before advancing
-  const handleNext = () => {
-    if (formRef.current) {
-      setValidationError(null);
-      // Trigger HTML5 validation for inputs in the current view
-      const inputs = formRef.current.querySelectorAll(`[data-step="${currentStep}"] input[required], [data-step="${currentStep}"] select[required], [data-step="${currentStep}"] textarea[required]`);
-      let isValid = true;
-      inputs.forEach((input) => {
-        if (!(input as HTMLInputElement).checkValidity()) {
-          (input as HTMLInputElement).reportValidity();
-          isValid = false;
-        }
-      });
+  const updateField = (name: TextFieldName, value: string) => {
+    setFormValues((current) => ({ ...current, [name]: value }));
+    setValidationError(null);
+  };
 
-      if (isValid) {
-        if (currentStep === 4) {
-          // On last step before review, validate with Zod and generate preview data
-          const formData = new FormData(formRef.current);
-          const data = {
-            name: formData.get("name") as string,
-            status: formData.get("status") as string,
-            primary_niche: formData.get("primary_niche") as string,
-            target_countries: formData.get("target_countries") as string,
-            run_frequency: formData.get("run_frequency") as string,
-            max_leads_per_run: formData.get("max_leads_per_run") as string,
-            lead_source: formData.get("lead_source") as string,
-          };
-          
-          const result = previewSchema.safeParse(data);
-          if (!result.success) {
-            setValidationError(result.error.issues[0].message);
-            return;
-          }
-          setPreviewData(result.data);
-        }
-        
-        setCurrentStep(s => Math.min(STEPS.length, s + 1));
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
+  const updateTextInput = (name: TextFieldName) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    updateField(name, event.target.value);
+  };
+
+  const updateBooleanField = (name: BooleanFieldName) => (event: ChangeEvent<HTMLInputElement>) => {
+    setFormValues((current) => ({ ...current, [name]: event.target.checked }));
+    setValidationError(null);
+  };
+
+  const handleNext = () => {
+    setValidationError(null);
+    const error = validateStep(currentStep, formValues);
+    if (error) {
+      setValidationError(error);
+      return;
     }
+
+    if (currentStep === 4) {
+      const result = previewSchema.safeParse(toPreviewData(formValues));
+      if (!result.success) {
+        setValidationError(result.error.issues[0].message);
+        return;
+      }
+      setPreviewData(result.data);
+    }
+
+    setCurrentStep((step) => Math.min(STEPS.length, step + 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handlePrev = () => {
     setValidationError(null);
     setCurrentStep(s => Math.max(1, s - 1));
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isPending) return;
+
+    const error = validateStep(5, formValues);
+    if (error) {
+      setValidationError(error);
+      return;
+    }
+
+    const result = previewSchema.safeParse(toPreviewData(formValues));
+    if (!result.success) {
+      setValidationError(result.error.issues[0].message);
+      return;
+    }
+
+    setPreviewData(result.data);
+    setValidationError(null);
+    const formData = buildCampaignFormData(formValues);
+    startTransition(() => {
+      action(formData);
+    });
   };
 
   return (
@@ -149,8 +354,7 @@ export function CreateCampaignForm({
       </div>
 
       <div className="panel mt-16 p-6 md:p-8">
-        <form action={action} ref={formRef} className="form">
-          <input name="timezone" type="hidden" value="Asia/Karachi" />
+        <form onSubmit={handleSubmit} className="form">
           
           <AnimatePresence mode="wait">
             {currentStep === 1 && (
@@ -167,13 +371,14 @@ export function CreateCampaignForm({
                 <div className="form-grid">
                   <label className="field-group">
                     <span className="field-label">Campaign name *</span>
-                    <input name="name" required placeholder="Dubai Dental Clinics - May" className="field" />
+                    <input name="name" required value={formValues.name} onChange={updateTextInput("name")} placeholder="Dubai Dental Clinics - May" className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Status</span>
                     <CrmSelect
                       name="status"
-                      defaultValue="draft"
+                      defaultValue={formValues.status}
+                      onValueChange={(value) => updateField("status", value)}
                       options={[
                         { value: "draft", label: "Draft", description: "Save configuration without running discovery." },
                         { value: "active", label: "Active", description: "Active campaigns are eligible for scheduled or manual n8n discovery runs." },
@@ -183,13 +388,14 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group col-span-2 md:col-span-1 lg:col-span-2">
                     <span className="field-label">Description</span>
-                    <textarea name="description" rows={3} placeholder="Internal notes, campaign intent, exclusions." className="field" />
+                    <textarea name="description" rows={3} value={formValues.description} onChange={updateTextInput("description")} placeholder="Internal notes, campaign intent, exclusions." className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Assigned inbox</span>
                     <CrmSelect
                       name="assigned_inbox_id"
-                      defaultValue=""
+                      defaultValue={formValues.assigned_inbox_id}
+                      onValueChange={(value) => updateField("assigned_inbox_id", value)}
                       placeholder="No fixed inbox"
                       emptyState="No sender inboxes configured."
                       options={inboxOptions}
@@ -198,11 +404,11 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Internal tags</span>
-                    <input name="tags" placeholder="e.g. Q2 push, high priority" className="field" />
+                    <input name="tags" value={formValues.tags} onChange={updateTextInput("tags")} placeholder="e.g. Q2 push, high priority" className="field" />
                   </label>
                   <label className="field-group col-span-2 md:col-span-1 lg:col-span-2">
                     <span className="field-label">Notes</span>
-                    <textarea name="notes" rows={2} placeholder="Anything the founders need to remember about this campaign." className="field" />
+                    <textarea name="notes" rows={2} value={formValues.notes} onChange={updateTextInput("notes")} placeholder="Anything the founders need to remember about this campaign." className="field" />
                   </label>
                 </div>
               </motion.div>
@@ -222,13 +428,14 @@ export function CreateCampaignForm({
                 <div className="form-grid">
                   <label className="field-group">
                     <span className="field-label">Primary niche *</span>
-                    <input name="primary_niche" required placeholder="Dental Clinics" className="field" />
+                    <input name="primary_niche" required value={formValues.primary_niche} onChange={updateTextInput("primary_niche")} placeholder="Dental Clinics" className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Lead source</span>
                     <CrmSelect
                       name="lead_source"
-                      defaultValue="google_places"
+                      defaultValue={formValues.lead_source}
+                      onValueChange={(value) => updateField("lead_source", value)}
                       options={[
                         { value: "google_places", label: "Google Places", description: "Primary source for local business discovery." },
                         { value: "manual_import", label: "Manual Import", description: "Reserved for uploaded or hand-curated leads." }
@@ -237,23 +444,23 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group col-span-2 md:col-span-1 lg:col-span-2">
                     <span className="field-label">Niche keywords</span>
-                    <textarea name="niche_keywords" rows={2} placeholder={"dentist\ndental surgery\northodontist"} className="field" />
+                    <textarea name="niche_keywords" rows={2} value={formValues.niche_keywords} onChange={updateTextInput("niche_keywords")} placeholder={"dentist\ndental surgery\northodontist"} className="field" />
                   </label>
                   <label className="field-group col-span-2 md:col-span-1 lg:col-span-2">
                     <span className="field-label">Target countries *</span>
-                    <textarea name="target_countries" rows={2} required placeholder={"UAE\nSaudi Arabia"} className="field" />
+                    <textarea name="target_countries" rows={2} required value={formValues.target_countries} onChange={updateTextInput("target_countries")} placeholder={"UAE\nSaudi Arabia"} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Target cities</span>
-                    <textarea name="target_cities" rows={3} placeholder={"Dubai\nAbu Dhabi"} className="field" />
+                    <textarea name="target_cities" rows={3} value={formValues.target_cities} onChange={updateTextInput("target_cities")} placeholder={"Dubai\nAbu Dhabi"} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Exclude cities</span>
-                    <textarea name="exclude_cities" rows={3} placeholder="Sharjah" className="field" />
+                    <textarea name="exclude_cities" rows={3} value={formValues.exclude_cities} onChange={updateTextInput("exclude_cities")} placeholder="Sharjah" className="field" />
                   </label>
                   <label className="field-group col-span-2 md:col-span-1 lg:col-span-2">
                     <span className="field-label">Business languages</span>
-                    <input name="language_of_business" placeholder="English, Arabic" className="field" />
+                    <input name="language_of_business" value={formValues.language_of_business} onChange={updateTextInput("language_of_business")} placeholder="English, Arabic" className="field" />
                   </label>
                 </div>
               </motion.div>
@@ -273,13 +480,14 @@ export function CreateCampaignForm({
                 <div className="form-grid">
                   <label className="field-group">
                     <span className="field-label">Min score for Band A</span>
-                    <input name="min_score_band_a" type="number" min="0" max="100" defaultValue="76" className="field" />
+                    <input name="min_score_band_a" type="number" min="0" max="100" value={formValues.min_score_band_a} onChange={updateTextInput("min_score_band_a")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Sequence for Band A</span>
                     <CrmSelect
                       name="sequence_band_a"
-                      defaultValue=""
+                      defaultValue={formValues.sequence_band_a}
+                      onValueChange={(value) => updateField("sequence_band_a", value)}
                       placeholder="Default workflow routing"
                       emptyState="No active Band A sequences found."
                       options={bandAOptions}
@@ -288,13 +496,14 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Min score for Band B</span>
-                    <input name="min_score_band_b" type="number" min="0" max="100" defaultValue="51" className="field" />
+                    <input name="min_score_band_b" type="number" min="0" max="100" value={formValues.min_score_band_b} onChange={updateTextInput("min_score_band_b")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Sequence for Band B</span>
                     <CrmSelect
                       name="sequence_band_b"
-                      defaultValue=""
+                      defaultValue={formValues.sequence_band_b}
+                      onValueChange={(value) => updateField("sequence_band_b", value)}
                       placeholder="Default workflow routing"
                       emptyState="No active Band B sequences found."
                       options={bandBOptions}
@@ -305,7 +514,8 @@ export function CreateCampaignForm({
                     <span className="field-label">Sequence for Band C</span>
                     <CrmSelect
                       name="sequence_band_c"
-                      defaultValue=""
+                      defaultValue={formValues.sequence_band_c}
+                      onValueChange={(value) => updateField("sequence_band_c", value)}
                       placeholder="Default workflow routing"
                       emptyState="No active Band C sequences found."
                       options={bandCOptions}
@@ -316,7 +526,8 @@ export function CreateCampaignForm({
                     <span className="field-label">Confidence required</span>
                     <CrmSelect
                       name="confidence_required"
-                      defaultValue="medium"
+                      defaultValue={formValues.confidence_required}
+                      onValueChange={(value) => updateField("confidence_required", value)}
                       options={[
                         { value: "low", label: "Low", description: "Allow lower-confidence candidates through scoring." },
                         { value: "medium", label: "Medium", description: "Balanced default for current workflow." },
@@ -331,23 +542,23 @@ export function CreateCampaignForm({
                   
                   <label className="field-group">
                     <span className="field-label">Min Google rating</span>
-                    <input name="min_google_rating" type="number" min="0" max="5" step="0.1" defaultValue="3.5" className="field" />
+                    <input name="min_google_rating" type="number" min="0" max="5" step="0.1" value={formValues.min_google_rating} onChange={updateTextInput("min_google_rating")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Min review count</span>
-                    <input name="min_review_count" type="number" min="0" defaultValue="5" className="field" />
+                    <input name="min_review_count" type="number" min="0" value={formValues.min_review_count} onChange={updateTextInput("min_review_count")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Min automation opportunity</span>
-                    <input name="min_automation_opportunity" type="number" min="0" max="20" defaultValue="13" className="field" />
+                    <input name="min_automation_opportunity" type="number" min="0" max="20" value={formValues.min_automation_opportunity} onChange={updateTextInput("min_automation_opportunity")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Min ability to pay</span>
-                    <input name="min_ability_to_pay" type="number" min="0" max="15" defaultValue="9" className="field" />
+                    <input name="min_ability_to_pay" type="number" min="0" max="15" value={formValues.min_ability_to_pay} onChange={updateTextInput("min_ability_to_pay")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Min reachability</span>
-                    <input name="min_reachability" type="number" min="0" max="10" defaultValue="6" className="field" />
+                    <input name="min_reachability" type="number" min="0" max="10" value={formValues.min_reachability} onChange={updateTextInput("min_reachability")} className="field" />
                   </label>
                 </div>
               </motion.div>
@@ -369,7 +580,8 @@ export function CreateCampaignForm({
                     <span className="field-label">Run frequency</span>
                     <CrmSelect
                       name="run_frequency"
-                      defaultValue="manual"
+                      defaultValue={formValues.run_frequency}
+                      onValueChange={(value) => updateField("run_frequency", value)}
                       options={[
                         { value: "manual", label: "Manual", description: "Founders trigger discovery explicitly." },
                         { value: "daily", label: "Daily", description: "Run discovery each day." },
@@ -380,46 +592,46 @@ export function CreateCampaignForm({
                   </label>
                   <label className="field-group">
                     <span className="field-label">Next scheduled run</span>
-                    <CrmDateField name="next_run_at" type="datetime-local" placeholder="Select date and time" />
+                    <CrmDateField name="next_run_at" type="datetime-local" defaultValue={formValues.next_run_at} onChange={(event) => updateField("next_run_at", event.target.value)} placeholder="Select date and time" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Max leads per run</span>
-                    <input name="max_leads_per_run" type="number" min="1" max="1000" defaultValue="100" className="field" />
+                    <input name="max_leads_per_run" type="number" min="1" max="1000" value={formValues.max_leads_per_run} onChange={updateTextInput("max_leads_per_run")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Max candidates/day</span>
-                    <input name="max_candidates_per_day" type="number" min="1" max="75" defaultValue="75" className="field" />
+                    <input name="max_candidates_per_day" type="number" min="1" max="75" value={formValues.max_candidates_per_day} onChange={updateTextInput("max_candidates_per_day")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Max Places details calls/day</span>
-                    <input name="max_details_calls_per_day" type="number" min="1" max="100" defaultValue="100" className="field" />
+                    <input name="max_details_calls_per_day" type="number" min="1" max="100" value={formValues.max_details_calls_per_day} onChange={updateTextInput("max_details_calls_per_day")} className="field" />
                   </label>
                   <label className="field-group">
                     <span className="field-label">Max total Places calls/day</span>
-                    <input name="max_total_places_calls_per_day" type="number" min="1" max="150" defaultValue="150" className="field" />
+                    <input name="max_total_places_calls_per_day" type="number" min="1" max="150" value={formValues.max_total_places_calls_per_day} onChange={updateTextInput("max_total_places_calls_per_day")} className="field" />
                   </label>
                 </div>
 
                 <div className="bg-black/20 p-4 rounded-xl border border-white/5 space-y-3">
                   <h3 className="text-sm font-semibold mb-4 text-white/80">Operational Flags</h3>
                   <label className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
-                    <input name="exclude_chains" type="checkbox" className="w-4 h-4 accent-brand rounded border-white/20" />
+                    <input name="exclude_chains" type="checkbox" checked={formValues.exclude_chains} onChange={updateBooleanField("exclude_chains")} className="w-4 h-4 accent-brand rounded border-white/20" />
                     <span className="text-sm">Exclude chains & franchises</span>
                   </label>
                   <label className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
-                    <input name="exclude_already_discovered" type="checkbox" defaultChecked className="w-4 h-4 accent-brand rounded border-white/20" />
+                    <input name="exclude_already_discovered" type="checkbox" checked={formValues.exclude_already_discovered} onChange={updateBooleanField("exclude_already_discovered")} className="w-4 h-4 accent-brand rounded border-white/20" />
                     <span className="text-sm">Exclude already discovered leads globally</span>
                   </label>
                   <label className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
-                    <input name="auto_approve_band_b" type="checkbox" className="w-4 h-4 accent-brand rounded border-white/20" />
+                    <input name="auto_approve_band_b" type="checkbox" checked={formValues.auto_approve_band_b} onChange={updateBooleanField("auto_approve_band_b")} className="w-4 h-4 accent-brand rounded border-white/20" />
                     <span className="text-sm">Auto-approve Band B leads</span>
                   </label>
                   <label className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
-                    <input name="require_approval_band_a" type="checkbox" defaultChecked className="w-4 h-4 accent-brand rounded border-white/20" />
+                    <input name="require_approval_band_a" type="checkbox" checked={formValues.require_approval_band_a} onChange={updateBooleanField("require_approval_band_a")} className="w-4 h-4 accent-brand rounded border-white/20" />
                     <span className="text-sm">Require manual approval for Band A</span>
                   </label>
                   <label className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
-                    <input name="crawl_website" type="checkbox" defaultChecked className="w-4 h-4 accent-brand rounded border-white/20" />
+                    <input name="crawl_website" type="checkbox" checked={formValues.crawl_website} onChange={updateBooleanField("crawl_website")} className="w-4 h-4 accent-brand rounded border-white/20" />
                     <span className="text-sm">Deep crawl websites during discovery phase</span>
                   </label>
                 </div>
@@ -497,19 +709,19 @@ export function CreateCampaignForm({
                   </div>
                 ) : null}
 
-                {validationError ? (
-                  <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 p-4 rounded-lg mb-6 flex items-center gap-3">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                    <p className="text-sm">{validationError}</p>
-                  </div>
-                ) : null}
-
                 <div className="flex justify-center">
-                  <SubmitButton />
+                  <SubmitButton pending={isPending} />
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
+
+          {validationError ? (
+            <div className="mt-8 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 p-4 rounded-lg flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">{validationError}</p>
+            </div>
+          ) : null}
 
           <div className="flex items-center justify-between mt-12 pt-6 border-t border-white/10">
             <Button
