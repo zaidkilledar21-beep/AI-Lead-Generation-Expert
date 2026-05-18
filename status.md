@@ -7,12 +7,20 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Analytics chart Sonar duplication reduction.
+- Phase 02 campaign creation verification.
 
 ## Current module / PR
-- Frontend analytics dashboard polish.
+- Campaign creation wizard.
 
 ## Last completed work
+- Verified the Create Campaign wizard payload against `app/campaigns/actions.ts`, `lib/app/campaigns.ts`, and `lib/contracts.ts`; all required, list, boolean, numeric, optional, and defaulted fields align with the server action parser.
+- Confirmed the final `Save Campaign` submit path calls the existing `createCampaign` server action via the complete state-built `FormData` payload.
+- Ran a minimal Playwright browser probe against `/campaigns/new`; unauthenticated access redirects to `/login?next=%2Fcampaigns%2Fnew`, so real campaign creation remains a manual authenticated QA step.
+- Found no confirmed blocking issue in campaign creation/persistence during static contract review and unauthenticated browser probing.
+- Fixed the Create New Campaign wizard so field values are stored in local controlled state across step navigation.
+- Replaced mounted-DOM `FormData` step validation with state-based step validation and final review validation.
+- Final campaign save now builds a complete `FormData` payload from wizard state, including CSV/list text fields, numeric strings, and explicit boolean `on`/`off` values expected by `createCampaign`.
+- Preserved existing wizard styling/layout and kept the final button label as `Save Campaign`.
 - Reduced remaining Sonar duplication risk in `components/crm/analytics-charts.tsx` by extracting shared vertical performance chart rendering for niche and country bars without changing chart data, colors, labels, layout, or behavior.
 - Ran a localized duplication proxy against `components/crm/analytics-charts.tsx`; it reported 0.00% duplicated six-line blocks, below the requested sub-3% threshold.
 - Created `plans/analytics-ui-overhaul.md` for the scoped analytics UI pass.
@@ -42,6 +50,8 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `app/campaigns/create-campaign-form.tsx`
+- `status.md`
 - `components/crm/analytics-charts.tsx`
 - `status.md`
 - `plans/analytics-ui-overhaul.md`
@@ -70,18 +80,22 @@ AI Automation CRM / Lead Generation Dashboard
 ## Validation status
 - lint: passed (`npm run lint`)
 - typecheck: passed (`npm run typecheck`)
+- build: passed (`npm run build`)
+- git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- browser/e2e QA: automated unauthenticated Playwright probe reached `/login?next=%2Fcampaigns%2Fnew`; authenticated campaign creation must be manual
+- manual campaign wizard QA: pending authenticated session
 - localized duplication check: passed, 0.00% duplicated six-line blocks in `components/crm/analytics-charts.tsx`
 - tests: not run in this pass
-- build: passed
 - Playwright browser check: reached `/login?next=%2Fanalytics` at desktop and tablet widths because `/analytics` requires authentication; login redirect had no horizontal overflow
 - Playwright setup: installed the missing Chromium browser binary with `npx playwright install chromium`
 - Graphify update/export: not run after this analytics UI change
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- No remaining confirmed campaign creation blocker from Phase 02, but campaign creation should still be manually checked in an authenticated browser session to confirm database creation and review payload values end to end.
 - The authenticated analytics layout still needs a browser pass with a valid dashboard session to visually confirm real data density and chart/table alignment.
 - The CRM still has several dense operational surfaces that should be improved incrementally rather than with a broad redesign.
 - Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
-- Run authenticated browser QA on `/analytics`, then refresh Graphify and the Obsidian Graphify layer if the analytics structure is accepted.
+- Run authenticated manual QA for `/campaigns/new`; if campaign creation succeeds, proceed to manual discovery testing/readiness checks in the next scoped phase.
