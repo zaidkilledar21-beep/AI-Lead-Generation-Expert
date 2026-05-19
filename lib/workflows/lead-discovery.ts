@@ -1241,7 +1241,7 @@ async function safeFinalizeDiscoveryRun(
       })
       .eq("id", runId);
 
-    return { status: fallback.error ? "failed" : "failed", stats: reconciledStats, finalized: !fallback.error };
+    return { status: "failed", stats: reconciledStats, finalized: !fallback.error };
   }
 
   await logDiscoveryCheckpoint({

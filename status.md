@@ -7,12 +7,18 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Phase 4 frontend run visibility and production QA support.
+- PR #42 Sonar cleanup for contact extraction regex hotspots and discovery finalization reliability.
 
 ## Current module / PR
 - Campaign manual discovery run path.
 
 ## Last completed work
+- Completed a surgical Sonar cleanup for PR #42 on `codex/pass-6-production-readiness`.
+- Replaced contact extraction's regex-heavy HTML, email, obfuscation, validation, trimming, and phone extraction paths with capped scanner/string helpers over crawled input.
+- Added a 400k-character contact scan cap and index-based stripping for comments plus `script`, `style`, `svg`, and `noscript` blocks.
+- Replaced `mailto:`, plain email, obfuscated email, punctuation trim, email validation, and phone extraction regex usage with bounded parsing and character-loop validation while preserving business-email rejection/ranking behavior.
+- Added focused contact extraction tests for visible, `mailto:`, obfuscated, asset-like email rejection, long hostile HTML, and normal phone extraction.
+- Removed the redundant `fallback.error ? "failed" : "failed"` conditional in discovery finalization fallback while preserving `status: "failed"`, reconciled stats, and `finalized: !fallback.error`.
 - Implemented `plans/04_frontend_run_visibility_prod_qa.md` with scoped frontend/query visibility changes.
 - Extended campaign row loading with bounded discovery run counters, latest WF-10 checkpoint summary, stale-running detection, pending manual review counts/reason, and queued/paused/blocked outreach counts.
 - Updated `/campaigns` cards to show latest run status, stale-running state, candidate/lead/manual-review/rejected counts, latest checkpoint summary, and queue/review counts.
@@ -92,6 +98,10 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `lib/workflows/contact-extraction.ts`
+- `tests/unit/contact-extraction.test.ts`
+- `lib/workflows/lead-discovery.ts`
+- `status.md`
 - `app/campaigns/page.tsx`
 - `app/campaigns/run-now-button.tsx`
 - `app/campaigns/[campaign_id]/page.tsx`
@@ -143,9 +153,10 @@ AI Automation CRM / Lead Generation Dashboard
 - Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
 
 ## Validation status
-- lint: passed (`npm run lint`) after Phase 4 frontend run visibility changes
-- typecheck: passed (`npm run typecheck`) after Phase 4 frontend run visibility changes
-- build: passed (`npm run build`) after Phase 4 frontend run visibility changes; Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- contact extraction focused test: passed (`npm test -- tests/unit/contact-extraction.test.ts`) after Sonar regex hotspot cleanup
+- lint: passed (`npm run lint`) after PR #42 Sonar cleanup
+- typecheck: passed (`npm run typecheck`) after PR #42 Sonar cleanup
+- build: passed (`npm run build`) after PR #42 Sonar cleanup; Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
 - git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
 - scoring/routing handoff validation: passed lint/typecheck/build/diff-check after DeepSeek timeout/retry, scoring failure isolation, and routing handoff changes
 - contact extraction focused test: passed (`npm test -- tests/unit/contact-extraction.test.ts`)
@@ -164,6 +175,8 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- Sonar should be re-run on PR #42 to confirm the four contact-extraction regex hotspots and the lead-discovery redundant conditional are cleared.
+- Contact extraction behavior is covered by focused unit tests, but production crawl diversity can still reveal edge cases in unusual obfuscation formats.
 - Graphify was stale for exact Phase 4 paths: `graphify explain` did not find `lib/crm/queries.ts` or `app/campaigns/run-now-button.tsx`, so the implementation used the requested graph commands first and then the smallest direct file shortlist.
 - The new campaign queue/manual-review counts use bounded relationship queries through `leads`; production QA should confirm those counts match SQL on live Supabase data.
 - Authenticated browser QA for the new `/campaigns` and campaign-detail run visibility still needs a real dashboard session.

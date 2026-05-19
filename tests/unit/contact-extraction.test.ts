@@ -8,25 +8,34 @@ import {
 } from "@/lib/workflows/contact-extraction";
 
 describe("contact extraction", () => {
-  it("extracts visible, mailto, and obfuscated emails while ignoring script/style junk", () => {
+  it("extracts normal visible emails while ignoring script/style junk", () => {
     const html = `
       <script>const asset = "tracking@example.com";</script>
       <style>.icon{background:url(info@example.org.png)}</style>
-      <a href="mailto:Sales@ClinicDubai.com?subject=Hi">email</a>
-      <p>hello [at] clinicdubai [dot] com</p>
       <p>support@clinicdubai.com</p>
     `;
 
-    expect(extractBusinessEmailsFromHtml(html)).toEqual([
-      "sales@clinicdubai.com",
-      "hello@clinicdubai.com",
-      "support@clinicdubai.com"
+    expect(extractBusinessEmailsFromHtml(html)).toEqual(["support@clinicdubai.com"]);
+  });
+
+  it("extracts mailto emails", () => {
+    expect(extractBusinessEmailsFromHtml('<a href="mailto:Sales@ClinicDubai.com?subject=Hi">email</a>')).toEqual([
+      "sales@clinicdubai.com"
+    ]);
+  });
+
+  it("extracts obfuscated emails", () => {
+    expect(extractBusinessEmailsFromHtml("<p>hello [at] clinicdubai [dot] com</p>")).toEqual([
+      "hello@clinicdubai.com"
     ]);
   });
 
   it("rejects malformed, placeholder, asset, and query-fragment emails", () => {
     expect(isValidBusinessEmail("person@example.com")).toBe(false);
     expect(isValidBusinessEmail("logo@brand.com.png")).toBe(false);
+    expect(isValidBusinessEmail("logo@2x.png")).toBe(false);
+    expect(isValidBusinessEmail("cropped-artboard@4x.jpg")).toBe(false);
+    expect(isValidBusinessEmail("icon@3x.webp")).toBe(false);
     expect(isValidBusinessEmail("sales@brand.com?subject=x")).toBe(false);
     expect(isValidBusinessEmail("sales@brand.c0m")).toBe(false);
     expect(isValidBusinessEmail("sales@brand.com")).toBe(true);
@@ -45,5 +54,12 @@ describe("contact extraction", () => {
     expect(normalizePhone("2024-01-01")).toBeNull();
     expect(normalizePhone("12345")).toBeNull();
     expect(extractPhonesFromHtml("<p>Call +971 (50) 123-4567</p>")).toEqual(["+971501234567"]);
+  });
+
+  it("does not hang on long hostile html", () => {
+    const hostile = `<script>${"<".repeat(300_000)}</script><p>contact@clinicdubai.com</p>`;
+    const started = Date.now();
+    expect(extractBusinessEmailsFromHtml(hostile)).toEqual(["contact@clinicdubai.com"]);
+    expect(Date.now() - started).toBeLessThan(250);
   });
 });
