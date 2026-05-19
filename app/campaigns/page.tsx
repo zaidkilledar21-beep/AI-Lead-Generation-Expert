@@ -4,7 +4,8 @@ import { CrmSelect } from "@/components/ui/crm-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MetricCard } from "@/components/ui/metric-card";
 import { getCampaignRows } from "@/lib/crm/queries";
-import { archiveCampaignAction, duplicateCampaignFormAction, triggerCampaignManualRun, updateCampaignStatus } from "./actions";
+import { archiveCampaignAction, duplicateCampaignFormAction, updateCampaignStatus } from "./actions";
+import { RunNowButton } from "./run-now-button";
 
 function statusTone(status: string) {
   if (status === "active") return "success" as const;
@@ -235,6 +236,8 @@ export default async function CampaignsPage({
                 const cities = campaign.targetCities.join(", ") || "All cities";
                 const nextRunLabel = formatDateTime(campaign.nextRunAt);
                 const lastRunLabel = formatDateTime(campaign.lastRunAt);
+                const latestRunAt = campaign.latestRunCompletedAt ?? campaign.latestRunStartedAt ?? campaign.lastRunAt;
+                const latestRunLabel = formatDateTime(latestRunAt);
                 const isArchived = campaign.status === "archived";
                 const isActive = campaign.status === "active";
                 const geographyLabel = geography || "Unspecified";
@@ -296,12 +299,14 @@ export default async function CampaignsPage({
                         <span>Last run {lastRunLabel}</span>
                         <span>Next run {nextRunLabel}</span>
                       </div>
+                      {campaign.latestRunStatus ? (
+                        <div className="campaign-card-footline">
+                          <span>Latest run {campaign.latestRunStatus} at {latestRunLabel}</span>
+                          {campaign.latestRunError ? <span className="text-red-300">{campaign.latestRunError}</span> : null}
+                        </div>
+                      ) : null}
                       <div className="campaign-card-actions">
-                        <form action={triggerCampaignManualRun.bind(null, campaign.id)}>
-                          <Button type="submit" disabled={isArchived}>
-                            {isArchived ? "Archived" : "Run now"}
-                          </Button>
-                        </form>
+                        <RunNowButton campaignId={campaign.id} disabled={isArchived} />
                         <LinkButton href={`/campaigns/${campaign.id}`} variant="secondary">
                           Open
                         </LinkButton>

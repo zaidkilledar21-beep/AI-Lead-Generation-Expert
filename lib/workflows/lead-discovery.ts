@@ -63,9 +63,45 @@ export type RunLeadDiscoveryOutput = {
   errors: string[];
 };
 
+type DiscoveryStats = {
+  created: number; duplicates: number; manualReview: number; rejected: number;
+  crawlFailures: number; candidatesChecked: number; textSearchCalls: number;
+  detailsCalls: number; enriched: number; scored: number;
+};
+
 const textSearchFieldMask = "places.id,nextPageToken";
 const defaultDetailsFieldMask = "id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,rating,userRatingCount,googleMapsUri";
 const allowedDetailsFields = new Set(defaultDetailsFieldMask.split(","));
+const googlePlacesTimeoutMs = 15000;
+
+function conciseError(error: unknown) {
+  return error instanceof Error ? error.message : "Discovery run failed";
+}
+
+function compactBody(value: string) {
+  return value.replace(/\s+/g, " ").trim().slice(0, 400);
+}
+
+async function googlePlacesErrorMessage(response: Response, label: string) {
+  const body = compactBody(await response.text().catch(() => ""));
+  const status = `${response.status} ${response.statusText}`.trim();
+  return body ? `${label} failed: ${status} - ${body}` : `${label} failed: ${status}`;
+}
+
+async function fetchGooglePlaces(url: string, init: RequestInit, label: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), googlePlacesTimeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`${label} timed out after ${googlePlacesTimeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function getDetailsFieldMask() {
   const configured = process.env.GOOGLE_PLACES_ALLOWED_FIELD_MASK ?? defaultDetailsFieldMask;
@@ -142,7 +178,7 @@ async function reserveQuota(campaign: CampaignRow, counterName: string, maxAllow
 
 async function textSearch(query: string) {
   const apiKey = getRequiredEnv("GOOGLE_PLACES_API_KEY");
-  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+  const response = await fetchGooglePlaces("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -150,23 +186,23 @@ async function textSearch(query: string) {
       "x-goog-fieldmask": textSearchFieldMask
     },
     body: JSON.stringify({ textQuery: query, pageSize: 20 })
-  });
+  }, "Google Places Text Search");
 
-  if (!response.ok) throw new Error(`Google Places Text Search failed: ${response.status}`);
+  if (!response.ok) throw new Error(await googlePlacesErrorMessage(response, "Google Places Text Search"));
   return response.json() as Promise<PlacesSearchResult>;
 }
 
 async function placeDetails(placeId: string) {
   const apiKey = getRequiredEnv("GOOGLE_PLACES_API_KEY");
   const detailsFieldMask = getDetailsFieldMask();
-  const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+  const response = await fetchGooglePlaces(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
     headers: {
       "x-goog-api-key": apiKey,
       "x-goog-fieldmask": detailsFieldMask
     }
-  });
+  }, "Google Places Details");
 
-  if (!response.ok) throw new Error(`Google Places Details failed: ${response.status}`);
+  if (!response.ok) throw new Error(await googlePlacesErrorMessage(response, "Google Places Details"));
   return response.json() as Promise<PlacesDetails>;
 }
 
@@ -183,6 +219,86 @@ async function logWorkflowEvent(payload: {
     workflow_name: "WF-10 Lead Discovery",
     ...payload
   });
+}
+
+function statsSummary(stats: DiscoveryStats) {
+  return {
+    created: stats.created,
+    duplicates: stats.duplicates,
+    manual_review: stats.manualReview,
+    rejected: stats.rejected,
+    candidates_checked: stats.candidatesChecked,
+    text_search_calls: stats.textSearchCalls,
+    details_calls: stats.detailsCalls,
+    crawl_failures: stats.crawlFailures,
+    enriched: stats.enriched,
+    scored: stats.scored
+  };
+}
+
+function queryPreview(queryText: string) {
+  return compactBody(queryText).slice(0, 120);
+}
+
+async function logDiscoveryCheckpoint({
+  campaign,
+  runId,
+  eventType,
+  payload = {}
+}: Readonly<{
+  campaign: CampaignRow;
+  runId?: string | null;
+  eventType: string;
+  payload?: Record<string, unknown>;
+}>) {
+  try {
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId ?? undefined,
+      event_type: eventType,
+      status: "completed",
+      payload: {
+        run_id: runId ?? null,
+        ...payload
+      }
+    });
+  } catch {
+    // Diagnostics must never be the reason a discovery run fails.
+  }
+}
+
+function promotionCheckpointPayload({
+  runId,
+  campaignId,
+  candidateCount,
+  promotableCount,
+  createdCount,
+  duplicateCount,
+  enrichedCount,
+  scoredCount,
+  errorCount
+}: Readonly<{
+  runId: string;
+  campaignId: string;
+  candidateCount: number;
+  promotableCount: number;
+  createdCount?: number;
+  duplicateCount?: number;
+  enrichedCount?: number;
+  scoredCount?: number;
+  errorCount?: number;
+}>) {
+  return {
+    run_id: runId,
+    campaign_id: campaignId,
+    candidate_count: candidateCount,
+    promotable_count: promotableCount,
+    created_count: createdCount ?? 0,
+    duplicate_count: duplicateCount ?? 0,
+    enriched_count: enrichedCount ?? 0,
+    scored_count: scoredCount ?? 0,
+    error_count: errorCount ?? 0
+  };
 }
 
 async function getCampaign(campaignId?: string) {
@@ -352,9 +468,30 @@ async function promoteAndProcessLeads(
 ) {
   const supabase = createSupabaseServiceClient();
   const results = { created: 0, duplicates: 0, enriched: 0, scored: 0, errors: [] as string[] };
+  const candidateCount = promotableLeads.length;
+  const basePayload = {
+    runId,
+    campaignId: campaign.id,
+    candidateCount,
+    promotableCount: candidateCount
+  };
 
-  if (dryRun || promotableLeads.length === 0) return results;
+  if (dryRun || promotableLeads.length === 0) {
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId,
+      eventType: "promotion_completed",
+      payload: promotionCheckpointPayload(basePayload)
+    });
+    return results;
+  }
 
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "import_started",
+    payload: promotionCheckpointPayload(basePayload)
+  });
   const importResult = await importDiscoveredLeads(
     {
       niche: campaign.primary_niche ?? campaign.niche,
@@ -367,13 +504,48 @@ async function promoteAndProcessLeads(
   results.created = importResult.created;
   results.duplicates = importResult.duplicates;
   results.errors.push(...importResult.errors);
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "import_completed",
+    payload: promotionCheckpointPayload({
+      ...basePayload,
+      createdCount: results.created,
+      duplicateCount: results.duplicates,
+      errorCount: results.errors.length
+    })
+  });
 
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "enrichment_scoring_started",
+    payload: promotionCheckpointPayload({
+      ...basePayload,
+      createdCount: results.created,
+      duplicateCount: results.duplicates,
+      errorCount: results.errors.length
+    })
+  });
   for (const leadId of importResult.created_lead_ids ?? []) {
     const { enriched, scored, error } = await processLeadEnrichmentAndScoring(leadId, campaign, runId);
     if (enriched) results.enriched += 1;
     if (scored) results.scored += 1;
     if (error) results.errors.push(error);
   }
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "enrichment_scoring_completed",
+    payload: promotionCheckpointPayload({
+      ...basePayload,
+      createdCount: results.created,
+      duplicateCount: results.duplicates,
+      enrichedCount: results.enriched,
+      scoredCount: results.scored,
+      errorCount: results.errors.length
+    })
+  });
 
   for (const lead of promotableLeads) {
     if (lead.candidate_id) {
@@ -388,6 +560,20 @@ async function promoteAndProcessLeads(
   for (let i = 0; i < results.created; i += 1) {
     await reserveQuota(campaign, "final_leads", campaign.max_leads_per_run);
   }
+
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "promotion_completed",
+    payload: promotionCheckpointPayload({
+      ...basePayload,
+      createdCount: results.created,
+      duplicateCount: results.duplicates,
+      enrichedCount: results.enriched,
+      scoredCount: results.scored,
+      errorCount: results.errors.length
+    })
+  });
 
   return results;
 }
@@ -564,12 +750,6 @@ async function processCandidatePlace(
   return { quotaExhausted: false };
 }
 
-type DiscoveryStats = {
-  created: number; duplicates: number; manualReview: number; rejected: number;
-  crawlFailures: number; candidatesChecked: number; textSearchCalls: number;
-  detailsCalls: number; enriched: number; scored: number;
-};
-
 async function executeSearchQueries(
   queries: string[],
   campaign: CampaignRow,
@@ -581,14 +761,32 @@ async function executeSearchQueries(
   const promotable: RawLeadInput[] = [];
   let quotaExhausted = false;
 
-  for (const queryText of queries) {
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "query_loop_started",
+    payload: { query_count: queries.length, stats: statsSummary(stats) }
+  });
+
+  for (const [queryIndex, queryText] of queries.entries()) {
     if (!(await reserveQuota(campaign, "places_text_search_calls", 50))) {
       quotaExhausted = true;
       break;
     }
     stats.textSearchCalls += 1;
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId,
+      eventType: "query_quota_reserved",
+      payload: {
+        query_count: queries.length,
+        query_index: queryIndex,
+        query_text_preview: queryPreview(queryText),
+        stats: statsSummary(stats)
+      }
+    });
 
-    const { data: searchQuery } = await supabase
+    const { data: searchQuery, error: searchQueryError } = await supabase
       .from("campaign_search_queries")
       .upsert(
         { campaign_id: campaign.id, query_text: queryText, region: campaign.region, last_run_at: new Date().toISOString() },
@@ -596,14 +794,63 @@ async function executeSearchQueries(
       )
       .select("id")
       .single();
+    if (searchQueryError) throw new Error(searchQueryError.message);
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId,
+      eventType: "search_query_upserted",
+      payload: {
+        query_count: queries.length,
+        query_index: queryIndex,
+        query_text_preview: queryPreview(queryText),
+        search_query_id: searchQuery?.id ?? null,
+        stats: statsSummary(stats)
+      }
+    });
 
     let searchResult: PlacesSearchResult;
     try {
+      await logDiscoveryCheckpoint({
+        campaign,
+        runId,
+        eventType: "text_search_started",
+        payload: {
+          query_count: queries.length,
+          query_index: queryIndex,
+          query_text_preview: queryPreview(queryText),
+          stats: statsSummary(stats)
+        }
+      });
       searchResult = await textSearch(queryText);
+      await logDiscoveryCheckpoint({
+        campaign,
+        runId,
+        eventType: "text_search_completed",
+        payload: {
+          query_count: queries.length,
+          query_index: queryIndex,
+          query_text_preview: queryPreview(queryText),
+          places_count: searchResult.places?.length ?? 0,
+          stats: statsSummary(stats)
+        }
+      });
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "Text Search failed");
       continue;
     }
+
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId,
+      eventType: "place_processing_started",
+      payload: {
+        query_count: queries.length,
+        query_index: queryIndex,
+        query_text_preview: queryPreview(queryText),
+        places_count: searchResult.places?.length ?? 0,
+        stats: statsSummary(stats)
+      }
+    });
 
     const placeResult = await processSearchResultPlaces(
       searchResult.places ?? [],
@@ -623,6 +870,19 @@ async function executeSearchQueries(
 
     if (promotable.length >= campaign.max_leads_per_run) break;
   }
+
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "execute_search_completed",
+    payload: {
+      query_count: queries.length,
+      promotable_count: promotable.length,
+      quota_exhausted: quotaExhausted,
+      error_count: errors.length,
+      stats: statsSummary(stats)
+    }
+  });
 
   return { promotable, quotaExhausted };
 }
@@ -671,7 +931,14 @@ async function finalizeDiscoveryRun(
 ): Promise<void> {
   const supabase = createSupabaseServiceClient();
 
-  await supabase
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "finalize_started",
+    payload: { status, error_count: errors.length, stats: statsSummary(stats) }
+  });
+
+  const { error } = await supabase
     .from("discovery_runs")
     .update({
       status,
@@ -689,6 +956,25 @@ async function finalizeDiscoveryRun(
     })
     .eq("id", runId);
 
+  if (error) {
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "finalize_failed",
+      status: "failed",
+      error_message: error.message,
+      payload: { run_id: runId, intended_status: status, error_count: errors.length, stats: statsSummary(stats) }
+    });
+    throw new Error(`Failed to finalize discovery run: ${error.message}`);
+  }
+
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "finalize_completed",
+    payload: { status, error_count: errors.length, stats: statsSummary(stats) }
+  });
+
   await logWorkflowEvent({
     campaign_id: campaign.id,
     discovery_run_id: runId,
@@ -699,6 +985,16 @@ async function finalizeDiscoveryRun(
   });
 }
 
+async function failDiscoveryRun(
+  campaign: CampaignRow,
+  runId: string,
+  stats: DiscoveryStats,
+  errors: string[]
+) {
+  const message = errors[0] ?? "Discovery run failed";
+  await finalizeDiscoveryRun(campaign, runId, stats, [message], "failed");
+}
+
 export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promise<RunLeadDiscoveryOutput> {
   const supabase = createSupabaseServiceClient();
   const campaign = await getCampaign(input.campaign_id);
@@ -706,11 +1002,27 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
   if (!campaign) {
     return { run_id: null, status: "paused", created: 0, duplicates: 0, manual_review: 0, errors: ["No active campaign found"] };
   }
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId: null,
+    eventType: "get_campaign_loaded",
+    payload: {
+      requested_campaign_id: input.campaign_id ?? null,
+      dry_run: Boolean(input.dry_run),
+      trigger_type: input.trigger_type ?? (input.dry_run ? "manual" : "schedule")
+    }
+  });
 
   if (!(await reserveQuota(campaign, "run_count", campaign.max_discovery_runs_per_day))) {
     await logWorkflowEvent({ campaign_id: campaign.id, event_type: "quota_enforced", status: "blocked", payload: { counter: "run_count" } });
     return { run_id: null, status: "quota_exhausted", created: 0, duplicates: 0, manual_review: 0, errors: ["Daily discovery run cap reached"] };
   }
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId: null,
+    eventType: "run_quota_reserved",
+    payload: { max_discovery_runs_per_day: campaign.max_discovery_runs_per_day }
+  });
 
   const { data: run, error: runError } = await supabase
     .from("discovery_runs")
@@ -723,21 +1035,72 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
   const runId = run.id as string;
   const errors: string[] = [];
   const stats: DiscoveryStats = { created: 0, duplicates: 0, manualReview: 0, rejected: 0, crawlFailures: 0, candidatesChecked: 0, textSearchCalls: 0, detailsCalls: 0, enriched: 0, scored: 0 };
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "run_inserted",
+    payload: { stats: statsSummary(stats) }
+  });
 
-  await logWorkflowEvent({ campaign_id: campaign.id, discovery_run_id: runId, event_type: "discovery_run", status: "started" });
+  try {
+    await logWorkflowEvent({ campaign_id: campaign.id, discovery_run_id: runId, event_type: "discovery_run", status: "started" });
 
-  const queries = buildQueries(campaign);
-  const { promotable, quotaExhausted } = await executeSearchQueries(queries, campaign, runId, stats, errors);
+    const queries = buildQueries(campaign);
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId,
+      eventType: "queries_built",
+      payload: { query_count: queries.length, stats: statsSummary(stats) }
+    });
+    if (queries.length === 0) {
+      throw new Error("No Google Places search queries were generated for this campaign");
+    }
 
-  const promotionResults = await promoteAndProcessLeads(promotable, campaign, runId, !!input.dry_run);
-  stats.created = promotionResults.created;
-  stats.duplicates += promotionResults.duplicates;
-  stats.enriched = promotionResults.enriched;
-  stats.scored = promotionResults.scored;
-  errors.push(...promotionResults.errors);
+    const { promotable, quotaExhausted } = await executeSearchQueries(queries, campaign, runId, stats, errors);
 
-  const status = resolveRunStatus(quotaExhausted, errors.length);
-  await finalizeDiscoveryRun(campaign, runId, stats, errors, status);
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId,
+      eventType: "promotion_started",
+      payload: { promotable_count: promotable.length, stats: statsSummary(stats) }
+    });
+    const promotionResults = await promoteAndProcessLeads(promotable, campaign, runId, !!input.dry_run);
+    stats.created = promotionResults.created;
+    stats.duplicates += promotionResults.duplicates;
+    stats.enriched = promotionResults.enriched;
+    stats.scored = promotionResults.scored;
+    errors.push(...promotionResults.errors);
+    if (!input.dry_run && promotable.length > 0 && stats.created === 0) {
+      const message = `No leads promoted from ${promotable.length} fetched candidates`;
+      errors.unshift(message);
+      await logWorkflowEvent({
+        campaign_id: campaign.id,
+        discovery_run_id: runId,
+        event_type: "promotion_completed",
+        status: "failed",
+        error_message: message,
+        payload: promotionCheckpointPayload({
+          runId,
+          campaignId: campaign.id,
+          candidateCount: promotable.length,
+          promotableCount: promotable.length,
+          createdCount: stats.created,
+          duplicateCount: stats.duplicates,
+          enrichedCount: stats.enriched,
+          scoredCount: stats.scored,
+          errorCount: errors.length
+        })
+      });
+    }
 
-  return { run_id: runId, status, created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, errors };
+    const status = resolveRunStatus(quotaExhausted, errors.length);
+    await finalizeDiscoveryRun(campaign, runId, stats, errors, status);
+
+    return { run_id: runId, status, created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, errors };
+  } catch (error) {
+    const message = conciseError(error);
+    errors.unshift(message);
+    await failDiscoveryRun(campaign, runId, stats, errors);
+    return { run_id: runId, status: "failed", created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, errors };
+  }
 }

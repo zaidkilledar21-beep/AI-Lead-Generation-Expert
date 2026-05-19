@@ -16,6 +16,14 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { triggerDiscoveryWorkflow } from "@/lib/n8n/client";
 import { importDiscoveredLeads, type RawLeadInput } from "@/lib/workflows/discovery";
 
+export type ManualRunStatus = "requested" | "running" | "success" | "quota_blocked" | "config_missing" | "failed";
+
+export type ManualRunResult = {
+  status: ManualRunStatus;
+  message: string;
+  runId?: string | null;
+};
+
 function parseCsv(value: FormDataEntryValue | null) {
   const raw = typeof value === "string" ? value : "";
   return raw
@@ -84,6 +92,65 @@ function parseCsvRows(csv: string) {
 function normalizeLeadSource(value: string): CampaignConfigInput["lead_source"] {
   if (value === "manual_import") return "manual_import";
   return "google_places";
+}
+
+function asPayloadRecord(payload: unknown): Record<string, unknown> | null {
+  if (typeof payload === "object" && payload !== null && !Array.isArray(payload)) {
+    return payload as Record<string, unknown>;
+  }
+  return null;
+}
+
+function payloadErrors(payload: Record<string, unknown> | null) {
+  const errors = payload?.errors;
+  if (Array.isArray(errors)) return errors.map((error) => String(error)).filter(Boolean);
+  const error = payload?.error;
+  return typeof error === "string" && error ? [error] : [];
+}
+
+function manualRunResultFromWorkflow(result: Awaited<ReturnType<typeof triggerDiscoveryWorkflow>>): ManualRunResult {
+  const payload = asPayloadRecord(result.payload);
+  const status = typeof payload?.status === "string" ? payload.status : null;
+  const errors = payloadErrors(payload);
+  const message = errors[0] ?? result.message ?? "Discovery workflow accepted.";
+  const runId = typeof payload?.run_id === "string" ? payload.run_id : result.workflowRunId ?? null;
+
+  if (!result.ok) {
+    return { status: "failed", message: result.message ?? "Discovery workflow request failed.", runId };
+  }
+  if (status === "quota_exhausted") {
+    return { status: "quota_blocked", message: message || "Daily discovery run cap reached.", runId };
+  }
+  if (status === "failed") {
+    return { status: "failed", message: message || "Discovery run failed.", runId };
+  }
+  if (status === "paused") {
+    return { status: "config_missing", message: message || "No active campaign was available for discovery.", runId };
+  }
+  if (status === "completed") {
+    return { status: "success", message: "Discovery run completed.", runId };
+  }
+  if (status === "running") {
+    return { status: "running", message: "Discovery run is running.", runId };
+  }
+
+  return { status: "requested", message, runId };
+}
+
+function manualRunEventStatus(status: ManualRunStatus): "started" | "completed" | "failed" | "blocked" {
+  if (status === "quota_blocked" || status === "config_missing") return "blocked";
+  if (status === "failed") return "failed";
+  if (status === "success") return "completed";
+  return "started";
+}
+
+function manualRunResultFromError(error: unknown): ManualRunResult {
+  const message = error instanceof Error ? error.message : "Campaign manual run failed";
+  const lower = message.toLowerCase();
+  const status: ManualRunStatus = lower.includes("n8n") || lower.includes("readiness") || lower.includes("blocked")
+    ? "config_missing"
+    : "failed";
+  return { status, message };
 }
 
 function campaignFromForm(formData: FormData): CampaignConfigInput {
@@ -178,40 +245,63 @@ export async function archiveCampaignAction(campaignId: string) {
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
-export async function triggerCampaignManualRun(campaignId: string) {
-  const actor = await requireDashboardWriteAccess();
-  await assertCampaignManualRunReadiness(campaignId);
-  await markCampaignManualRunRequested(campaignId);
-  const result = await triggerDiscoveryWorkflow({
-    campaignId,
-    requestedBy: actor
-  });
-
+export async function triggerCampaignManualRun(campaignId: string): Promise<ManualRunResult> {
   const supabase = createSupabaseServiceClient();
-  await supabase.from("workflow_events").insert({
-    workflow_name: "WF-10 Lead Discovery",
-    campaign_id: campaignId,
-    event_type: "crm_manual_run_requested",
-    status: result.ok ? "requested" : "failed",
-    payload: {
-      requested_by: actor.userId,
-      requested_by_email: actor.email,
-      n8n_status: result.status,
-      n8n_workflow_run_id: result.workflowRunId,
-      n8n_message: result.message,
-      n8n_payload: result.payload
-    },
-    created_at: new Date().toISOString()
-  });
+  let actor: Awaited<ReturnType<typeof requireDashboardWriteAccess>> | null = null;
 
-  if (!result.ok) {
-    throw new Error(result.message ?? "n8n discovery workflow request failed");
+  try {
+    actor = await requireDashboardWriteAccess();
+    await assertCampaignManualRunReadiness(campaignId);
+    await markCampaignManualRunRequested(campaignId);
+    const result = await triggerDiscoveryWorkflow({
+      campaignId,
+      requestedBy: actor
+    });
+    const manualRunResult = manualRunResultFromWorkflow(result);
+
+    await supabase.from("workflow_events").insert({
+      workflow_name: "WF-10 Lead Discovery",
+      campaign_id: campaignId,
+      event_type: "crm_manual_run_requested",
+      status: manualRunEventStatus(manualRunResult.status),
+      payload: {
+        requested_by: actor.userId,
+        requested_by_email: actor.email,
+        n8n_status: result.status,
+        n8n_workflow_run_id: result.workflowRunId,
+        n8n_message: result.message,
+        n8n_payload: result.payload,
+        manual_run_status: manualRunResult.status,
+        manual_run_message: manualRunResult.message
+      },
+      created_at: new Date().toISOString()
+    });
+
+    revalidatePath("/campaigns");
+    revalidatePath(`/campaigns/${campaignId}`);
+    revalidatePath("/pipeline");
+    revalidatePath("/analytics");
+    return manualRunResult;
+  } catch (error) {
+    const manualRunResult = manualRunResultFromError(error);
+    await supabase.from("workflow_events").insert({
+      workflow_name: "WF-10 Lead Discovery",
+      campaign_id: campaignId,
+      event_type: "crm_manual_run_requested",
+      status: manualRunEventStatus(manualRunResult.status),
+      error_message: manualRunResult.message,
+      payload: {
+        requested_by: actor?.userId ?? null,
+        requested_by_email: actor?.email ?? null,
+        manual_run_status: manualRunResult.status
+      },
+      created_at: new Date().toISOString()
+    });
+
+    revalidatePath("/campaigns");
+    revalidatePath(`/campaigns/${campaignId}`);
+    return manualRunResult;
   }
-
-  revalidatePath("/campaigns");
-  revalidatePath(`/campaigns/${campaignId}`);
-  revalidatePath("/pipeline");
-  revalidatePath("/analytics");
 }
 
 export async function manualImportLeadsAction(campaignId: string, _: unknown, formData: FormData) {

@@ -144,17 +144,29 @@ export async function getCampaignRows() {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return [];
 
-  const [{ data: analytics }, { data: campaigns }] = await Promise.all([
+  const [{ data: analytics }, { data: campaigns }, { data: discoveryRuns }] = await Promise.all([
     supabase.from("campaign_analytics").select("*").order("name"),
-    supabase.from("campaigns").select("*").order("created_at", { ascending: false })
+    supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
+    supabase
+      .from("discovery_runs")
+      .select("id,campaign_id,status,started_at,completed_at,error_message")
+      .order("started_at", { ascending: false })
+      .limit(100)
   ]);
 
   const analyticsById = new Map(
     asArray(analytics as Array<Record<string, any>>).map((row) => [row.campaign_id, row])
   );
+  const latestRunByCampaignId = new Map<string, Record<string, any>>();
+  asArray(discoveryRuns as Array<Record<string, any>>).forEach((run) => {
+    if (typeof run.campaign_id === "string" && !latestRunByCampaignId.has(run.campaign_id)) {
+      latestRunByCampaignId.set(run.campaign_id, run);
+    }
+  });
 
   return asArray(campaigns as Array<Record<string, any>>).map((campaign) => {
     const analyticsRow = analyticsById.get(campaign.id) ?? {};
+    const latestRun = latestRunByCampaignId.get(campaign.id);
     return {
       id: campaign.id,
       name: campaign.name,
@@ -195,6 +207,10 @@ export async function getCampaignRows() {
       notes: campaign.notes ?? null,
       createdAt: campaign.created_at,
       updatedAt: campaign.updated_at,
+      latestRunStatus: latestRun?.status ?? null,
+      latestRunStartedAt: latestRun?.started_at ?? null,
+      latestRunCompletedAt: latestRun?.completed_at ?? null,
+      latestRunError: latestRun?.error_message ?? null,
       leads: analyticsRow.total_leads ?? 0,
       enriched: analyticsRow.enriched_or_later ?? 0,
       scored: analyticsRow.scored_leads ?? 0,
