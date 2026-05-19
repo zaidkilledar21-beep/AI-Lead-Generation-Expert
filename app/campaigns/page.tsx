@@ -30,6 +30,19 @@ function formatDateTime(value: string | null) {
   return value ? new Date(value).toLocaleString() : "--";
 }
 
+function runStatusTone(status: string | null, isStale: boolean) {
+  if (isStale || status === "failed") return "danger" as const;
+  if (status === "completed") return "success" as const;
+  if (status === "running") return "warning" as const;
+  if (status === "quota_exhausted" || status === "blocked") return "warning" as const;
+  return "muted" as const;
+}
+
+function formatRunStatus(status: string | null, isStale: boolean) {
+  if (isStale) return "stale running";
+  return status ? status.replaceAll("_", " ") : "no run";
+}
+
 function buildHref(
   base: string,
   params: Readonly<{
@@ -300,8 +313,39 @@ export default async function CampaignsPage({
                         <span>Next run {nextRunLabel}</span>
                       </div>
                       {campaign.latestRunStatus ? (
-                        <div className="campaign-card-footline">
-                          <span>Latest run {campaign.latestRunStatus} at {latestRunLabel}</span>
+                        <div className="grid gap-2 rounded-xl border border-white/10 bg-white/3 p-3 text-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="muted">Latest run {latestRunLabel}</span>
+                            <Badge tone={runStatusTone(campaign.latestRunStatus, campaign.latestRunIsStale)}>
+                              {formatRunStatus(campaign.latestRunStatus, campaign.latestRunIsStale)}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <span>
+                              <strong>{campaign.latestRunCandidatesChecked}</strong> candidates
+                            </span>
+                            <span>
+                              <strong>{campaign.latestRunCandidatesPromoted}</strong> leads
+                            </span>
+                            <span>
+                              <strong>{campaign.latestRunManualReviewCandidates}</strong> review
+                            </span>
+                            <span>
+                              <strong>{campaign.latestRunRejected + campaign.latestRunCrawlFailures}</strong> rejected/fail
+                            </span>
+                          </div>
+                          {campaign.latestRunCheckpoint ? (
+                            <div className="muted">
+                              Last checkpoint: <strong>{campaign.latestRunCheckpoint}</strong>
+                              {campaign.latestRunCheckpointStatus ? ` (${campaign.latestRunCheckpointStatus})` : ""}
+                              {campaign.latestRunCheckpointSummary ? ` - ${campaign.latestRunCheckpointSummary}` : ""}
+                            </div>
+                          ) : null}
+                          <div className="muted">
+                            Queue: {campaign.queuedOutreach} queued / {campaign.pausedOutreach} paused / {campaign.blockedOutreach} blocked.
+                            Manual review: {campaign.pendingManualReviews}
+                            {campaign.latestManualReviewReason ? ` (${campaign.latestManualReviewReason})` : ""}.
+                          </div>
                           {campaign.latestRunError ? <span className="text-red-300">{campaign.latestRunError}</span> : null}
                         </div>
                       ) : null}

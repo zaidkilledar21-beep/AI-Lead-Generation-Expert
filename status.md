@@ -7,12 +7,47 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Discovery run lifecycle hardening and Run Now feedback fix.
+- PR #42 Sonar cleanup for contact extraction regex hotspots and discovery finalization reliability.
 
 ## Current module / PR
 - Campaign manual discovery run path.
 
 ## Last completed work
+- Completed a surgical Sonar cleanup for PR #42 on `codex/pass-6-production-readiness`.
+- Replaced contact extraction's regex-heavy HTML, email, obfuscation, validation, trimming, and phone extraction paths with capped scanner/string helpers over crawled input.
+- Added a 400k-character contact scan cap and index-based stripping for comments plus `script`, `style`, `svg`, and `noscript` blocks.
+- Replaced `mailto:`, plain email, obfuscated email, punctuation trim, email validation, and phone extraction regex usage with bounded parsing and character-loop validation while preserving business-email rejection/ranking behavior.
+- Added focused contact extraction tests for visible, `mailto:`, obfuscated, asset-like email rejection, long hostile HTML, and normal phone extraction.
+- Removed the redundant `fallback.error ? "failed" : "failed"` conditional in discovery finalization fallback while preserving `status: "failed"`, reconciled stats, and `finalized: !fallback.error`.
+- Implemented `plans/04_frontend_run_visibility_prod_qa.md` with scoped frontend/query visibility changes.
+- Extended campaign row loading with bounded discovery run counters, latest WF-10 checkpoint summary, stale-running detection, pending manual review counts/reason, and queued/paused/blocked outreach counts.
+- Updated `/campaigns` cards to show latest run status, stale-running state, candidate/lead/manual-review/rejected counts, latest checkpoint summary, and queue/review counts.
+- Updated campaign detail run history to read directly from `discovery_runs` for richer counters and to show a read-only latest WF-10 checkpoint timeline from `workflow_events`.
+- Added bounded post-Run Now refreshes on the campaign card action and immediate route refresh after detail-page campaign actions; no infinite polling was added.
+- Added `plans/04_frontend_run_visibility_prod_qa_checklist.md` for the fresh-campaign production smoke test and SQL/frontend count comparison.
+- Implemented `plans/03_scoring_routing_queue_draft_handoff.md` with scoped scoring/routing handoff changes.
+- Added bounded DeepSeek request handling with AbortController timeout, compact error messages, one retry for transient 429/5xx responses, and compact JSON parse failure reporting.
+- Updated scoring failure handling so failed scoring logs `WF-03 ICP Scoring`, moves the lead to `review_pending`, upserts a `scoring_failed` manual review item, and remains isolated per lead.
+- Updated discovery's per-lead post-import flow to call `routeLead(leadId)` after successful scoring and log `wf_04_routing` completed/failed workflow events with route status and reasons.
+- Updated routing so global outreach pause no longer throws through discovery; it routes affected leads to manual review with `global_outreach_paused`.
+- Tightened queue eligibility so only leads with a valid email, a valid score/sequence, no reply, no suppression hit, and an allowed route policy are queued for WF-05/WF-06.
+- Preserved draft generation handoff by leaving queued leads in `outreach_queue.status = 'queued'` for WF-05 rather than triggering draft generation inside discovery.
+- Implemented `plans/02_contact_extraction_enrichment_validation.md` with scoped contact extraction and enrichment correctness changes.
+- Added a shared contact extraction utility for safe HTML cleanup, basic entity decoding, visible/mailto/obfuscated email extraction, strict practical email validation, business-domain email ranking, and phone normalization.
+- Updated website crawl signals to strip non-visible HTML before extraction, reject junk emails, rank selected business emails, normalize phones, and persist email confidence/reason metadata.
+- Updated discovery candidate enrichment so `lead_candidates.normalized_payload` contains final crawl-enriched email/phone/WhatsApp values and `source_attribution.website_crawl_signals` records contact confidence summary.
+- Updated discovery routing so candidates with no valid email, phone, WhatsApp, or contact form move to manual review instead of automatic promotion.
+- Updated lead import normalization so invalid emails do not enter `leads.email` and duplicate imported candidates are marked `duplicate`.
+- Updated enrichment reuse so successful candidate crawls are reused, invalid candidate emails are ignored and logged, and recrawling only happens when the candidate crawl did not succeed.
+- Added focused Vitest coverage for visible/mailto/obfuscated extraction, junk email rejection, business-domain ranking, and phone normalization.
+- Implemented `plans/01_discovery_lifecycle_state_safety.md` with scoped backend discovery lifecycle safety changes.
+- Added DB-backed `reconcileDiscoveryRunStats(runId)` so final counts are reconciled from persisted `lead_candidates`, `leads`, and `workflow_events` state instead of trusting only in-memory counters.
+- Replaced fragile finalization with `safeFinalizeDiscoveryRun`, which reconciles counts, writes terminal status/counters/error details, logs `finalize_completed` or `finalize_failed`, and attempts a minimal failed-status fallback if the full update fails.
+- Added stale running-run recovery before new discovery starts; stale runs older than the configured threshold are reconciled and terminalized, then logged with `stale_run_recovered`.
+- Added double-start protection: a non-stale `running` run for the campaign now returns `status: "running"` with `A discovery run is already in progress` before daily `run_count` quota is reserved.
+- Persisted incremental run counters during query execution and logged `run_progress_persisted`, `counts_reconciled`, and `terminal_status_written` checkpoints.
+- Removed the unsafe post-import candidate mass-promotion update; candidates are now only marked `promoted` when `importDiscoveredLeads` has written a real `final_lead_id`.
+- Marked imported duplicate candidates as `duplicate` instead of `promoted`, and reconciliation repairs any promoted candidate for the current run that lacks `final_lead_id`.
 - Completed the follow-up discovery diagnostics audit on the current diff without reworking the discovery architecture.
 - Added the missing `execute_search_completed`, `import_started`, `import_completed`, `enrichment_scoring_started`, `enrichment_scoring_completed`, `promotion_completed`, and `finalize_failed` workflow event checkpoints.
 - Promotion/import/enrichment/finalization is now diagnosable from compact aggregate workflow event payloads: run id, campaign id, candidate/promotable/created/duplicate/enriched/scored/error counts, query counts, and stats summaries only.
@@ -63,7 +98,27 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `lib/workflows/contact-extraction.ts`
+- `tests/unit/contact-extraction.test.ts`
 - `lib/workflows/lead-discovery.ts`
+- `status.md`
+- `app/campaigns/page.tsx`
+- `app/campaigns/run-now-button.tsx`
+- `app/campaigns/[campaign_id]/page.tsx`
+- `app/campaigns/[campaign_id]/campaign-detail-controls.tsx`
+- `lib/crm/queries.ts`
+- `plans/04_frontend_run_visibility_prod_qa_checklist.md`
+- `status.md`
+- `lib/deepseek.ts`
+- `lib/workflows/scoring.ts`
+- `lib/workflows/routing.ts`
+- `lib/workflows/lead-discovery.ts`
+- `lib/workflows/contact-extraction.ts`
+- `lib/workflows/website-crawler.ts`
+- `lib/workflows/enrichment.ts`
+- `lib/workflows/discovery.ts`
+- `tests/unit/contact-extraction.test.ts`
+- `status.md`
 - `app/campaigns/actions.ts`
 - `app/campaigns/page.tsx`
 - `app/campaigns/run-now-button.tsx`
@@ -98,10 +153,15 @@ AI Automation CRM / Lead Generation Dashboard
 - Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
 
 ## Validation status
-- lint: passed (`npm run lint`)
-- typecheck: passed (`npm run typecheck`)
-- build: passed (`npm run build`)
+- contact extraction focused test: passed (`npm test -- tests/unit/contact-extraction.test.ts`) after Sonar regex hotspot cleanup
+- lint: passed (`npm run lint`) after PR #42 Sonar cleanup
+- typecheck: passed (`npm run typecheck`) after PR #42 Sonar cleanup
+- build: passed (`npm run build`) after PR #42 Sonar cleanup; Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
 - git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- scoring/routing handoff validation: passed lint/typecheck/build/diff-check after DeepSeek timeout/retry, scoring failure isolation, and routing handoff changes
+- contact extraction focused test: passed (`npm test -- tests/unit/contact-extraction.test.ts`)
+- contact extraction/enrichment validation: passed lint/typecheck/build/diff-check after scoped changes
+- discovery lifecycle state safety: passed lint/typecheck/build/diff-check after reconciliation, stale recovery, progress persistence, double-start protection, and candidate promotion consistency changes
 - discovery follow-up diagnostics audit: passed; missing search/promotion/finalization checkpoints added
 - discovery lifecycle diagnostics: added checkpoint workflow_events for the zombie run investigation
 - discovery hardening validation: passed lint/typecheck/build/diff-check after changes
@@ -115,6 +175,17 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- Sonar should be re-run on PR #42 to confirm the four contact-extraction regex hotspots and the lead-discovery redundant conditional are cleared.
+- Contact extraction behavior is covered by focused unit tests, but production crawl diversity can still reveal edge cases in unusual obfuscation formats.
+- Graphify was stale for exact Phase 4 paths: `graphify explain` did not find `lib/crm/queries.ts` or `app/campaigns/run-now-button.tsx`, so the implementation used the requested graph commands first and then the smallest direct file shortlist.
+- The new campaign queue/manual-review counts use bounded relationship queries through `leads`; production QA should confirm those counts match SQL on live Supabase data.
+- Authenticated browser QA for the new `/campaigns` and campaign-detail run visibility still needs a real dashboard session.
+- Production retest is still required to confirm DeepSeek timeout/retry behavior, routing workflow events, and WF-05 pickup of newly queued B-band leads against live data.
+- Global outreach pause now prevents discovery-triggered queuing by routing to manual review; if the intended operator behavior is paused queue rows instead, that should be handled in a later explicit workflow policy pass.
+- Production retest is still required to confirm extracted contact confidence and manual-review routing against real crawled business websites.
+- Generic/no-reply addresses are retained only as low-confidence evidence in extraction ranking; manual review should confirm whether they are acceptable for any specific campaign.
+- Production retest is still required to confirm stale-run recovery and double-start protection against live Supabase/Vercel/n8n timing.
+- Historical promoted candidates without `final_lead_id` are repaired only when their discovery run is reconciled by this workflow; this patch does not perform a broad backfill across every old run.
 - Production issue under investigation: run `87d51a76-bd77-45be-8c16-8fbcbe576260` stayed `running` with zero counters and no completion event after `/api/workflows/discovery/run` returned 200; next run should reveal the stopping checkpoint.
 - Manual production retest is still required with a fresh campaign or after the daily quota resets to confirm Vercel/n8n/Google Places behavior against live services.
 - The next production test must confirm whether the run reaches `promotion_completed`, then `finalize_started`, then `finalize_completed`; if it stops earlier, the last checkpoint should identify the failing stage.
@@ -125,5 +196,10 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
+- Deploy/retest with a fresh active campaign: click Run Now, watch `/campaigns` and the campaign detail Run history tab, then compare visible counts/checkpoints with Supabase rows using `plans/04_frontend_run_visibility_prod_qa_checklist.md`.
+- Retest scoring/routing with a fresh reachable lead: confirm `lead_scores`, `automation_hypotheses`, `wf_04_routing` event, and either `outreach_queue.status = 'queued'` for eligible B-band leads or a pending `manual_review_queue` item for A-band, low-confidence, missing-contact, suppressed, or global-pause cases.
+- Retest with a fresh campaign that crawls real websites: confirm candidate `normalized_payload.email` matches `leads.email` for valid selected emails, invalid/junk emails are absent from `leads.email`, and no-contact candidates land in manual review.
+- Retest with a fresh campaign: start Run Now once, confirm a terminal `discovery_runs.status` with reconciled counters, then click Run Now again during/near execution to confirm active-run blocking returns `status: "running"` without consuming another `run_count`.
+- If a stale `running` row exists, run a new campaign discovery after the stale threshold and confirm `stale_run_recovered`, `counts_reconciled`, and `terminal_status_written` events appear before the new run starts.
 - Retest Run Now with a brand-new campaign or after quota reset: confirm the UI shows requested/running or a quota/config/error message, then inspect `workflow_events` in chronological order for `execute_search_completed`, `promotion_started`, `import_started`, `import_completed`, `enrichment_scoring_started`, `enrichment_scoring_completed`, `promotion_completed`, `finalize_started`, and `finalize_completed` or `finalize_failed`.
 - After the retest, confirm the latest `discovery_runs` row has non-running `status`, populated `completed_at`, expected counters, and a clear `error_message` if no leads were promoted.

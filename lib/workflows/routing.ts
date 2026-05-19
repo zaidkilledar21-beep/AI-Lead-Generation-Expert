@@ -1,4 +1,5 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { isValidBusinessEmail, normalizeDomain, normalizePhone } from "@/lib/workflows/contact-extraction";
 import type { LeadStatus } from "@/lib/types";
 
 const blockedApprovalStatuses = new Set([
@@ -22,21 +23,37 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus) {
   }
 }
 
+async function isGlobalOutreachPaused() {
+  const supabase = createSupabaseServiceClient();
+  const { data: globalOutreach } = await supabase.from("app_settings").select("value").eq("key", "global_outreach").maybeSingle();
+  return (
+    globalOutreach?.value && typeof globalOutreach.value === "object" && "paused" in globalOutreach.value
+      ? Boolean((globalOutreach.value as { paused?: unknown }).paused)
+      : true
+  );
+}
+
+async function isSuppressed(lead: { email?: string | null; website?: string | null; phone?: string | null }) {
+  const supabase = createSupabaseServiceClient();
+  const email = isValidBusinessEmail(lead.email) ? lead.email?.toLowerCase() ?? null : null;
+  const domain = normalizeDomain(lead.website);
+  const phone = normalizePhone(lead.phone);
+  const checks = [];
+
+  if (email) checks.push(supabase.from("suppression_list").select("id", { count: "exact", head: true }).eq("normalized_email", email));
+  if (domain) checks.push(supabase.from("suppression_list").select("id", { count: "exact", head: true }).eq("normalized_domain", domain));
+  if (phone) checks.push(supabase.from("suppression_list").select("id", { count: "exact", head: true }).eq("normalized_phone", phone));
+  if (checks.length === 0) return false;
+
+  const results = await Promise.all(checks);
+  return results.some((result) => (result.count ?? 0) > 0);
+}
+
 export async function routeApprovedLead(leadId: string) {
   const supabase = createSupabaseServiceClient();
 
-  const { data: globalOutreach } = await supabase.from("app_settings").select("value").eq("key", "global_outreach").maybeSingle();
-  const globalPaused =
-    globalOutreach?.value && typeof globalOutreach.value === "object" && "paused" in globalOutreach.value
-      ? Boolean((globalOutreach.value as { paused?: unknown }).paused)
-      : true;
-
-  if (globalPaused) {
-    throw new Error("Global outreach is paused");
-  }
-
   const [{ data: lead, error: leadError }, { data: score, error: scoreError }, { count: replyCount }] = await Promise.all([
-    supabase.from("leads").select("email,status").eq("id", leadId).maybeSingle(),
+    supabase.from("leads").select("email,phone,website,status").eq("id", leadId).maybeSingle(),
     supabase
       .from("lead_scores")
       .select("band")
@@ -49,13 +66,30 @@ export async function routeApprovedLead(leadId: string) {
 
   if (leadError) throw new Error(leadError.message);
   if (!lead) throw new Error("Lead not found");
-  if (!lead.email) throw new Error("Lead needs a prospect email before outreach approval");
+  if (!isValidBusinessEmail(lead.email)) {
+    await createOrUpdateManualReview(leadId, "missing_valid_email", "normal");
+    await updateLeadStatus(leadId, "review_pending");
+    return { status: "review_pending", reasons: ["missing_valid_email"] };
+  }
   if (blockedApprovalStatuses.has(lead.status)) {
     throw new Error(`Lead status blocks outreach approval: ${lead.status}`);
   }
-  if ((replyCount ?? 0) > 0) throw new Error("Lead already has a reply; outreach must remain paused");
+  if ((replyCount ?? 0) > 0) {
+    await updateLeadStatus(leadId, "paused");
+    return { status: "paused", reasons: ["reply_exists"] };
+  }
   if (scoreError) throw new Error(scoreError.message);
   if (!score?.band) throw new Error("Lead must be scored before approval");
+  if (await isSuppressed(lead)) {
+    await createOrUpdateManualReview(leadId, "suppressed_contact", "high");
+    await updateLeadStatus(leadId, "review_pending");
+    return { status: "review_pending", reasons: ["suppressed_contact"] };
+  }
+  if (await isGlobalOutreachPaused()) {
+    await createOrUpdateManualReview(leadId, "global_outreach_paused", "normal");
+    await updateLeadStatus(leadId, "review_pending");
+    return { status: "review_pending", reasons: ["global_outreach_paused"] };
+  }
 
   const { data: sequence, error: sequenceError } = await supabase
     .from("outreach_sequences")
@@ -67,7 +101,11 @@ export async function routeApprovedLead(leadId: string) {
     .maybeSingle();
 
   if (sequenceError) throw new Error(sequenceError.message);
-  if (!sequence?.id) throw new Error(`No active sequence found for band ${score.band}`);
+  if (!sequence?.id) {
+    await createOrUpdateManualReview(leadId, `missing_outreach_sequence_${score.band}`, "high");
+    await updateLeadStatus(leadId, "review_pending");
+    return { status: "review_pending", reasons: [`missing_outreach_sequence_${score.band}`] };
+  }
 
   const { error: queueError } = await supabase.from("outreach_queue").upsert(
     {
@@ -89,13 +127,14 @@ export async function routeApprovedLead(leadId: string) {
     .eq("review_status", "pending");
 
   await updateLeadStatus(leadId, "queued");
+  return { status: "queued", reasons: [] };
 }
 
 export async function routeLead(leadId: string) {
   const supabase = createSupabaseServiceClient();
 
   const [{ data: lead }, { data: score }, { data: hypothesis }] = await Promise.all([
-    supabase.from("leads").select("email,phone,whatsapp,status").eq("id", leadId).maybeSingle(),
+    supabase.from("leads").select("email,phone,whatsapp,website,status").eq("id", leadId).maybeSingle(),
     supabase
       .from("lead_scores")
       .select("*")
@@ -114,7 +153,8 @@ export async function routeLead(leadId: string) {
 
   if (!lead || !score) throw new Error("Lead and score are required for routing");
 
-  const reachable = Boolean(lead.email || lead.phone || lead.whatsapp);
+  const hasValidEmail = isValidBusinessEmail(lead.email);
+  const reachable = Boolean(hasValidEmail || lead.phone || lead.whatsapp);
   const weakHypothesis = !hypothesis?.outreach_hook;
   const needsReview = score.band === "A" || score.confidence === "low" || !reachable || weakHypothesis || score.manual_review_required;
 
@@ -123,6 +163,7 @@ export async function routeLead(leadId: string) {
       score.band === "A" ? "band_a_first_email" : null,
       score.confidence === "low" ? "low_confidence" : null,
       !reachable ? "missing_contact" : null,
+      lead.email && !hasValidEmail ? "invalid_email" : null,
       weakHypothesis ? "generic_hypothesis" : null,
       score.manual_review_required ? "scoring_flag" : null
     ].filter(Boolean);
@@ -154,8 +195,7 @@ export async function routeLead(leadId: string) {
   }
 
   if (score.band === "B") {
-    await routeApprovedLead(leadId);
-    return { status: "queued", reasons: [] };
+    return routeApprovedLead(leadId);
   }
 
   await updateLeadStatus(leadId, score.band === "C" ? "paused" : "archived");

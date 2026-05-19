@@ -4,6 +4,8 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { buildLeadDedupeKey, importDiscoveredLeads, type RawLeadInput } from "@/lib/workflows/discovery";
 import { enrichLead } from "@/lib/workflows/enrichment";
 import { scoreLead } from "@/lib/workflows/scoring";
+import { routeLead } from "@/lib/workflows/routing";
+import { normalizePhone, selectBestBusinessEmail } from "@/lib/workflows/contact-extraction";
 import { crawlBusinessWebsite, extractWebsiteSignals } from "@/lib/workflows/website-crawler";
 
 type CampaignRow = {
@@ -53,14 +55,16 @@ export type RunLeadDiscoveryInput = {
 };
 
 type DiscoveryRunStatus = "completed" | "failed" | "quota_exhausted";
+type DiscoveryRunOutputStatus = DiscoveryRunStatus | "paused" | "running";
 
 export type RunLeadDiscoveryOutput = {
   run_id: string | null;
-  status: DiscoveryRunStatus | "paused";
+  status: DiscoveryRunOutputStatus;
   created: number;
   duplicates: number;
   manual_review: number;
   errors: string[];
+  message?: string;
 };
 
 type DiscoveryStats = {
@@ -69,10 +73,38 @@ type DiscoveryStats = {
   detailsCalls: number; enriched: number; scored: number;
 };
 
+type DiscoveryRunRow = {
+  id: string;
+  campaign_id: string;
+  status: string;
+  candidates_checked: number | null;
+  places_text_search_calls: number | null;
+  places_details_calls: number | null;
+  total_places_calls: number | null;
+  duplicates_skipped: number | null;
+  candidates_rejected: number | null;
+  candidates_promoted: number | null;
+  manual_review_candidates: number | null;
+  crawl_failures: number | null;
+  error_message: string | null;
+  started_at: string | null;
+};
+
 const textSearchFieldMask = "places.id,nextPageToken";
 const defaultDetailsFieldMask = "id,displayName,formattedAddress,nationalPhoneNumber,websiteUri,rating,userRatingCount,googleMapsUri";
 const allowedDetailsFields = new Set(defaultDetailsFieldMask.split(","));
 const googlePlacesTimeoutMs = 15000;
+const defaultStaleRunMinutes = 10;
+
+function emptyDiscoveryStats(): DiscoveryStats {
+  return { created: 0, duplicates: 0, manualReview: 0, rejected: 0, crawlFailures: 0, candidatesChecked: 0, textSearchCalls: 0, detailsCalls: 0, enriched: 0, scored: 0 };
+}
+
+function staleRunCutoffIso() {
+  const configured = Number(process.env.DISCOVERY_STALE_RUN_MINUTES ?? defaultStaleRunMinutes);
+  const minutes = Number.isFinite(configured) && configured > 0 ? configured : defaultStaleRunMinutes;
+  return new Date(Date.now() - minutes * 60 * 1000).toISOString();
+}
 
 function conciseError(error: unknown) {
   return error instanceof Error ? error.message : "Discovery run failed";
@@ -236,6 +268,16 @@ function statsSummary(stats: DiscoveryStats) {
   };
 }
 
+function numberFrom(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function eventPayload(row: { payload?: unknown }) {
+  return typeof row.payload === "object" && row.payload !== null && !Array.isArray(row.payload)
+    ? row.payload as Record<string, unknown>
+    : {};
+}
+
 function queryPreview(queryText: string) {
   return compactBody(queryText).slice(0, 120);
 }
@@ -246,7 +288,7 @@ async function logDiscoveryCheckpoint({
   eventType,
   payload = {}
 }: Readonly<{
-  campaign: CampaignRow;
+  campaign: Pick<CampaignRow, "id">;
   runId?: string | null;
   eventType: string;
   payload?: Record<string, unknown>;
@@ -299,6 +341,138 @@ function promotionCheckpointPayload({
     scored_count: scoredCount ?? 0,
     error_count: errorCount ?? 0
   };
+}
+
+async function countRunRows(table: "lead_candidates" | "leads", runId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { count, error } = await supabase
+    .from(table)
+    .select("id", { count: "exact", head: true })
+    .eq("discovery_run_id", runId);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+async function countCandidatesByStatus(runId: string, status: string) {
+  const supabase = createSupabaseServiceClient();
+  const { count, error } = await supabase
+    .from("lead_candidates")
+    .select("id", { count: "exact", head: true })
+    .eq("discovery_run_id", runId)
+    .eq("candidate_status", status);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+async function countPromotedCandidates(runId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { count, error } = await supabase
+    .from("lead_candidates")
+    .select("id", { count: "exact", head: true })
+    .eq("discovery_run_id", runId)
+    .not("final_lead_id", "is", null);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+async function countFailedCrawls(runId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { count, error } = await supabase
+    .from("lead_candidates")
+    .select("id", { count: "exact", head: true })
+    .eq("discovery_run_id", runId)
+    .eq("website_crawl_status", "failed");
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+async function getDiscoveryRun(runId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("discovery_runs")
+    .select("id,campaign_id,status,candidates_checked,places_text_search_calls,places_details_calls,total_places_calls,duplicates_skipped,candidates_rejected,candidates_promoted,manual_review_candidates,crawl_failures,error_message,started_at")
+    .eq("id", runId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data as DiscoveryRunRow | null;
+}
+
+async function persistedDuplicateCount(runId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("workflow_events")
+    .select("payload")
+    .eq("discovery_run_id", runId)
+    .eq("event_type", "lead_intake");
+
+  if (error) return 0;
+  return (data ?? []).reduce((sum, row) => sum + numberFrom(eventPayload(row).duplicates), 0);
+}
+
+async function repairCandidatePromotionConsistency(runId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase
+    .from("lead_candidates")
+    .update({ candidate_status: "details_fetched", rejection_reason: "promotion_reconciled_without_final_lead" })
+    .eq("discovery_run_id", runId)
+    .eq("candidate_status", "promoted")
+    .is("final_lead_id", null);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function reconcileDiscoveryRunStats(runId: string, inMemoryStats: Partial<DiscoveryStats> = {}): Promise<DiscoveryStats> {
+  const run = await getDiscoveryRun(runId);
+  if (!run) throw new Error(`Discovery run not found: ${runId}`);
+  await repairCandidatePromotionConsistency(runId);
+
+  const [
+    candidateCount,
+    rejectedCount,
+    manualReviewCount,
+    duplicateCandidateCount,
+    promotedCandidateCount,
+    failedCrawlCount,
+    createdLeadCount,
+    duplicateEventsCount
+  ] = await Promise.all([
+    countRunRows("lead_candidates", runId),
+    countCandidatesByStatus(runId, "rejected"),
+    countCandidatesByStatus(runId, "manual_review"),
+    countCandidatesByStatus(runId, "duplicate"),
+    countPromotedCandidates(runId),
+    countFailedCrawls(runId),
+    countRunRows("leads", runId),
+    persistedDuplicateCount(runId)
+  ]);
+
+  const duplicates = Math.max(inMemoryStats.duplicates ?? 0, run.duplicates_skipped ?? 0, duplicateEventsCount, duplicateCandidateCount);
+  const textSearchCalls = Math.max(inMemoryStats.textSearchCalls ?? 0, run.places_text_search_calls ?? 0);
+  const detailsCalls = Math.max(inMemoryStats.detailsCalls ?? 0, run.places_details_calls ?? 0, candidateCount);
+  const created = Math.max(inMemoryStats.created ?? 0, run.candidates_promoted ?? 0, createdLeadCount, promotedCandidateCount);
+  const reconciled = {
+    created,
+    duplicates,
+    manualReview: Math.max(inMemoryStats.manualReview ?? 0, run.manual_review_candidates ?? 0, manualReviewCount),
+    rejected: Math.max(inMemoryStats.rejected ?? 0, run.candidates_rejected ?? 0, rejectedCount),
+    crawlFailures: Math.max(inMemoryStats.crawlFailures ?? 0, run.crawl_failures ?? 0, failedCrawlCount),
+    candidatesChecked: Math.max(inMemoryStats.candidatesChecked ?? 0, run.candidates_checked ?? 0, candidateCount + duplicates),
+    textSearchCalls,
+    detailsCalls,
+    enriched: inMemoryStats.enriched ?? 0,
+    scored: inMemoryStats.scored ?? 0
+  };
+
+  await logWorkflowEvent({
+    campaign_id: run.campaign_id,
+    discovery_run_id: runId,
+    event_type: "counts_reconciled",
+    status: "completed",
+    payload: { run_id: runId, stats: statsSummary(reconciled) }
+  });
+
+  return reconciled;
 }
 
 async function getCampaign(campaignId?: string) {
@@ -374,8 +548,9 @@ async function enrichCandidateFromWebsite(candidate: RawLeadInput) {
   }
 
   const signals = extractWebsiteSignals(crawl.pages);
-  candidate.email = signals.emails[0] ?? null;
-  candidate.phone = candidate.phone ?? signals.phones[0] ?? null;
+  const selectedEmail = selectBestBusinessEmail(signals.emails, candidate.website);
+  candidate.email = selectedEmail.email;
+  candidate.phone = normalizePhone(candidate.phone) ?? signals.phones[0] ?? null;
   candidate.whatsapp = signals.whatsapp_found ? "visible" : null;
   candidate.source_attribution = {
     ...candidate.source_attribution,
@@ -384,6 +559,10 @@ async function enrichCandidateFromWebsite(candidate: RawLeadInput) {
       contact_form_found: signals.contact_form_found,
       whatsapp_found: signals.whatsapp_found,
       chat_widget_found: signals.chat_widget_found,
+      email_confidence: selectedEmail.confidence,
+      email_reason: selectedEmail.reason,
+      email_found: Boolean(selectedEmail.email),
+      phone_found: Boolean(signals.phones[0]),
       raw_scrape_summary: signals.raw_scrape_summary
     }
   };
@@ -457,6 +636,28 @@ async function processLeadEnrichmentAndScoring(
     return { enriched, scored, error: errorMsg };
   }
 
+  try {
+    const routeResult = await routeLead(leadId);
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "wf_04_routing",
+      status: "completed",
+      payload: { lead_id: leadId, route_status: routeResult.status, reasons: routeResult.reasons }
+    });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? `WF-04 routing failed for ${leadId}: ${error.message}` : `WF-04 routing failed for ${leadId}`;
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "wf_04_routing",
+      status: "failed",
+      error_message: error instanceof Error ? error.message : "Unknown routing error",
+      payload: { lead_id: leadId }
+    });
+    return { enriched, scored, error: errorMsg };
+  }
+
   return { enriched, scored };
 }
 
@@ -466,7 +667,6 @@ async function promoteAndProcessLeads(
   runId: string,
   dryRun: boolean
 ) {
-  const supabase = createSupabaseServiceClient();
   const results = { created: 0, duplicates: 0, enriched: 0, scored: 0, errors: [] as string[] };
   const candidateCount = promotableLeads.length;
   const basePayload = {
@@ -547,16 +747,6 @@ async function promoteAndProcessLeads(
     })
   });
 
-  for (const lead of promotableLeads) {
-    if (lead.candidate_id) {
-      await supabase
-        .from("lead_candidates")
-        .update({ candidate_status: "promoted" })
-        .eq("id", lead.candidate_id)
-        .is("final_lead_id", null);
-    }
-  }
-
   for (let i = 0; i < results.created; i += 1) {
     await reserveQuota(campaign, "final_leads", campaign.max_leads_per_run);
   }
@@ -618,7 +808,7 @@ function buildCandidateFromDetails(
     source: "google_places",
     google_place_id: details.id,
     google_maps_url: details.googleMapsUri ?? null,
-    phone: details.nationalPhoneNumber ?? null,
+    phone: normalizePhone(details.nationalPhoneNumber) ?? null,
     rating: details.rating ?? null,
     review_count: details.userRatingCount ?? null,
     address: details.formattedAddress,
@@ -726,21 +916,29 @@ async function processCandidatePlace(
   let crawlStatus: CrawlResult["crawlStatus"] = candidate.website ? "pending" : "skipped";
   let crawlSummary: string | null = null;
 
+  let finalValidation = validation;
   if (validation.status === "details_fetched" && campaign.crawl_website && candidate.website) {
     const enrichment = await enrichCandidateFromWebsite(candidate);
     const resolved = resolveCrawlStatus(enrichment);
     crawlStatus = resolved.crawlStatus;
     crawlSummary = resolved.crawlSummary;
     stats.crawlFailures += resolved.crawlFailures;
+
+    const crawlSignals = candidate.source_attribution?.website_crawl_signals as Record<string, unknown> | undefined;
+    const hasReachableContact = Boolean(candidate.email || candidate.phone || candidate.whatsapp || crawlSignals?.contact_form_found);
+    if (!hasReachableContact) {
+      finalValidation = { status: "manual_review", reason: "no_reachable_contact" };
+      stats.manualReview += 1;
+    }
   }
 
-  const inserted = await insertCandidateRecord({ candidate, details, campaign, runId, searchQueryId, validation, crawlStatus, crawlSummary });
+  const inserted = await insertCandidateRecord({ candidate, details, campaign, runId, searchQueryId, validation: finalValidation, crawlStatus, crawlSummary });
   if (!inserted) {
     errors.push(`Failed to insert candidate for place ${placeId}`);
     return { quotaExhausted: false };
   }
 
-  if (validation.status === "details_fetched") {
+  if (finalValidation.status === "details_fetched") {
     return {
       candidate: { ...candidate, candidate_id: inserted.id, campaign_id: campaign.id, discovery_run_id: runId },
       quotaExhausted: false
@@ -869,8 +1067,10 @@ async function executeSearchQueries(
     }
 
     if (promotable.length >= campaign.max_leads_per_run) break;
+    await updateDiscoveryRunProgress(campaign, runId, stats);
   }
 
+  await updateDiscoveryRunProgress(campaign, runId, stats);
   await logDiscoveryCheckpoint({
     campaign,
     runId,
@@ -907,41 +1107,32 @@ async function processSearchResultPlaces(
   return { candidates, quotaExhausted: false };
 }
 
-function resolveRunStatus(
-  quotaExhausted: boolean,
-  errorsCount: number
-): DiscoveryRunStatus {
-  if (quotaExhausted) return "quota_exhausted";
-  if (errorsCount > 0) return "failed";
-  return "completed";
-}
-
 function mapEventStatus(status: DiscoveryRunStatus): "completed" | "failed" | "blocked" {
   if (status === "quota_exhausted") return "blocked";
   if (status === "failed") return "failed";
   return "completed";
 }
 
-async function finalizeDiscoveryRun(
-  campaign: CampaignRow,
+function resolveRunStatus(
+  quotaExhausted: boolean,
+  errorsCount: number,
+  createdCount = 0
+): DiscoveryRunStatus {
+  if (quotaExhausted) return "quota_exhausted";
+  if (createdCount > 0) return "completed";
+  if (errorsCount > 0) return "failed";
+  return "completed";
+}
+
+async function updateDiscoveryRunProgress(
+  campaign: Pick<CampaignRow, "id">,
   runId: string,
-  stats: DiscoveryStats,
-  errors: string[],
-  status: DiscoveryRunStatus
-): Promise<void> {
+  stats: DiscoveryStats
+) {
   const supabase = createSupabaseServiceClient();
-
-  await logDiscoveryCheckpoint({
-    campaign,
-    runId,
-    eventType: "finalize_started",
-    payload: { status, error_count: errors.length, stats: statsSummary(stats) }
-  });
-
   const { error } = await supabase
     .from("discovery_runs")
     .update({
-      status,
       candidates_checked: stats.candidatesChecked,
       places_text_search_calls: stats.textSearchCalls,
       places_details_calls: stats.detailsCalls,
@@ -950,9 +1141,84 @@ async function finalizeDiscoveryRun(
       candidates_rejected: stats.rejected,
       candidates_promoted: stats.created,
       manual_review_candidates: stats.manualReview,
-      crawl_failures: stats.crawlFailures,
-      error_message: errors[0] ?? null,
-      completed_at: new Date().toISOString()
+      crawl_failures: stats.crawlFailures
+    })
+    .eq("id", runId)
+    .eq("status", "running");
+
+  if (error) {
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "run_progress_persisted",
+      status: "failed",
+      error_message: error.message,
+      payload: { run_id: runId, stats: statsSummary(stats) }
+    });
+    return;
+  }
+
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "run_progress_persisted",
+    payload: { stats: statsSummary(stats) }
+  });
+}
+
+async function safeFinalizeDiscoveryRun(
+  campaign: Pick<CampaignRow, "id">,
+  runId: string,
+  stats: Partial<DiscoveryStats>,
+  errors: string[],
+  status: DiscoveryRunStatus
+): Promise<{ status: DiscoveryRunStatus; stats: DiscoveryStats; finalized: boolean }> {
+  const supabase = createSupabaseServiceClient();
+
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "finalize_started",
+    payload: { status, error_count: errors.length, stats }
+  });
+
+  let reconciledStats: DiscoveryStats;
+  let finalizationErrors = errors;
+  try {
+    reconciledStats = await reconcileDiscoveryRunStats(runId, stats);
+  } catch (error) {
+    const message = `Failed to reconcile discovery run counts: ${conciseError(error)}`;
+    finalizationErrors = [message, ...errors];
+    reconciledStats = { ...emptyDiscoveryStats(), ...stats };
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "counts_reconciled",
+      status: "failed",
+      error_message: message,
+      payload: { run_id: runId, stats }
+    });
+  }
+
+  const finalStatus = resolveRunStatus(status === "quota_exhausted", finalizationErrors.length, reconciledStats.created);
+  const completedAt = new Date().toISOString();
+  const errorDetails = finalizationErrors.map((message) => ({ message, recorded_at: completedAt })).slice(0, 20);
+  const { error } = await supabase
+    .from("discovery_runs")
+    .update({
+      status: finalStatus,
+      candidates_checked: reconciledStats.candidatesChecked,
+      places_text_search_calls: reconciledStats.textSearchCalls,
+      places_details_calls: reconciledStats.detailsCalls,
+      total_places_calls: reconciledStats.textSearchCalls + reconciledStats.detailsCalls,
+      duplicates_skipped: reconciledStats.duplicates,
+      candidates_rejected: reconciledStats.rejected,
+      candidates_promoted: reconciledStats.created,
+      manual_review_candidates: reconciledStats.manualReview,
+      crawl_failures: reconciledStats.crawlFailures,
+      error_message: finalizationErrors[0] ?? null,
+      error_details: errorDetails,
+      completed_at: completedAt
     })
     .eq("id", runId);
 
@@ -963,26 +1229,45 @@ async function finalizeDiscoveryRun(
       event_type: "finalize_failed",
       status: "failed",
       error_message: error.message,
-      payload: { run_id: runId, intended_status: status, error_count: errors.length, stats: statsSummary(stats) }
+      payload: { run_id: runId, intended_status: finalStatus, error_count: finalizationErrors.length, stats: statsSummary(reconciledStats) }
     });
-    throw new Error(`Failed to finalize discovery run: ${error.message}`);
+
+    const fallback = await supabase
+      .from("discovery_runs")
+      .update({
+        status: "failed",
+        error_message: `Failed to finalize discovery run: ${error.message}`,
+        completed_at: completedAt
+      })
+      .eq("id", runId);
+
+    return { status: "failed", stats: reconciledStats, finalized: !fallback.error };
   }
 
   await logDiscoveryCheckpoint({
     campaign,
     runId,
     eventType: "finalize_completed",
-    payload: { status, error_count: errors.length, stats: statsSummary(stats) }
+    payload: { status: finalStatus, error_count: finalizationErrors.length, stats: statsSummary(reconciledStats) }
+  });
+
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "terminal_status_written",
+    payload: { status: finalStatus, stats: statsSummary(reconciledStats) }
   });
 
   await logWorkflowEvent({
     campaign_id: campaign.id,
     discovery_run_id: runId,
     event_type: "discovery_run",
-    status: mapEventStatus(status),
-    error_message: errors[0],
-    payload: { created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, enriched: stats.enriched, scored: stats.scored, errors_count: errors.length }
+    status: mapEventStatus(finalStatus),
+    error_message: finalizationErrors[0],
+    payload: { created: reconciledStats.created, duplicates: reconciledStats.duplicates, manual_review: reconciledStats.manualReview, enriched: reconciledStats.enriched, scored: reconciledStats.scored, errors_count: finalizationErrors.length }
   });
+
+  return { status: finalStatus, stats: reconciledStats, finalized: true };
 }
 
 async function failDiscoveryRun(
@@ -992,7 +1277,80 @@ async function failDiscoveryRun(
   errors: string[]
 ) {
   const message = errors[0] ?? "Discovery run failed";
-  await finalizeDiscoveryRun(campaign, runId, stats, [message], "failed");
+  return safeFinalizeDiscoveryRun(campaign, runId, stats, [message], "failed");
+}
+
+async function recoverStaleDiscoveryRun(run: DiscoveryRunRow) {
+  const supabase = createSupabaseServiceClient();
+  const { data: events } = await supabase
+    .from("workflow_events")
+    .select("event_type,status,error_message")
+    .eq("discovery_run_id", run.id);
+
+  const fatalEvent = (events ?? []).find((event) => event.status === "failed");
+  const quotaEvent = (events ?? []).find((event) => event.event_type === "quota_enforced" && event.status === "blocked");
+  const reconciled = await reconcileDiscoveryRunStats(run.id);
+  const errors = fatalEvent?.error_message ? [fatalEvent.error_message] : run.error_message ? [run.error_message] : [];
+  let status: DiscoveryRunStatus = "failed";
+  if (quotaEvent) {
+    status = "quota_exhausted";
+  } else if (!fatalEvent && (reconciled.created > 0 || reconciled.candidatesChecked > 0)) {
+    status = "completed";
+  }
+
+  const finalized = await safeFinalizeDiscoveryRun(
+    { id: run.campaign_id },
+    run.id,
+    reconciled,
+    status === "failed" && errors.length === 0 ? ["Recovered stale discovery run with no persisted progress"] : errors,
+    status
+  );
+
+  await logWorkflowEvent({
+    campaign_id: run.campaign_id,
+    discovery_run_id: run.id,
+    event_type: "stale_run_recovered",
+    status: finalized.finalized ? "completed" : "failed",
+    error_message: finalized.finalized ? undefined : "Stale run recovery finalization failed",
+    payload: { run_id: run.id, recovered_status: finalized.status, stats: statsSummary(finalized.stats) }
+  });
+}
+
+export async function recoverStaleDiscoveryRuns(campaignId?: string) {
+  const supabase = createSupabaseServiceClient();
+  let query = supabase
+    .from("discovery_runs")
+    .select("id,campaign_id,status,candidates_checked,places_text_search_calls,places_details_calls,total_places_calls,duplicates_skipped,candidates_rejected,candidates_promoted,manual_review_candidates,crawl_failures,error_message,started_at")
+    .eq("status", "running")
+    .lt("started_at", staleRunCutoffIso())
+    .order("started_at", { ascending: true })
+    .limit(25);
+
+  if (campaignId) query = query.eq("campaign_id", campaignId);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  for (const run of (data ?? []) as DiscoveryRunRow[]) {
+    await recoverStaleDiscoveryRun(run);
+  }
+
+  return { recovered: data?.length ?? 0 };
+}
+
+async function getActiveDiscoveryRun(campaignId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("discovery_runs")
+    .select("id,campaign_id,status,candidates_checked,places_text_search_calls,places_details_calls,total_places_calls,duplicates_skipped,candidates_rejected,candidates_promoted,manual_review_candidates,crawl_failures,error_message,started_at")
+    .eq("campaign_id", campaignId)
+    .eq("status", "running")
+    .gte("started_at", staleRunCutoffIso())
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data as DiscoveryRunRow | null;
 }
 
 export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promise<RunLeadDiscoveryOutput> {
@@ -1012,6 +1370,21 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       trigger_type: input.trigger_type ?? (input.dry_run ? "manual" : "schedule")
     }
   });
+
+  await recoverStaleDiscoveryRuns(campaign.id);
+  const activeRun = await getActiveDiscoveryRun(campaign.id);
+  if (activeRun) {
+    const message = "A discovery run is already in progress";
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: activeRun.id,
+      event_type: "discovery_run_start_blocked",
+      status: "blocked",
+      error_message: message,
+      payload: { run_id: activeRun.id }
+    });
+    return { run_id: activeRun.id, status: "running", created: 0, duplicates: 0, manual_review: 0, errors: [message], message };
+  }
 
   if (!(await reserveQuota(campaign, "run_count", campaign.max_discovery_runs_per_day))) {
     await logWorkflowEvent({ campaign_id: campaign.id, event_type: "quota_enforced", status: "blocked", payload: { counter: "run_count" } });
@@ -1034,7 +1407,7 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
 
   const runId = run.id as string;
   const errors: string[] = [];
-  const stats: DiscoveryStats = { created: 0, duplicates: 0, manualReview: 0, rejected: 0, crawlFailures: 0, candidatesChecked: 0, textSearchCalls: 0, detailsCalls: 0, enriched: 0, scored: 0 };
+  const stats = emptyDiscoveryStats();
   await logDiscoveryCheckpoint({
     campaign,
     runId,
@@ -1093,14 +1466,28 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       });
     }
 
-    const status = resolveRunStatus(quotaExhausted, errors.length);
-    await finalizeDiscoveryRun(campaign, runId, stats, errors, status);
+    const status = resolveRunStatus(quotaExhausted, errors.length, stats.created);
+    const finalized = await safeFinalizeDiscoveryRun(campaign, runId, stats, errors, status);
 
-    return { run_id: runId, status, created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, errors };
+    return {
+      run_id: runId,
+      status: finalized.status,
+      created: finalized.stats.created,
+      duplicates: finalized.stats.duplicates,
+      manual_review: finalized.stats.manualReview,
+      errors
+    };
   } catch (error) {
     const message = conciseError(error);
     errors.unshift(message);
-    await failDiscoveryRun(campaign, runId, stats, errors);
-    return { run_id: runId, status: "failed", created: stats.created, duplicates: stats.duplicates, manual_review: stats.manualReview, errors };
+    const finalized = await failDiscoveryRun(campaign, runId, stats, errors);
+    return {
+      run_id: runId,
+      status: finalized.status,
+      created: finalized.stats.created,
+      duplicates: finalized.stats.duplicates,
+      manual_review: finalized.stats.manualReview,
+      errors
+    };
   }
 }

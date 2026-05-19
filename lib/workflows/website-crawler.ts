@@ -1,5 +1,6 @@
 import dns from "node:dns/promises";
 import net from "node:net";
+import { extractBusinessEmailsFromHtml, extractPhonesFromHtml, normalizeDomain, selectBestBusinessEmail } from "@/lib/workflows/contact-extraction";
 
 export type CrawlPage = {
   url: string;
@@ -141,12 +142,18 @@ export async function crawlBusinessWebsite(websiteUrl?: string | null): Promise<
 }
 
 export function extractWebsiteSignals(pages: CrawlPage[]) {
-  const combined = pages.map((page) => page.html).join("\n").toLowerCase();
-  const emails = [...new Set(combined.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) ?? [])];
-  const phones = [...new Set(combined.match(/(?:\+?\d[\d\s().-]{7,}\d)/g) ?? [])].slice(0, 5);
+  const combinedHtml = pages.map((page) => page.html).join("\n");
+  const combined = combinedHtml.toLowerCase();
+  const websiteDomain = normalizeDomain(pages[0]?.url);
+  const emails = [...new Set(pages.flatMap((page) => extractBusinessEmailsFromHtml(page.html)))];
+  const emailSelection = selectBestBusinessEmail(emails, websiteDomain);
+  const phones = [...new Set(pages.flatMap((page) => extractPhonesFromHtml(page.html)))].slice(0, 5);
 
   return {
     emails,
+    selected_email: emailSelection.email,
+    email_confidence: emailSelection.confidence,
+    email_reason: emailSelection.reason,
     phones,
     booking_link_found: ["book now", "calendly", "appointment", "calendar"].some((term) => combined.includes(term)),
     contact_form_found: ["<form", "contact form", "submit"].some((term) => combined.includes(term)),

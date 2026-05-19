@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { triggerCampaignManualRun, type ManualRunResult } from "./actions";
 
@@ -17,19 +18,35 @@ export function RunNowButton({
   campaignId: string;
   disabled?: boolean;
 }>) {
+  const router = useRouter();
+  const refreshTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<ManualRunResult | null>(null);
+
+  useEffect(() => () => {
+    refreshTimers.current.forEach((timer) => clearTimeout(timer));
+  }, []);
+
+  function scheduleBoundedRefresh() {
+    refreshTimers.current.forEach((timer) => clearTimeout(timer));
+    router.refresh();
+    refreshTimers.current = [5000, 10000, 20000, 30000].map((delay) =>
+      setTimeout(() => router.refresh(), delay)
+    );
+  }
 
   const runNow = () => {
     setResult(null);
     startTransition(async () => {
       try {
         setResult(await triggerCampaignManualRun(campaignId));
+        scheduleBoundedRefresh();
       } catch (error) {
         setResult({
           status: "failed",
           message: error instanceof Error ? error.message : "Manual discovery request failed"
         });
+        scheduleBoundedRefresh();
       }
     });
   };

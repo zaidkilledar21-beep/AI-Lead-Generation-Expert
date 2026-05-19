@@ -20,6 +20,18 @@ function statusTone(status: string) {
   return "info" as const;
 }
 
+function runStatusTone(status: string, isStale: boolean) {
+  if (isStale || status === "failed") return "danger" as const;
+  if (status === "completed") return "success" as const;
+  if (status === "running") return "warning" as const;
+  return "muted" as const;
+}
+
+function runStatusLabel(status: string, isStale: boolean) {
+  if (isStale) return "stale running";
+  return status.replaceAll("_", " ");
+}
+
 function frequencyLabel(value: string) {
   if (value === "every_3_days") return "Every 3 days";
   return value.charAt(0).toUpperCase() + value.slice(1).replaceAll("_", " ");
@@ -366,11 +378,12 @@ export default async function CampaignDetailPage({
                         <thead>
                           <tr>
                             <th>Started</th>
-                            <th>Leads found</th>
-                            <th>Duplicates</th>
-                            <th>Errors</th>
+                            <th>Candidates</th>
+                            <th>Leads</th>
+                            <th>Review</th>
+                            <th>Rejected</th>
+                            <th>Places</th>
                             <th>Duration</th>
-                            <th>Triggered by</th>
                             <th>Status</th>
                           </tr>
                         </thead>
@@ -378,12 +391,18 @@ export default async function CampaignDetailPage({
                           {detail.runs.map((run) => (
                             <tr key={run.id}>
                               <td className="mono">{run.startedAt ? new Date(run.startedAt).toLocaleString() : "--"}</td>
+                              <td className="mono">{run.candidatesChecked}</td>
                               <td className="mono">{run.leadsFound}</td>
-                              <td className="mono">{run.duplicatesSkipped}</td>
-                              <td className="mono">{run.errors}</td>
+                              <td className="mono">{run.manualReview}</td>
+                              <td className="mono">{run.rejected + run.crawlFailures}</td>
+                              <td className="mono">{run.totalPlacesCalls}</td>
                               <td className="mono">{run.durationSeconds ? `${run.durationSeconds}s` : "--"}</td>
-                              <td>{run.triggeredBy}</td>
-                              <td>{run.status}</td>
+                              <td>
+                                <div className="grid gap-1">
+                                  <Badge tone={runStatusTone(run.status, run.isStale)}>{runStatusLabel(run.status, run.isStale)}</Badge>
+                                  {run.errorMessage ? <span className="text-xs text-red-300">{run.errorMessage}</span> : null}
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -395,6 +414,36 @@ export default async function CampaignDetailPage({
                       description="Trigger a manual discovery run to populate the execution history and see the campaign’s operational trail."
                     />
                   )}
+                  <section className="crm-state-card">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold">Latest run checkpoints</h3>
+                        <p className="muted mt-1 text-sm">Recent WF-10 workflow events for diagnosing the current discovery stage.</p>
+                      </div>
+                      <Badge tone="info">{detail.runEvents.length}</Badge>
+                    </div>
+                    {detail.runEvents.length > 0 ? (
+                      <div className="mt-4 grid gap-3">
+                        {detail.runEvents.map((event) => (
+                          <div key={event.id} className="rounded-xl border border-white/10 bg-white/3 px-4 py-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <strong className="text-sm">{event.eventType}</strong>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge tone={event.status === "failed" ? "danger" : event.status === "blocked" ? "warning" : "muted"}>
+                                  {event.status}
+                                </Badge>
+                                <span className="muted text-xs">{formatDateTime(event.createdAt)}</span>
+                              </div>
+                            </div>
+                            {event.errorMessage ? <p className="mt-2 text-sm text-red-300">{event.errorMessage}</p> : null}
+                            {event.summary ? <p className="muted mt-2 text-sm leading-6">{event.summary}</p> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="muted mt-4 text-sm">No workflow events are recorded for this campaign yet.</p>
+                    )}
+                  </section>
                 </section>
               ) : null}
 

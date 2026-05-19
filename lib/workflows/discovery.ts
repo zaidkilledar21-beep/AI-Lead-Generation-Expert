@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { DiscoverLeadsInput, DiscoverLeadsOutput, GooglePlacesLeadInput } from "@/lib/contracts";
 import { assertDiscoverInput } from "@/lib/contracts";
+import { isValidBusinessEmail, normalizePhone } from "@/lib/workflows/contact-extraction";
 
 export type RawLeadInput = GooglePlacesLeadInput & {
   business_name: string;
@@ -15,7 +16,8 @@ function normalizeUrl(value?: string | null) {
 }
 
 function normalizeEmail(value?: string | null) {
-  return value?.trim().toLowerCase() || null;
+  const email = value?.trim().toLowerCase() || null;
+  return isValidBusinessEmail(email) ? email : null;
 }
 
 function normalizeDomain(value?: string | null) {
@@ -79,6 +81,16 @@ async function findDuplicateReason(lead: ReturnType<typeof normalizeLead>): Prom
   return (count ?? 0) > 0 ? "name_location" : null;
 }
 
+async function markCandidateDuplicate(candidateId: string | null | undefined, reason: string) {
+  if (!candidateId) return;
+  const supabase = createSupabaseServiceClient();
+  await supabase
+    .from("lead_candidates")
+    .update({ candidate_status: "duplicate", rejection_reason: reason })
+    .eq("id", candidateId)
+    .is("final_lead_id", null);
+}
+
 function normalizeLead(raw: RawLeadInput, defaults?: Partial<DiscoverLeadsInput>) {
   const website = normalizeUrl(raw.website);
 
@@ -91,7 +103,7 @@ function normalizeLead(raw: RawLeadInput, defaults?: Partial<DiscoverLeadsInput>
     source: raw.source?.trim() || "manual_import",
     google_maps_url: raw.google_maps_url?.trim() || null,
     linkedin_url: raw.linkedin_url?.trim() || null,
-    phone: raw.phone?.trim() || null,
+    phone: normalizePhone(raw.phone) ?? null,
     email: normalizeEmail(raw.email),
     whatsapp: raw.whatsapp?.trim() || null,
     rating: raw.rating ?? null,
@@ -131,6 +143,7 @@ export async function importDiscoveredLeads(input: DiscoverLeadsInput, leads: Ra
       if (duplicateReason) {
         duplicates += 1;
         duplicateReasonCounts[duplicateReason] = (duplicateReasonCounts[duplicateReason] ?? 0) + 1;
+        await markCandidateDuplicate(raw.candidate_id, `duplicate_${duplicateReason}`);
         continue;
       }
 
@@ -140,6 +153,7 @@ export async function importDiscoveredLeads(input: DiscoverLeadsInput, leads: Ra
         if (error.code === "23505") {
           duplicates += 1;
           duplicateReasonCounts.database_constraint = (duplicateReasonCounts.database_constraint ?? 0) + 1;
+          await markCandidateDuplicate(raw.candidate_id, "duplicate_database_constraint");
         } else {
           errors.push(`${lead.business_name}: ${error.message}`);
           failureReasonCounts.database_error = (failureReasonCounts.database_error ?? 0) + 1;

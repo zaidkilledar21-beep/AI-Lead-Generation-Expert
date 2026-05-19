@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { archiveCampaignAction, duplicateCampaignAction, triggerCampaignManualRun, updateCampaignStatus, type ManualRunResult } from "../actions";
 
@@ -23,6 +24,7 @@ export function CampaignDetailControls({
   status: string;
   manualRunBlocked: boolean;
 }>) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [manualRunResult, setManualRunResult] = useState<ManualRunResult | null>(null);
@@ -34,6 +36,7 @@ export function CampaignDetailControls({
       try {
         const result = await action();
         onSuccess?.(result);
+        router.refresh();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Campaign action failed");
       }

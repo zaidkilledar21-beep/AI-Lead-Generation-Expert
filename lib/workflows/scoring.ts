@@ -2,6 +2,7 @@ import { assertScoringOutput } from "@/lib/contracts";
 import { callDeepSeekJson } from "@/lib/deepseek";
 import { icpConfig } from "@/lib/config/icp";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { createOrUpdateManualReview } from "@/lib/workflows/routing";
 import type { ScoringOutput } from "@/lib/types";
 
 const scoringPromptVersion = "icp_scoring_v2";
@@ -202,6 +203,8 @@ export async function scoreLead(leadId: string) {
     }
     const message = error instanceof Error ? error.message : "Unknown scoring error";
     await logScoringEvent(lead, "failed", { prompt_version: scoringPromptVersion }, message);
+    await supabase.from("leads").update({ status: "review_pending" }).eq("id", leadId);
+    await createOrUpdateManualReview(leadId, "scoring_failed", "normal");
     throw error;
   }
 }
