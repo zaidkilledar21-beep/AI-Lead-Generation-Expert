@@ -7,12 +7,25 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Phase 02 campaign creation verification.
+- Discovery run lifecycle hardening and Run Now feedback fix.
 
 ## Current module / PR
-- Campaign creation wizard.
+- Campaign manual discovery run path.
 
 ## Last completed work
+- Completed the follow-up discovery diagnostics audit on the current diff without reworking the discovery architecture.
+- Added the missing `execute_search_completed`, `import_started`, `import_completed`, `enrichment_scoring_started`, `enrichment_scoring_completed`, `promotion_completed`, and `finalize_failed` workflow event checkpoints.
+- Promotion/import/enrichment/finalization is now diagnosable from compact aggregate workflow event payloads: run id, campaign id, candidate/promotable/created/duplicate/enriched/scored/error counts, query counts, and stats summaries only.
+- Added an explicit zero-lead promotion failure path: if fetched promotable candidates exist but no leads are created, the run finalizes as `failed` with `No leads promoted from X fetched candidates`.
+- Confirmed finalization update errors are checked; a failed update now logs `finalize_failed` and does not log `finalize_completed`.
+- Added safe discovery lifecycle checkpoint workflow events to identify where a run stops after `discovery_runs` insertion.
+- Checkpoints now cover campaign load, run quota reservation, run insertion, query building, query loop start, query quota reservation, search-query upsert, Google Text Search start/completion, place processing start, promotion start, finalization start, and finalization completion.
+- Checkpoint payloads are compact and safe: run id, query counts/indexes, max-120-character query previews, places count, and stats summaries only.
+- Hardened `runLeadDiscovery` so a discovery run inserted as `running` is finalized as `failed` with counters and `completed_at` if any post-insert processing error occurs.
+- Added checked discovery run finalization, explicit failed-run workflow events, zero-query failure handling, Google Places request timeouts, and compact Google Places response-body error messages without logging secrets.
+- Updated Run Now server action feedback to distinguish requested/running/success, quota blocked, config missing, and failed states while preserving existing quota behavior.
+- Added campaign card Run Now inline pending/result feedback and surfaced latest run status/date/error from a bounded latest-runs query.
+- Updated campaign detail manual-run controls to show returned manual-run feedback.
 - Verified the Create Campaign wizard payload against `app/campaigns/actions.ts`, `lib/app/campaigns.ts`, and `lib/contracts.ts`; all required, list, boolean, numeric, optional, and defaulted fields align with the server action parser.
 - Confirmed the final `Save Campaign` submit path calls the existing `createCampaign` server action via the complete state-built `FormData` payload.
 - Ran a minimal Playwright browser probe against `/campaigns/new`; unauthenticated access redirects to `/login?next=%2Fcampaigns%2Fnew`, so real campaign creation remains a manual authenticated QA step.
@@ -50,6 +63,13 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `lib/workflows/lead-discovery.ts`
+- `app/campaigns/actions.ts`
+- `app/campaigns/page.tsx`
+- `app/campaigns/run-now-button.tsx`
+- `app/campaigns/[campaign_id]/campaign-detail-controls.tsx`
+- `lib/crm/queries.ts`
+- `status.md`
 - `app/campaigns/create-campaign-form.tsx`
 - `status.md`
 - `components/crm/analytics-charts.tsx`
@@ -82,6 +102,9 @@ AI Automation CRM / Lead Generation Dashboard
 - typecheck: passed (`npm run typecheck`)
 - build: passed (`npm run build`)
 - git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- discovery follow-up diagnostics audit: passed; missing search/promotion/finalization checkpoints added
+- discovery lifecycle diagnostics: added checkpoint workflow_events for the zombie run investigation
+- discovery hardening validation: passed lint/typecheck/build/diff-check after changes
 - browser/e2e QA: automated unauthenticated Playwright probe reached `/login?next=%2Fcampaigns%2Fnew`; authenticated campaign creation must be manual
 - manual campaign wizard QA: pending authenticated session
 - localized duplication check: passed, 0.00% duplicated six-line blocks in `components/crm/analytics-charts.tsx`
@@ -92,10 +115,15 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- Production issue under investigation: run `87d51a76-bd77-45be-8c16-8fbcbe576260` stayed `running` with zero counters and no completion event after `/api/workflows/discovery/run` returned 200; next run should reveal the stopping checkpoint.
+- Manual production retest is still required with a fresh campaign or after the daily quota resets to confirm Vercel/n8n/Google Places behavior against live services.
+- The next production test must confirm whether the run reaches `promotion_completed`, then `finalize_started`, then `finalize_completed`; if it stops earlier, the last checkpoint should identify the failing stage.
+- Existing stuck `discovery_runs` rows are not backfilled by this code-only patch.
 - No remaining confirmed campaign creation blocker from Phase 02, but campaign creation should still be manually checked in an authenticated browser session to confirm database creation and review payload values end to end.
 - The authenticated analytics layout still needs a browser pass with a valid dashboard session to visually confirm real data density and chart/table alignment.
 - The CRM still has several dense operational surfaces that should be improved incrementally rather than with a broad redesign.
 - Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
-- Run authenticated manual QA for `/campaigns/new`; if campaign creation succeeds, proceed to manual discovery testing/readiness checks in the next scoped phase.
+- Retest Run Now with a brand-new campaign or after quota reset: confirm the UI shows requested/running or a quota/config/error message, then inspect `workflow_events` in chronological order for `execute_search_completed`, `promotion_started`, `import_started`, `import_completed`, `enrichment_scoring_started`, `enrichment_scoring_completed`, `promotion_completed`, `finalize_started`, and `finalize_completed` or `finalize_failed`.
+- After the retest, confirm the latest `discovery_runs` row has non-running `status`, populated `completed_at`, expected counters, and a clear `error_message` if no leads were promoted.

@@ -2,10 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { archiveCampaignAction, duplicateCampaignAction, triggerCampaignManualRun, updateCampaignStatus } from "../actions";
+import { archiveCampaignAction, duplicateCampaignAction, triggerCampaignManualRun, updateCampaignStatus, type ManualRunResult } from "../actions";
 
 const archiveCopy =
   "Archiving keeps historical leads, runs, and analytics, but removes this campaign from active operating views.";
+
+function manualRunTone(result: ManualRunResult | null) {
+  if (!result) return "text-green-300";
+  if (result.status === "failed") return "text-red-300";
+  if (result.status === "quota_blocked" || result.status === "config_missing") return "text-yellow-300";
+  return "text-green-300";
+}
 
 export function CampaignDetailControls({
   campaignId,
@@ -18,9 +25,11 @@ export function CampaignDetailControls({
 }>) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [manualRunResult, setManualRunResult] = useState<ManualRunResult | null>(null);
 
   function runAction(action: () => Promise<unknown>, onSuccess?: (result: unknown) => void) {
     setError(null);
+    setManualRunResult(null);
     startTransition(async () => {
       try {
         const result = await action();
@@ -40,7 +49,7 @@ export function CampaignDetailControls({
         <Button
           type="button"
           disabled={isPending || manualRunBlocked || isArchived}
-          onClick={() => runAction(() => triggerCampaignManualRun(campaignId))}
+          onClick={() => runAction(() => triggerCampaignManualRun(campaignId), (result) => setManualRunResult(result as ManualRunResult))}
         >
           {isArchived ? "Archived" : manualRunBlocked ? "Readiness blocked" : isPending ? "Working..." : "Trigger manual discovery run"}
         </Button>
@@ -96,6 +105,7 @@ export function CampaignDetailControls({
         ) : null}
       </div>
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
+      {manualRunResult ? <p className={`text-sm ${manualRunTone(manualRunResult)}`}>{manualRunResult.message}</p> : null}
     </div>
   );
 }
