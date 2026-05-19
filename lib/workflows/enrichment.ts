@@ -1,5 +1,6 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { EnrichLeadOutput } from "@/lib/contracts";
+import { isValidBusinessEmail, normalizePhone, selectBestBusinessEmail } from "@/lib/workflows/contact-extraction";
 import { crawlBusinessWebsite, extractWebsiteSignals } from "@/lib/workflows/website-crawler";
 
 type CandidateSourceAttribution = {
@@ -8,6 +9,8 @@ type CandidateSourceAttribution = {
     contact_form_found?: boolean;
     whatsapp_found?: boolean;
     chat_widget_found?: boolean;
+    email_confidence?: "high" | "medium" | "low" | "none";
+    email_reason?: string;
     raw_scrape_summary?: string;
   };
 };
@@ -29,6 +32,7 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
 
   if (error) throw new Error(error.message);
   if (!lead) throw new Error("Lead not found");
+  const existingLeadEmail = isValidBusinessEmail(lead.email) ? lead.email : null;
   if (!lead.website) {
     await logEnrichmentFailure(leadId, "Lead has no website");
     return {
@@ -51,6 +55,8 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
     const sourceAttribution = candidate.source_attribution as CandidateSourceAttribution | null;
     const crawlSignals = sourceAttribution?.website_crawl_signals;
     const normalizedPayload = candidate.normalized_payload as CandidatePayload | null;
+    const candidateEmail = isValidBusinessEmail(normalizedPayload?.email) ? normalizedPayload?.email ?? null : null;
+    const candidatePhone = normalizePhone(normalizedPayload?.phone);
     const record = {
       lead_id: leadId,
       services_offered: [],
@@ -58,8 +64,8 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
       detected_tools: [],
       booking_link_found: crawlSignals?.booking_link_found ?? false,
       contact_form_found: crawlSignals?.contact_form_found ?? false,
-      email_found: normalizedPayload?.email ?? null,
-      phone_found: normalizedPayload?.phone ?? null,
+      email_found: candidateEmail,
+      phone_found: candidatePhone,
       whatsapp_found: crawlSignals?.whatsapp_found ? "visible" : null,
       chat_widget_found: crawlSignals?.chat_widget_found ?? false,
       raw_scrape_summary: candidate.website_crawl_summary,
@@ -74,8 +80,8 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
       .from("leads")
       .update({
         status: "enriched",
-        email: lead.email ?? normalizedPayload?.email ?? null,
-        phone: lead.phone ?? normalizedPayload?.phone ?? null,
+        email: existingLeadEmail ?? candidateEmail,
+        phone: lead.phone ?? candidatePhone,
         whatsapp: lead.whatsapp ?? normalizedPayload?.whatsapp ?? record.whatsapp_found
       })
       .eq("id", leadId);
@@ -83,7 +89,8 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
     await logEnrichmentEvent(lead, "completed", {
       reused_candidate_crawl: true,
       confidence: "medium",
-      signals: crawlSignals ?? {}
+      signals: crawlSignals ?? {},
+      ignored_candidate_email: normalizedPayload?.email && !candidateEmail ? "invalid_email" : null
     });
 
     return {
@@ -108,7 +115,7 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
   const pages = crawl.pages;
   const combined = pages.map((page) => page.html).join("\n");
   const signals = extractWebsiteSignals(pages);
-  const emails = signals.emails;
+  const selectedEmail = selectBestBusinessEmail(signals.emails, lead.website);
   const phones = signals.phones;
   const workflowSignals = [
     signals.whatsapp_found ? "whatsapp visible" : null,
@@ -125,7 +132,7 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
     contact_page_url: pages.find((page) => page.url !== lead.website)?.url ?? null,
     booking_link_found: signals.booking_link_found,
     contact_form_found: signals.contact_form_found,
-    email_found: emails[0] ?? null,
+    email_found: selectedEmail.email,
     phone_found: phones[0] ?? null,
     whatsapp_found: signals.whatsapp_found ? "visible" : null,
     social_links: [],
@@ -136,7 +143,7 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
     calendar_tool_found: hasAny(combined, ["calendly", "acuity", "calendar"]),
     detected_tools: [],
     raw_scrape_summary: workflowSignals.join("; "),
-    enrichment_confidence: pages.length > 1 || emails.length || phones.length ? "medium" : "low",
+    enrichment_confidence: pages.length > 1 || selectedEmail.email || phones.length ? "medium" : "low",
     status: "completed"
   };
 
@@ -147,8 +154,8 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
     .from("leads")
     .update({
       status: "enriched",
-      email: lead.email ?? emails[0] ?? null,
-      phone: lead.phone ?? phones[0] ?? null,
+      email: existingLeadEmail ?? selectedEmail.email,
+      phone: lead.phone ?? normalizePhone(phones[0]),
       whatsapp: lead.whatsapp ?? record.whatsapp_found
     })
     .eq("id", leadId);
@@ -157,6 +164,8 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
     reused_candidate_crawl: false,
     confidence: record.enrichment_confidence,
     pages_crawled: pages.length,
+    email_confidence: selectedEmail.confidence,
+    email_reason: selectedEmail.reason,
     workflow_signals: workflowSignals
   });
 
@@ -164,7 +173,7 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
     lead_id: leadId,
     status: "completed",
     enrichment_confidence: record.enrichment_confidence as "low" | "medium" | "high",
-    email_found: emails[0],
+    email_found: selectedEmail.email ?? undefined,
     workflow_signals: workflowSignals
   };
 }

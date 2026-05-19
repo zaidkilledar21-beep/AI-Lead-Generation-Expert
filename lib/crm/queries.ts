@@ -49,6 +49,61 @@ function relationOne<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
+function numberFrom(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function isStaleRunningRun(run: Record<string, any> | null | undefined) {
+  if (!run || run.status !== "running" || !run.started_at) return false;
+  return Date.now() - new Date(run.started_at).getTime() > 15 * 60 * 1000;
+}
+
+function payloadSummary(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const record = payload as Record<string, unknown>;
+  const summaryKeys = [
+    "run_id",
+    "query_count",
+    "query_index",
+    "places_count",
+    "candidate_count",
+    "promotable_count",
+    "created_count",
+    "duplicate_count",
+    "enriched_count",
+    "scored_count",
+    "error_count",
+    "manual_review_count",
+    "queued_count",
+    "route_status",
+    "reason"
+  ];
+  const parts = summaryKeys
+    .map((key) => {
+      const value = record[key];
+      if (value == null || typeof value === "object") return null;
+      return `${key}: ${String(value).slice(0, 80)}`;
+    })
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join(" / ").slice(0, 260) : null;
+}
+
+function latestRunCheckpoint(events: Array<Record<string, any>>, run: Record<string, any> | null | undefined) {
+  if (!run) return null;
+  return events.find((event) => event.discovery_run_id === run.id || event.payload?.run_id === run.id) ?? null;
+}
+
+function incrementCount(map: Map<string, number>, campaignId: unknown) {
+  if (typeof campaignId === "string") {
+    map.set(campaignId, (map.get(campaignId) ?? 0) + 1);
+  }
+}
+
+function leadCampaignId(row: Record<string, any>) {
+  const lead = relationOne<Record<string, any>>(row.leads);
+  return lead?.campaign_id;
+}
+
 function mapPipelineRow(row: Record<string, any>) {
   return {
     id: row.id,
@@ -144,29 +199,76 @@ export async function getCampaignRows() {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return [];
 
-  const [{ data: analytics }, { data: campaigns }, { data: discoveryRuns }] = await Promise.all([
+  const [
+    { data: analytics },
+    { data: campaigns },
+    { data: discoveryRuns },
+    { data: workflowEvents },
+    { data: manualReviews },
+    { data: outreachQueue }
+  ] = await Promise.all([
     supabase.from("campaign_analytics").select("*").order("name"),
     supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
     supabase
       .from("discovery_runs")
-      .select("id,campaign_id,status,started_at,completed_at,error_message")
+      .select("id,campaign_id,status,started_at,completed_at,error_message,candidates_checked,places_text_search_calls,places_details_calls,total_places_calls,duplicates_skipped,candidates_rejected,candidates_promoted,manual_review_candidates,crawl_failures,duration_seconds")
       .order("started_at", { ascending: false })
-      .limit(100)
+      .limit(100),
+    supabase
+      .from("workflow_events")
+      .select("id,campaign_id,discovery_run_id,event_type,status,error_message,payload,created_at")
+      .eq("workflow_name", "WF-10 Lead Discovery")
+      .order("created_at", { ascending: false })
+      .limit(250),
+    supabase
+      .from("manual_review_queue")
+      .select("id,reason,review_status,leads!inner(campaign_id)")
+      .eq("review_status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(500),
+    supabase
+      .from("outreach_queue")
+      .select("id,status,pause_reason,leads!inner(campaign_id)")
+      .in("status", ["queued", "paused", "blocked"])
+      .order("created_at", { ascending: false })
+      .limit(500)
   ]);
 
   const analyticsById = new Map(
     asArray(analytics as Array<Record<string, any>>).map((row) => [row.campaign_id, row])
   );
+  const workflowEventsList = asArray(workflowEvents as Array<Record<string, any>>);
   const latestRunByCampaignId = new Map<string, Record<string, any>>();
   asArray(discoveryRuns as Array<Record<string, any>>).forEach((run) => {
     if (typeof run.campaign_id === "string" && !latestRunByCampaignId.has(run.campaign_id)) {
       latestRunByCampaignId.set(run.campaign_id, run);
     }
   });
+  const pendingManualReviewsByCampaignId = new Map<string, number>();
+  const latestManualReviewReasonByCampaignId = new Map<string, string>();
+  asArray(manualReviews as Array<Record<string, any>>).forEach((review) => {
+    const campaignId = leadCampaignId(review);
+    incrementCount(pendingManualReviewsByCampaignId, campaignId);
+    if (typeof campaignId === "string" && typeof review.reason === "string" && !latestManualReviewReasonByCampaignId.has(campaignId)) {
+      latestManualReviewReasonByCampaignId.set(campaignId, review.reason);
+    }
+  });
+  const queueCountsByCampaignId = new Map<string, { queued: number; paused: number; blocked: number }>();
+  asArray(outreachQueue as Array<Record<string, any>>).forEach((queueItem) => {
+    const campaignId = leadCampaignId(queueItem);
+    if (typeof campaignId !== "string") return;
+    const counts = queueCountsByCampaignId.get(campaignId) ?? { queued: 0, paused: 0, blocked: 0 };
+    if (queueItem.status === "paused") counts.paused += 1;
+    else if (queueItem.status === "blocked") counts.blocked += 1;
+    else counts.queued += 1;
+    queueCountsByCampaignId.set(campaignId, counts);
+  });
 
   return asArray(campaigns as Array<Record<string, any>>).map((campaign) => {
     const analyticsRow = analyticsById.get(campaign.id) ?? {};
     const latestRun = latestRunByCampaignId.get(campaign.id);
+    const latestCheckpoint = latestRunCheckpoint(workflowEventsList, latestRun);
+    const queueCounts = queueCountsByCampaignId.get(campaign.id) ?? { queued: 0, paused: 0, blocked: 0 };
     return {
       id: campaign.id,
       name: campaign.name,
@@ -208,9 +310,29 @@ export async function getCampaignRows() {
       createdAt: campaign.created_at,
       updatedAt: campaign.updated_at,
       latestRunStatus: latestRun?.status ?? null,
+      latestRunId: latestRun?.id ?? null,
       latestRunStartedAt: latestRun?.started_at ?? null,
       latestRunCompletedAt: latestRun?.completed_at ?? null,
       latestRunError: latestRun?.error_message ?? null,
+      latestRunIsStale: isStaleRunningRun(latestRun),
+      latestRunDurationSeconds: numberFrom(latestRun?.duration_seconds),
+      latestRunCandidatesChecked: numberFrom(latestRun?.candidates_checked),
+      latestRunCandidatesPromoted: numberFrom(latestRun?.candidates_promoted),
+      latestRunRejected: numberFrom(latestRun?.candidates_rejected),
+      latestRunManualReviewCandidates: numberFrom(latestRun?.manual_review_candidates),
+      latestRunCrawlFailures: numberFrom(latestRun?.crawl_failures),
+      latestRunTextSearchCalls: numberFrom(latestRun?.places_text_search_calls),
+      latestRunDetailsCalls: numberFrom(latestRun?.places_details_calls),
+      latestRunTotalPlacesCalls: numberFrom(latestRun?.total_places_calls),
+      latestRunCheckpoint: latestCheckpoint?.event_type ?? null,
+      latestRunCheckpointStatus: latestCheckpoint?.status ?? null,
+      latestRunCheckpointAt: latestCheckpoint?.created_at ?? null,
+      latestRunCheckpointSummary: latestCheckpoint?.error_message ?? payloadSummary(latestCheckpoint?.payload),
+      pendingManualReviews: pendingManualReviewsByCampaignId.get(campaign.id) ?? 0,
+      latestManualReviewReason: latestManualReviewReasonByCampaignId.get(campaign.id) ?? null,
+      queuedOutreach: queueCounts.queued,
+      pausedOutreach: queueCounts.paused,
+      blockedOutreach: queueCounts.blocked,
       leads: analyticsRow.total_leads ?? 0,
       enriched: analyticsRow.enriched_or_later ?? 0,
       scored: analyticsRow.scored_leads ?? 0,
@@ -227,10 +349,22 @@ export async function getCampaignDetailData(campaignId: string) {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return null;
 
-  const [campaigns, leads, runs] = await Promise.all([
+  const [campaigns, leads, runs, runEvents] = await Promise.all([
     getCampaignRows(),
     getPipelineRows(500),
-    supabase.from("campaign_run_log").select("*").eq("campaign_id", campaignId).order("run_started_at", { ascending: false }).limit(25)
+    supabase
+      .from("discovery_runs")
+      .select("id,campaign_id,status,started_at,completed_at,error_message,candidates_checked,places_text_search_calls,places_details_calls,total_places_calls,duplicates_skipped,candidates_rejected,candidates_promoted,manual_review_candidates,crawl_failures,duration_seconds,triggered_by")
+      .eq("campaign_id", campaignId)
+      .order("started_at", { ascending: false })
+      .limit(25),
+    supabase
+      .from("workflow_events")
+      .select("id,discovery_run_id,event_type,status,error_message,payload,created_at")
+      .eq("campaign_id", campaignId)
+      .eq("workflow_name", "WF-10 Lead Discovery")
+      .order("created_at", { ascending: false })
+      .limit(50)
   ]);
 
   const campaign = campaigns.find((item) => item.id === campaignId);
@@ -243,14 +377,30 @@ export async function getCampaignDetailData(campaignId: string) {
     leads: leads.filter((lead) => lead.campaignId === campaignId),
     runs: asArray(runs.data as Array<Record<string, any>>).map((run) => ({
       id: run.id,
-      startedAt: run.run_started_at,
-      completedAt: run.run_completed_at,
-      leadsFound: run.leads_found ?? 0,
-      duplicatesSkipped: run.duplicates_skipped ?? 0,
-      errors: run.errors ?? 0,
+      startedAt: run.started_at,
+      completedAt: run.completed_at,
+      leadsFound: numberFrom(run.candidates_promoted),
+      candidatesChecked: numberFrom(run.candidates_checked),
+      duplicatesSkipped: numberFrom(run.duplicates_skipped),
+      rejected: numberFrom(run.candidates_rejected),
+      manualReview: numberFrom(run.manual_review_candidates),
+      crawlFailures: numberFrom(run.crawl_failures),
+      totalPlacesCalls: numberFrom(run.total_places_calls),
+      errors: run.error_message ? 1 : 0,
+      errorMessage: run.error_message ?? null,
       durationSeconds: run.duration_seconds ?? 0,
       triggeredBy: run.triggered_by ?? "scheduled",
-      status: run.status ?? "completed"
+      status: run.status ?? "completed",
+      isStale: isStaleRunningRun(run)
+    })),
+    runEvents: asArray(runEvents.data as Array<Record<string, any>>).map((event) => ({
+      id: event.id,
+      discoveryRunId: event.discovery_run_id ?? null,
+      eventType: event.event_type,
+      status: event.status,
+      errorMessage: event.error_message ?? null,
+      createdAt: event.created_at ?? null,
+      summary: payloadSummary(event.payload)
     }))
   };
 }
