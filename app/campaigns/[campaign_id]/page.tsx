@@ -266,7 +266,13 @@ function SupportWarnings({ warnings }: { warnings: string[] }) {
   );
 }
 
-function LatestRunSummary({ latestRun }: { latestRun: CampaignDetail["runs"][number] | null }) {
+function LatestRunSummary({
+  campaignId,
+  latestRun
+}: {
+  campaignId: string;
+  latestRun: CampaignDetail["runs"][number] | null;
+}) {
   if (!latestRun) return null;
 
   return (
@@ -278,7 +284,10 @@ function LatestRunSummary({ latestRun }: { latestRun: CampaignDetail["runs"][num
             Started {formatDateTime(latestRun.startedAt)} / Completed {formatDateTime(latestRun.completedAt)}
           </p>
         </div>
-        <Badge tone={runStatusTone(latestRun.userStatus, latestRun.isStale)}>{latestRun.userStatus}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={runStatusTone(latestRun.userStatus, latestRun.isStale)}>{latestRun.userStatus}</Badge>
+          <a href={`/campaigns/${campaignId}/runs/${latestRun.id}`}>Open run detail</a>
+        </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Candidates checked" value={latestRun.candidatesChecked} />
@@ -358,7 +367,7 @@ function OperatorCockpit({ detail }: { detail: CampaignDetail }) {
             </p>
           </section>
         </div>
-        <LatestRunSummary latestRun={latestRun} />
+        <LatestRunSummary campaignId={detail.campaign.id} latestRun={latestRun} />
       </div>
     </section>
   );
@@ -594,6 +603,7 @@ function RunHistoryTab({ detail }: { detail: CampaignDetail }) {
                 <th>Places</th>
                 <th>Duration</th>
                 <th>Status</th>
+                <th>Open</th>
               </tr>
             </thead>
             <tbody>
@@ -611,6 +621,9 @@ function RunHistoryTab({ detail }: { detail: CampaignDetail }) {
                       <Badge tone={runStatusTone(run.userStatus, run.isStale)}>{runStatusLabel(run.userStatus, run.isStale)}</Badge>
                       {run.errorMessage ? <span className="text-xs text-red-300">{run.errorMessage}</span> : null}
                     </div>
+                  </td>
+                  <td>
+                    <a href={`/campaigns/${detail.campaign.id}/runs/${run.id}`}>Open run</a>
                   </td>
                 </tr>
               ))}
