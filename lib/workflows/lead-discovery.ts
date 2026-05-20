@@ -60,17 +60,46 @@ type DiscoveryRunOutputStatus = DiscoveryRunStatus | "paused" | "running";
 export type RunLeadDiscoveryOutput = {
   run_id: string | null;
   status: DiscoveryRunOutputStatus;
+  campaign_id?: string | null;
+  campaign_name?: string | null;
   created: number;
   duplicates: number;
   manual_review: number;
+  scored?: number;
+  queued?: number;
+  drafted?: number;
   errors: string[];
   message?: string;
+  notification?: DiscoveryRunNotification;
 };
 
 type DiscoveryStats = {
   created: number; duplicates: number; manualReview: number; rejected: number;
   crawlFailures: number; candidatesChecked: number; textSearchCalls: number;
   detailsCalls: number; enriched: number; scored: number;
+};
+
+type RoutingStats = {
+  queued: number;
+  drafted: number;
+};
+
+type PromotionResults = {
+  created: number;
+  duplicates: number;
+  enriched: number;
+  scored: number;
+  routing: RoutingStats;
+  errors: string[];
+};
+
+type DiscoveryRunNotification = {
+  subject: string;
+  final_status: string;
+  needs_attention: boolean;
+  campaign_url: string;
+  run_url: string;
+  body: string;
 };
 
 type DiscoveryRunRow = {
@@ -112,6 +141,114 @@ function conciseError(error: unknown) {
 
 function compactBody(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, 400);
+}
+
+function configuredAppBaseUrl() {
+  const baseUrl = process.env.APP_BASE_URL
+    ?? process.env.NEXT_PUBLIC_APP_URL
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+  return baseUrl.replace(/\/+$/, "");
+}
+
+function appPath(path: string) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const baseUrl = configuredAppBaseUrl();
+  return baseUrl ? `${baseUrl}${normalizedPath}` : normalizedPath;
+}
+
+function notificationSubject(status: DiscoveryRunOutputStatus, created: number, needsAttention: boolean) {
+  if (needsAttention) return "WF-10 Lead Discovery Needs Attention";
+  if (status === "quota_exhausted" && created > 0) return "WF-10 Lead Discovery Finished: Quota Reached";
+  if (status === "quota_exhausted") return "WF-10 Lead Discovery Finished: Quota Reached - No New Leads";
+  if (status === "completed" && created === 0) return "WF-10 Lead Discovery Finished: No New Leads";
+  return "WF-10 Lead Discovery Finished";
+}
+
+function notificationFinalStatus(status: DiscoveryRunOutputStatus, created: number, needsAttention: boolean) {
+  if (needsAttention) return status === "failed" ? "Needs Attention: failed" : "Needs Attention";
+  if (status === "quota_exhausted" && created > 0) return "Completed: quota reached";
+  if (status === "quota_exhausted") return "Quota reached: no new leads";
+  if (status === "completed") return "Completed";
+  if (status === "running") return "Running";
+  if (status === "paused") return "Paused";
+  return status.replaceAll("_", " ");
+}
+
+function buildDiscoveryRunNotification(input: {
+  campaignId?: string | null;
+  campaignName?: string | null;
+  runId: string | null;
+  status: DiscoveryRunOutputStatus;
+  stats: DiscoveryStats;
+  routing?: RoutingStats;
+  errors: string[];
+}) {
+  const needsAttention = input.status === "failed" || input.status === "paused" || input.status === "running";
+  const subject = notificationSubject(input.status, input.stats.created, needsAttention);
+  const finalStatus = notificationFinalStatus(input.status, input.stats.created, needsAttention);
+  const campaignUrl = input.campaignId ? appPath(`/campaigns/${input.campaignId}`) : appPath("/campaigns");
+  const runUrl = input.campaignId && input.runId
+    ? appPath(`/campaigns/${input.campaignId}/runs/${input.runId}`)
+    : campaignUrl;
+  const lines = [
+    subject,
+    "",
+    `Campaign: ${input.campaignName ?? "Unknown campaign"}`,
+    `Run ID: ${input.runId ?? "none"}`,
+    `Final status: ${finalStatus}`,
+    `Created/promoted leads: ${input.stats.created}`,
+    `Scored leads: ${input.stats.scored}`,
+    `Manual review: ${input.stats.manualReview}`,
+    `Drafted/queued: ${input.routing?.drafted ?? 0}/${input.routing?.queued ?? 0}`,
+    `Duplicates skipped: ${input.stats.duplicates}`,
+    `First error: ${input.errors[0] ?? "none"}`,
+    `Campaign detail: ${campaignUrl}`,
+    `Run detail: ${runUrl}`
+  ];
+
+  return {
+    subject,
+    final_status: finalStatus,
+    needs_attention: needsAttention,
+    campaign_url: campaignUrl,
+    run_url: runUrl,
+    body: lines.join("\n")
+  };
+}
+
+function discoveryOutput(input: {
+  campaign?: Pick<CampaignRow, "id" | "name"> | null;
+  runId: string | null;
+  status: DiscoveryRunOutputStatus;
+  stats?: DiscoveryStats;
+  routing?: RoutingStats;
+  errors: string[];
+  message?: string;
+}): RunLeadDiscoveryOutput {
+  const stats = input.stats ?? emptyDiscoveryStats();
+  return {
+    run_id: input.runId,
+    status: input.status,
+    campaign_id: input.campaign?.id ?? null,
+    campaign_name: input.campaign?.name ?? null,
+    created: stats.created,
+    duplicates: stats.duplicates,
+    manual_review: stats.manualReview,
+    scored: stats.scored,
+    queued: input.routing?.queued ?? 0,
+    drafted: input.routing?.drafted ?? 0,
+    errors: input.errors,
+    message: input.message,
+    notification: buildDiscoveryRunNotification({
+      campaignId: input.campaign?.id ?? null,
+      campaignName: input.campaign?.name ?? null,
+      runId: input.runId,
+      status: input.status,
+      stats,
+      routing: input.routing,
+      errors: input.errors
+    })
+  };
 }
 
 async function googlePlacesErrorMessage(response: Response, label: string) {
@@ -575,7 +712,7 @@ async function processLeadEnrichmentAndScoring(
   leadId: string,
   campaign: CampaignRow,
   runId: string
-): Promise<{ enriched: boolean; scored: boolean; error?: string }> {
+): Promise<{ enriched: boolean; scored: boolean; routeStatus?: string; error?: string }> {
   let enriched = false;
   let scored = false;
 
@@ -645,6 +782,7 @@ async function processLeadEnrichmentAndScoring(
       status: "completed",
       payload: { lead_id: leadId, route_status: routeResult.status, reasons: routeResult.reasons }
     });
+    return { enriched, scored, routeStatus: routeResult.status };
   } catch (error) {
     const errorMsg = error instanceof Error ? `WF-04 routing failed for ${leadId}: ${error.message}` : `WF-04 routing failed for ${leadId}`;
     await logWorkflowEvent({
@@ -667,7 +805,14 @@ async function promoteAndProcessLeads(
   runId: string,
   dryRun: boolean
 ) {
-  const results = { created: 0, duplicates: 0, enriched: 0, scored: 0, errors: [] as string[] };
+  const results: PromotionResults = {
+    created: 0,
+    duplicates: 0,
+    enriched: 0,
+    scored: 0,
+    routing: { queued: 0, drafted: 0 },
+    errors: []
+  };
   const candidateCount = promotableLeads.length;
   const basePayload = {
     runId,
@@ -728,9 +873,11 @@ async function promoteAndProcessLeads(
     })
   });
   for (const leadId of importResult.created_lead_ids ?? []) {
-    const { enriched, scored, error } = await processLeadEnrichmentAndScoring(leadId, campaign, runId);
+    const { enriched, scored, routeStatus, error } = await processLeadEnrichmentAndScoring(leadId, campaign, runId);
     if (enriched) results.enriched += 1;
     if (scored) results.scored += 1;
+    if (routeStatus === "queued") results.routing.queued += 1;
+    if (routeStatus === "drafted") results.routing.drafted += 1;
     if (error) results.errors.push(error);
   }
   await logDiscoveryCheckpoint({
@@ -1108,7 +1255,6 @@ async function processSearchResultPlaces(
 }
 
 function mapEventStatus(status: DiscoveryRunStatus): "completed" | "failed" | "blocked" {
-  if (status === "quota_exhausted") return "blocked";
   if (status === "failed") return "failed";
   return "completed";
 }
@@ -1358,7 +1504,12 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
   const campaign = await getCampaign(input.campaign_id);
 
   if (!campaign) {
-    return { run_id: null, status: "paused", created: 0, duplicates: 0, manual_review: 0, errors: ["No active campaign found"] };
+    return discoveryOutput({
+      campaign: null,
+      runId: null,
+      status: "paused",
+      errors: ["No active campaign found"]
+    });
   }
   await logDiscoveryCheckpoint({
     campaign,
@@ -1383,12 +1534,23 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       error_message: message,
       payload: { run_id: activeRun.id }
     });
-    return { run_id: activeRun.id, status: "running", created: 0, duplicates: 0, manual_review: 0, errors: [message], message };
+    return discoveryOutput({
+      campaign,
+      runId: activeRun.id,
+      status: "running",
+      errors: [message],
+      message
+    });
   }
 
   if (!(await reserveQuota(campaign, "run_count", campaign.max_discovery_runs_per_day))) {
     await logWorkflowEvent({ campaign_id: campaign.id, event_type: "quota_enforced", status: "blocked", payload: { counter: "run_count" } });
-    return { run_id: null, status: "quota_exhausted", created: 0, duplicates: 0, manual_review: 0, errors: ["Daily discovery run cap reached"] };
+    return discoveryOutput({
+      campaign,
+      runId: null,
+      status: "quota_exhausted",
+      errors: ["Daily discovery run cap reached"]
+    });
   }
   await logDiscoveryCheckpoint({
     campaign,
@@ -1469,25 +1631,24 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
     const status = resolveRunStatus(quotaExhausted, errors.length, stats.created);
     const finalized = await safeFinalizeDiscoveryRun(campaign, runId, stats, errors, status);
 
-    return {
-      run_id: runId,
+    return discoveryOutput({
+      campaign,
+      runId,
       status: finalized.status,
-      created: finalized.stats.created,
-      duplicates: finalized.stats.duplicates,
-      manual_review: finalized.stats.manualReview,
+      stats: finalized.stats,
+      routing: promotionResults.routing,
       errors
-    };
+    });
   } catch (error) {
     const message = conciseError(error);
     errors.unshift(message);
     const finalized = await failDiscoveryRun(campaign, runId, stats, errors);
-    return {
-      run_id: runId,
+    return discoveryOutput({
+      campaign,
+      runId,
       status: finalized.status,
-      created: finalized.stats.created,
-      duplicates: finalized.stats.duplicates,
-      manual_review: finalized.stats.manualReview,
+      stats: finalized.stats,
       errors
-    };
+    });
   }
 }

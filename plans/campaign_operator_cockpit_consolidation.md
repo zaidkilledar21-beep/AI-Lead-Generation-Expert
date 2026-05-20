@@ -58,20 +58,22 @@
 
 ### Plan Phase 5: Email and notification wording cleanup
 
-- Not started unless repo proves otherwise:
-  - Notification/email wording and direct run-detail links are outside this slice.
+- Implemented:
+  - WF-10 app response now includes a prepared notification subject, final status, body, campaign detail link, and run detail link.
+  - `quota_exhausted` with promoted leads reads as `Completed: quota reached` / `WF-10 Lead Discovery Finished: Quota Reached`.
+  - `quota_exhausted` with no promoted leads reads as `Quota reached: no new leads` / `WF-10 Lead Discovery Finished: Quota Reached - No New Leads`.
+  - WF-10 importable n8n workflow uses the app-provided notification fields and reserves `Needs Attention` for failed/blocked/paused/running attention states.
+- Missing:
+  - None found for the scoped Phase 5 notification wording slice.
+- Needs QA:
+  - Production n8n/import QA with a quota-reached discovery run and founder notification inbox verification.
 
 ## Next implementation slice
 
-Implemented Plan Phase 2 only:
-
-- Add `/campaigns/[campaign_id]/runs/[run_id]`.
-- Add a minimal run-detail query/helper in `lib/crm/queries.ts`.
-- Link latest run and run history rows from campaign detail to the run detail page.
-- Show run summary, quota/failure wording, timeline, run-specific leads, review/queue/draft outcomes, warnings, and safe error messages.
+Phase 1 through Phase 5 source slices are implemented. Remaining work is authenticated production QA and any follow-up fixes discovered from live data/n8n import testing.
 
 ## Non-goals
 
 - Do not rework discovery, scoring, routing, drafting, sending, Gmail, n8n, or database schema.
 - Do not redesign the campaign cockpit.
-- Do not implement Phase 4 or Phase 5.
+- Do not broaden beyond plan-scoped QA/fixes without a new plan.

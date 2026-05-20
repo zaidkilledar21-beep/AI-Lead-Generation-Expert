@@ -167,6 +167,13 @@ Node Skeleton:
     - `workflow_name = WF-10 Lead Discovery`
     - redact API keys, raw HTML, headers, and full PII payloads.
 
+18. Send founder notification
+    - Use the app response `notification.subject` and `notification.body`.
+    - Treat `quota_exhausted` with promoted leads as `Completed: quota reached`.
+    - Treat `quota_exhausted` with no promoted leads as `Quota reached: no new leads`.
+    - Reserve `Needs Attention` for failed, stuck, blocked, or paused runs.
+    - Include campaign detail and run detail links built from `APP_BASE_URL`.
+
 Success criteria:
 
 - No paid fallback source is called.
