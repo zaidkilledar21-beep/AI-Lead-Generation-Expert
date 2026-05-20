@@ -513,11 +513,11 @@ export async function getCampaignDetailData(campaignId: string) {
   ]);
 
   const supportWarnings = [
-    analyticsResult.error ? `Campaign analytics could not be loaded: ${analyticsResult.error.message}` : null,
-    runsResult.error ? `Discovery runs could not be loaded: ${runsResult.error.message}` : null,
-    runEventsResult.error ? `Run timeline could not be loaded: ${runEventsResult.error.message}` : null,
-    leadsResult.error ? `Campaign leads could not be loaded: ${leadsResult.error.message}` : null,
-    globalOutreachResult.error ? `Global outreach setting could not be loaded: ${globalOutreachResult.error.message}` : null,
+    warningFromResult("Campaign analytics", analyticsResult),
+    warningFromResult("Discovery runs", runsResult),
+    warningFromResult("Run timeline", runEventsResult),
+    warningFromResult("Campaign leads", leadsResult),
+    warningFromResult("Global outreach setting", globalOutreachResult),
     readinessResult.error ? `Readiness checks degraded: ${readinessResult.error}` : null
   ].filter(Boolean) as string[];
 
@@ -528,58 +528,10 @@ export async function getCampaignDetailData(campaignId: string) {
   const leadsList = asArray(leadsResult.data as Array<Record<string, any>>);
   const leadIds = leadsList.map((lead) => lead.id).filter((id): id is string => typeof id === "string");
 
-  const [
-    scoresResult,
-    evidenceResult,
-    reviewsResult,
-    queueResult,
-    draftsResult,
-    repliesResult,
-    sentEventsResult
-  ] = leadIds.length > 0
-    ? await Promise.all([
-        supabase.from("lead_scores").select("*").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(500),
-        supabase.from("score_evidence").select("*").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(500),
-        supabase.from("manual_review_queue").select("*").in("lead_id", leadIds).eq("review_status", "pending").order("created_at", { ascending: false }).limit(250),
-        supabase.from("outreach_queue").select("*").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(250),
-        supabase.from("email_drafts").select("*").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(250),
-        supabase.from("reply_events").select("lead_id,intent_classification,reply_received_at").in("lead_id", leadIds).order("reply_received_at", { ascending: false }).limit(250),
-        supabase.from("outreach_events").select("lead_id,event_type,status,created_at,sent_at").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(250)
-      ])
-    : [
-        { data: [], error: null },
-        { data: [], error: null },
-        { data: [], error: null },
-        { data: [], error: null },
-        { data: [], error: null },
-        { data: [], error: null },
-        { data: [], error: null }
-      ];
-
-  supportWarnings.push(
-    ...[
-      scoresResult.error ? `Lead scores could not be loaded: ${scoresResult.error.message}` : null,
-      evidenceResult.error ? `Score evidence could not be loaded: ${evidenceResult.error.message}` : null,
-      reviewsResult.error ? `Manual review state could not be loaded: ${reviewsResult.error.message}` : null,
-      queueResult.error ? `Outreach queue state could not be loaded: ${queueResult.error.message}` : null,
-      draftsResult.error ? `Draft state could not be loaded: ${draftsResult.error.message}` : null,
-      repliesResult.error ? `Reply state could not be loaded: ${repliesResult.error.message}` : null,
-      sentEventsResult.error ? `Outreach event state could not be loaded: ${sentEventsResult.error.message}` : null
-    ].filter(Boolean) as string[]
-  );
-
-  const scoreByLeadId = latestByKey(asArray(scoresResult.data as Array<Record<string, any>>), "lead_id");
-  const reviewByLeadId = latestByKey(asArray(reviewsResult.data as Array<Record<string, any>>), "lead_id");
-  const queueByLeadId = latestByKey(asArray(queueResult.data as Array<Record<string, any>>), "lead_id");
-  const draftByLeadId = latestByKey(asArray(draftsResult.data as Array<Record<string, any>>), "lead_id");
-  const replyByLeadId = latestByKey(asArray(repliesResult.data as Array<Record<string, any>>), "lead_id");
-  const sentEventByLeadId = latestByKey(asArray(sentEventsResult.data as Array<Record<string, any>>), "lead_id");
-  const evidenceByLeadId = new Map<string, Array<Record<string, any>>>();
-  for (const evidence of asArray(evidenceResult.data as Array<Record<string, any>>)) {
-    if (typeof evidence.lead_id === "string") {
-      evidenceByLeadId.set(evidence.lead_id, [...(evidenceByLeadId.get(evidence.lead_id) ?? []), evidence]);
-    }
-  }
+  const leadSupportResults = await fetchLeadSupportResults(supabase, leadIds, { pendingReviewsOnly: true });
+  supportWarnings.push(...leadSupportWarnings(leadSupportResults));
+  const leadSupportRows = leadSupportRowsFromResults(leadSupportResults);
+  const leadSupportIndexes = buildLeadSupportIndexes(leadSupportRows);
 
   const globalSettings = (globalOutreachResult.data?.value as Record<string, unknown> | null) ?? {};
   const globalOutreachPaused = globalSettings.paused === true;
@@ -592,12 +544,12 @@ export async function getCampaignDetailData(campaignId: string) {
     return [...source].filter(predicate).length;
   };
   const queueCounts = {
-    queued: countLatestOrAll((leadId) => toStr(queueByLeadId.get(leadId)?.status) === "queued"),
-    paused: countLatestOrAll((leadId) => toStr(queueByLeadId.get(leadId)?.status) === "paused"),
-    blocked: countLatestOrAll((leadId) => toStr(queueByLeadId.get(leadId)?.status) === "blocked")
+    queued: countLatestOrAll((leadId) => toStr(leadSupportIndexes.queueByLeadId.get(leadId)?.status) === "queued"),
+    paused: countLatestOrAll((leadId) => toStr(leadSupportIndexes.queueByLeadId.get(leadId)?.status) === "paused"),
+    blocked: countLatestOrAll((leadId) => toStr(leadSupportIndexes.queueByLeadId.get(leadId)?.status) === "blocked")
   };
-  const pendingManualReviews = countLatestOrAll((leadId) => Boolean(reviewByLeadId.get(leadId)));
-  const latestManualReviewReason = firstMeaningfulText([...reviewByLeadId.values()].map((review) => review.reason));
+  const pendingManualReviews = countLatestOrAll((leadId) => Boolean(leadSupportIndexes.reviewByLeadId.get(leadId)));
+  const latestManualReviewReason = firstMeaningfulText([...leadSupportIndexes.reviewByLeadId.values()].map((review) => review.reason));
   const campaign = buildCampaignView(
     campaignRow as Record<string, any>,
     (analyticsResult.data as Record<string, any> | null) ?? {},
@@ -608,7 +560,198 @@ export async function getCampaignDetailData(campaignId: string) {
     latestManualReviewReason
   );
 
-  const leads = leadsList.map((lead) => {
+  const leads = buildCampaignLeadRows({
+    campaignId,
+    campaignStatus: toStr(campaignRow.status),
+    globalOutreachPaused,
+    leads: leadsList,
+    supportRows: leadSupportRows
+  });
+
+  return {
+    campaign,
+    readiness: readinessResult.readiness,
+    globalOutreachPaused,
+    supportWarnings,
+    leads,
+    runs: runsList.map((run) => ({
+      id: run.id,
+      startedAt: run.started_at,
+      completedAt: run.completed_at,
+      leadsFound: numberFrom(run.candidates_promoted),
+      candidatesChecked: numberFrom(run.candidates_checked),
+      duplicatesSkipped: numberFrom(run.duplicates_skipped),
+      rejected: numberFrom(run.candidates_rejected),
+      manualReview: numberFrom(run.manual_review_candidates),
+      crawlFailures: numberFrom(run.crawl_failures),
+      totalPlacesCalls: numberFrom(run.total_places_calls),
+      scored: countLatestOrAll((leadId) => Boolean(leadSupportIndexes.scoreByLeadId.get(leadId))),
+      queued: queueCounts.queued,
+      drafted: countLatestOrAll((leadId) => Boolean(leadSupportIndexes.draftByLeadId.get(leadId))),
+      errors: run.error_message ? 1 : 0,
+      errorMessage: run.error_message ?? null,
+      durationSeconds: run.duration_seconds ?? 0,
+      triggeredBy: run.triggered_by ?? "scheduled",
+      status: run.status ?? "completed",
+      userStatus: userRunStatus(run),
+      isStale: isStaleRunningRun(run)
+    })),
+    runEvents: runEventsList.map((event) => ({
+      id: event.id,
+      discoveryRunId: event.discovery_run_id ?? null,
+      eventType: event.event_type,
+      label: workflowEventLabel(event.event_type),
+      status: event.status,
+      errorMessage: event.error_message ?? null,
+      createdAt: event.created_at ?? null,
+      summary: payloadSummary(event.payload)
+    }))
+  };
+}
+
+function warningFromResult(label: string, result: { error?: { message?: string } | null }) {
+  return result.error ? `${label} could not be loaded: ${result.error.message ?? "Unknown error"}` : null;
+}
+
+type QueryListResult = { data: unknown[] | null; error: { message?: string } | null };
+type LeadSupportResults = {
+  scoresResult: QueryListResult;
+  evidenceResult: QueryListResult;
+  reviewsResult: QueryListResult;
+  queueResult: QueryListResult;
+  draftsResult: QueryListResult;
+  repliesResult: QueryListResult;
+  sentEventsResult: QueryListResult;
+};
+type LeadSupportRows = {
+  scores: Array<Record<string, any>>;
+  evidence: Array<Record<string, any>>;
+  reviews: Array<Record<string, any>>;
+  queue: Array<Record<string, any>>;
+  drafts: Array<Record<string, any>>;
+  replies: Array<Record<string, any>>;
+  sentEvents: Array<Record<string, any>>;
+};
+
+function emptyQueryListResult(): QueryListResult {
+  return { data: [], error: null };
+}
+
+function emptyLeadSupportResults(): LeadSupportResults {
+  return {
+    scoresResult: emptyQueryListResult(),
+    evidenceResult: emptyQueryListResult(),
+    reviewsResult: emptyQueryListResult(),
+    queueResult: emptyQueryListResult(),
+    draftsResult: emptyQueryListResult(),
+    repliesResult: emptyQueryListResult(),
+    sentEventsResult: emptyQueryListResult()
+  };
+}
+
+async function fetchLeadSupportResults(
+  supabase: AnalyticsSupabaseClient,
+  leadIds: string[],
+  options: { pendingReviewsOnly?: boolean } = {}
+): Promise<LeadSupportResults> {
+  if (leadIds.length === 0) return emptyLeadSupportResults();
+
+  let reviewsQuery = supabase.from("manual_review_queue").select("*").in("lead_id", leadIds);
+  if (options.pendingReviewsOnly) {
+    reviewsQuery = reviewsQuery.eq("review_status", "pending");
+  }
+
+  const [
+    scoresResult,
+    evidenceResult,
+    reviewsResult,
+    queueResult,
+    draftsResult,
+    repliesResult,
+    sentEventsResult
+  ]: QueryListResult[] = await Promise.all([
+    supabase.from("lead_scores").select("*").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(500),
+    supabase.from("score_evidence").select("*").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(500),
+    reviewsQuery.order("created_at", { ascending: false }).limit(250),
+    supabase.from("outreach_queue").select("*").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(250),
+    supabase.from("email_drafts").select("*").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(250),
+    supabase.from("reply_events").select("lead_id,intent_classification,reply_received_at").in("lead_id", leadIds).order("reply_received_at", { ascending: false }).limit(250),
+    supabase.from("outreach_events").select("lead_id,event_type,status,created_at,sent_at").in("lead_id", leadIds).order("created_at", { ascending: false }).limit(250)
+  ]);
+
+  return {
+    scoresResult,
+    evidenceResult,
+    reviewsResult,
+    queueResult,
+    draftsResult,
+    repliesResult,
+    sentEventsResult
+  };
+}
+
+function leadSupportRowsFromResults(results: LeadSupportResults): LeadSupportRows {
+  return {
+    scores: asArray(results.scoresResult.data as Array<Record<string, any>>),
+    evidence: asArray(results.evidenceResult.data as Array<Record<string, any>>),
+    reviews: asArray(results.reviewsResult.data as Array<Record<string, any>>),
+    queue: asArray(results.queueResult.data as Array<Record<string, any>>),
+    drafts: asArray(results.draftsResult.data as Array<Record<string, any>>),
+    replies: asArray(results.repliesResult.data as Array<Record<string, any>>),
+    sentEvents: asArray(results.sentEventsResult.data as Array<Record<string, any>>)
+  };
+}
+
+function leadSupportWarnings(results: LeadSupportResults) {
+  return [
+    warningFromResult("Lead scores", results.scoresResult),
+    warningFromResult("Score evidence", results.evidenceResult),
+    warningFromResult("Manual review state", results.reviewsResult),
+    warningFromResult("Outreach queue state", results.queueResult),
+    warningFromResult("Draft state", results.draftsResult),
+    warningFromResult("Reply state", results.repliesResult),
+    warningFromResult("Outreach event state", results.sentEventsResult)
+  ].filter(Boolean) as string[];
+}
+
+function buildLeadSupportIndexes(rows: LeadSupportRows) {
+  const evidenceByLeadId = new Map<string, Array<Record<string, any>>>();
+
+  for (const evidence of rows.evidence) {
+    if (typeof evidence.lead_id === "string") {
+      evidenceByLeadId.set(evidence.lead_id, [...(evidenceByLeadId.get(evidence.lead_id) ?? []), evidence]);
+    }
+  }
+
+  return {
+    scoreByLeadId: latestByKey(rows.scores, "lead_id"),
+    reviewByLeadId: latestByKey(rows.reviews, "lead_id"),
+    queueByLeadId: latestByKey(rows.queue, "lead_id"),
+    draftByLeadId: latestByKey(rows.drafts, "lead_id"),
+    replyByLeadId: latestByKey(rows.replies, "lead_id"),
+    sentEventByLeadId: latestByKey(rows.sentEvents, "lead_id"),
+    evidenceByLeadId
+  };
+}
+
+function buildCampaignLeadRows(input: {
+  campaignId: string;
+  campaignStatus: string;
+  globalOutreachPaused: boolean;
+  leads: Array<Record<string, any>>;
+  supportRows: LeadSupportRows;
+}) {
+  const {
+    scoreByLeadId,
+    reviewByLeadId,
+    queueByLeadId,
+    draftByLeadId,
+    replyByLeadId,
+    sentEventByLeadId,
+    evidenceByLeadId
+  } = buildLeadSupportIndexes(input.supportRows);
+
+  return input.leads.map((lead) => {
     const score = scoreByLeadId.get(lead.id) ?? null;
     const manualReview = reviewByLeadId.get(lead.id) ?? null;
     const queue = queueByLeadId.get(lead.id) ?? null;
@@ -622,8 +765,8 @@ export async function getCampaignDetailData(campaignId: string) {
       manualReview,
       queue,
       draft,
-      globalPaused: globalOutreachPaused,
-      campaignStatus: toStr(campaignRow.status)
+      globalPaused: input.globalOutreachPaused,
+      campaignStatus: input.campaignStatus
     });
     const topEvidence = evidence
       .slice(0, 3)
@@ -644,7 +787,7 @@ export async function getCampaignDetailData(campaignId: string) {
       email: lead.email ?? null,
       phone: lead.phone ?? null,
       status: lead.status,
-      campaignId,
+      campaignId: input.campaignId,
       score: score?.total_score ?? null,
       band: score?.band ?? null,
       effectiveBand: score?.band ?? null,
@@ -667,45 +810,105 @@ export async function getCampaignDetailData(campaignId: string) {
       updatedAt: lead.updated_at ?? null
     };
   });
+}
+
+export async function getCampaignRunDetailData(campaignId: string, runId: string) {
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) return null;
+
+  const [campaignResult, runResult, globalOutreachResult] = await Promise.all([
+    supabase.from("campaigns").select("id,name,status").eq("id", campaignId).maybeSingle(),
+    supabase
+      .from("discovery_runs")
+      .select("id,campaign_id,status,started_at,completed_at,error_message,candidates_checked,places_text_search_calls,places_details_calls,total_places_calls,duplicates_skipped,candidates_rejected,candidates_promoted,manual_review_candidates,crawl_failures,duration_seconds,triggered_by")
+      .eq("id", runId)
+      .eq("campaign_id", campaignId)
+      .maybeSingle(),
+    supabase.from("app_settings").select("value").eq("key", "global_outreach").maybeSingle()
+  ]);
+
+  if (campaignResult.error || runResult.error || !campaignResult.data || !runResult.data) return null;
+
+  const [eventsResult, leadsResult] = await Promise.all([
+    supabase
+      .from("workflow_events")
+      .select("id,discovery_run_id,event_type,status,error_message,payload,created_at")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: true })
+      .limit(250),
+    supabase
+      .from("leads")
+      .select("id,business_name,website,email,phone,status,campaign_id,created_at,updated_at,last_activity_at,source,discovery_run_id,country,city,niche")
+      .eq("campaign_id", campaignId)
+      .eq("discovery_run_id", runId)
+      .order("created_at", { ascending: false })
+      .limit(250)
+  ]);
+
+  const supportWarnings = [
+    warningFromResult("Workflow timeline", eventsResult),
+    warningFromResult("Run leads", leadsResult),
+    warningFromResult("Global outreach setting", globalOutreachResult)
+  ].filter(Boolean) as string[];
+
+  const leadsList = asArray(leadsResult.data as Array<Record<string, any>>);
+  const leadIds = leadsList.map((lead) => lead.id).filter((id): id is string => typeof id === "string");
+  const leadSupportResults = await fetchLeadSupportResults(supabase, leadIds);
+  supportWarnings.push(...leadSupportWarnings(leadSupportResults));
+
+  const globalSettings = (globalOutreachResult.data?.value as Record<string, unknown> | null) ?? {};
+  const globalOutreachPaused = globalSettings.paused === true;
+  const run = runResult.data as Record<string, any>;
+  const events = asArray(eventsResult.data as Array<Record<string, any>>).filter((event) => {
+    const payload = event.payload as Record<string, unknown> | null;
+    return event.discovery_run_id === runId || payload?.run_id === runId;
+  });
+  const leads = buildCampaignLeadRows({
+    campaignId,
+    campaignStatus: toStr((campaignResult.data as Record<string, any>).status),
+    globalOutreachPaused,
+    leads: leadsList,
+    supportRows: leadSupportRowsFromResults(leadSupportResults)
+  });
 
   return {
-    campaign,
-    readiness: readinessResult.readiness,
-    globalOutreachPaused,
-    supportWarnings,
-    leads,
-    runs: runsList.map((run) => ({
+    campaign: {
+      id: campaignResult.data.id,
+      name: campaignResult.data.name,
+      status: campaignResult.data.status
+    },
+    run: {
       id: run.id,
-      startedAt: run.started_at,
-      completedAt: run.completed_at,
-      leadsFound: numberFrom(run.candidates_promoted),
+      campaignId: run.campaign_id,
+      status: run.status ?? "completed",
+      userStatus: userRunStatus(run),
+      isStale: isStaleRunningRun(run),
+      startedAt: run.started_at ?? null,
+      completedAt: run.completed_at ?? null,
+      durationSeconds: numberFrom(run.duration_seconds),
       candidatesChecked: numberFrom(run.candidates_checked),
       duplicatesSkipped: numberFrom(run.duplicates_skipped),
       rejected: numberFrom(run.candidates_rejected),
+      promoted: numberFrom(run.candidates_promoted),
       manualReview: numberFrom(run.manual_review_candidates),
       crawlFailures: numberFrom(run.crawl_failures),
+      textSearchCalls: numberFrom(run.places_text_search_calls),
+      detailsCalls: numberFrom(run.places_details_calls),
       totalPlacesCalls: numberFrom(run.total_places_calls),
-      scored: countLatestOrAll((leadId) => Boolean(scoreByLeadId.get(leadId))),
-      queued: queueCounts.queued,
-      drafted: countLatestOrAll((leadId) => Boolean(draftByLeadId.get(leadId))),
-      errors: run.error_message ? 1 : 0,
       errorMessage: run.error_message ?? null,
-      durationSeconds: run.duration_seconds ?? 0,
-      triggeredBy: run.triggered_by ?? "scheduled",
-      status: run.status ?? "completed",
-      userStatus: userRunStatus(run),
-      isStale: isStaleRunningRun(run)
-    })),
-    runEvents: runEventsList.map((event) => ({
+      triggeredBy: run.triggered_by ?? "scheduled"
+    },
+    leads,
+    events: events.map((event) => ({
       id: event.id,
-      discoveryRunId: event.discovery_run_id ?? null,
       eventType: event.event_type,
       label: workflowEventLabel(event.event_type),
       status: event.status,
       errorMessage: event.error_message ?? null,
       createdAt: event.created_at ?? null,
       summary: payloadSummary(event.payload)
-    }))
+    })),
+    supportWarnings
   };
 }
 

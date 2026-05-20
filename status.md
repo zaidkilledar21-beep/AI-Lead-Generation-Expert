@@ -7,12 +7,26 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Fix Sonar quality gate failures from Phase 2 routing idempotency work.
+- Fix Sonar duplicated-lines quality gate failures from the Phase 2 campaign run detail implementation and refresh Graphify via clean temp mirror.
 
 ## Current module / PR
-- Campaign manual discovery run path.
+- Campaign operator cockpit / run detail visibility.
 
 ## Last completed work
+- Fixed Sonar duplicated-lines risk in the Phase 2 campaign run detail implementation without changing route behavior, DB schema, discovery, scoring, routing, drafting, sending, Gmail, or n8n.
+- Extracted the repeated campaign/run lead table into `components/crm/campaign-leads-table.tsx` and reused it from campaign detail and run detail.
+- Refactored run detail repeated metric JSX into config-driven `MetricGrid`, `runMetricRows`, and `RunFactRow` helpers.
+- Consolidated repeated campaign/run lead support query, warning, row-normalization, and index-building logic in `lib/crm/queries.ts`.
+- Preserved `/campaigns/[campaign_id]/runs/[run_id]`, campaign/run ownership guard, and Next 16 async params handling.
+- Refreshed `graphify-out/graph.json` through a clean temp mirror using `graphify update . --no-cluster`, then exported the Obsidian Graphify layer.
+- Clean Graphify refresh result: 1,506 nodes and 2,987 links/edges.
+- Created `plans/campaign_operator_cockpit_consolidation.md` to map the source-of-truth cockpit plan against the current repo state.
+- Verified Phase 1 campaign detail reliability and baseline cockpit are implemented, with authenticated production QA still pending.
+- Implemented the Phase 2 run detail route at `/campaigns/[campaign_id]/runs/[run_id]`.
+- Added `getCampaignRunDetailData(campaignId, runId)` and small local lead/support-result helpers in `lib/crm/queries.ts`.
+- Linked the campaign detail latest run summary and run history rows to the new run detail route.
+- The run detail page now shows campaign name, run id/status, start/completion/duration, quota/failure wording, candidates, Places calls, duplicates, rejected candidates, promoted leads, manual review count, crawl failures, safe warnings/errors, workflow event timeline, and run-scoped lead routing/review/queue/draft outcomes.
+- Preserved the Next 16 async `params` / `searchParams` handling in `app/campaigns/[campaign_id]/page.tsx`; this pass did not change routing, discovery, scoring, n8n, Gmail, sending, or DB schema.
 - Fixed Phase 2 Sonar quality gate findings without changing routing behavior.
 - Reduced `routeLeadInternal` cognitive complexity by extracting manual-review decision helpers, manual-review routing, and non-review routing into small named helpers.
 - Removed the thenable mock pattern from `tests/unit/routing.test.ts`; terminal query methods now return explicit promises, and the mock `filters` member is marked `readonly`.
@@ -123,6 +137,14 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `components/crm/campaign-leads-table.tsx`
+- `graphify-out/graph.json`
+- `docs/obsidian-vault/10_Graphify/`
+- `plans/campaign_operator_cockpit_consolidation.md`
+- `app/campaigns/[campaign_id]/runs/[run_id]/page.tsx`
+- `app/campaigns/[campaign_id]/page.tsx`
+- `lib/crm/queries.ts`
+- `status.md`
 - `lib/workflows/routing.ts`
 - `tests/unit/routing.test.ts`
 - `status.md`
@@ -186,9 +208,21 @@ AI Automation CRM / Lead Generation Dashboard
 - `status.md`
 
 ## Current blocker
-- Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
+- Authenticated browser QA is still required for the new run detail route and the existing production campaign detail route.
 
 ## Validation status
+- campaign cockpit duplication cleanup lint: passed (`npm run lint`)
+- campaign cockpit duplication cleanup typecheck: passed (`npm run typecheck`)
+- campaign cockpit duplication cleanup build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- campaign cockpit duplication cleanup git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- campaign cockpit duplication cleanup Sonar/SonarLint: not run locally; no Sonar/SonarLint command or project config was available, and the refactor specifically removed the duplicated structures Sonar reported
+- campaign cockpit duplication cleanup Graphify refresh: completed via clean temp mirror with `graphify update . --no-cluster`; copied `graphify-out/graph.json` back and exported Obsidian Graphify notes; refreshed graph has 1,506 nodes and 2,987 links/edges
+- campaign cockpit Phase 2 run detail lint: passed (`npm run lint`)
+- campaign cockpit Phase 2 run detail typecheck: passed (`npm run typecheck`)
+- campaign cockpit Phase 2 run detail build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- campaign cockpit Phase 2 run detail git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- campaign cockpit Phase 2 focused tests: not run; no existing focused query/run-detail tests were found for `getCampaignRunDetailData` or `/campaigns/[campaign_id]/runs/[run_id]`
+- campaign cockpit Phase 2 Graphify refresh: not run; Graphify was used for navigation, but generated graph refresh was avoided in this source slice because the repo requires the clean temp mirror method for refreshes
 - Phase 2 Sonar quality-gate cleanup focused tests: passed (`npm test -- tests/unit/routing.test.ts`)
 - Phase 2 Sonar quality-gate cleanup lint: passed (`npm run lint`)
 - Phase 2 Sonar quality-gate cleanup typecheck: passed (`npm run typecheck`)
@@ -236,6 +270,11 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- SonarCloud should be re-run on the PR to confirm duplicated lines on new code drops below the quality gate; local Sonar/SonarLint was not available.
+- Phase 2 run detail is validated by lint/typecheck/build, but still needs authenticated production QA against live Supabase data.
+- No DB migration was added; the run detail page uses existing `discovery_runs`, `workflow_events`, `leads`, scores, manual review, queue, draft, reply, and outreach event data.
+- Phase 3 routing idempotency remains implemented, but the full plan taxonomy for explicit routing workflow events such as `routing_started`, `manual_review_already_pending`, and `queue_already_exists` remains a later alignment gap.
+- Phase 4 lead detail richness and Phase 5 email/notification wording cleanup remain out of scope for this pass.
 - The requested `plans/phase_2_routing_idempotency.md` file was not present; implementation used the user prompt, current `status.md`, Graphify navigation, and the closest existing routing plan `plans/03_scoring_routing_queue_draft_handoff.md`.
 - No migration was added because existing schema already has `manual_review_one_pending_per_lead_idx` and `unique (lead_id, sequence_id)` on `outreach_queue`; production should confirm those constraints exist on the deployed database.
 - Production QA should verify that routed leads no longer remain as scored-only and that workflow event payloads show the explicit routing outcome returned by `routeLead`.
@@ -265,6 +304,7 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
+- Production QA Phase 2 run detail: open `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db?tab=runs`, click the latest run/history run link, then verify `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db/runs/<run_id>` shows summary counters, timeline events, warnings/errors, and run-scoped leads without 404.
 - Production QA Phase 2: run discovery/scoring on fresh B-band and A-band leads, confirm B-band reachable leads create one `outreach_queue` row after repeated routing, A/low-confidence/manual-review leads create one pending `manual_review_queue` row, and missing sequence/inbox/global pause/campaign pause cases show explicit routing outcomes.
 - Deploy and retest `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db` in production to confirm it no longer renders 404 and no longer sends Supabase `.eq("id", undefined)`.
 - Production QA Phase 1: open `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db`, confirm it no longer 404s, verify latest run reads `Completed: quota reached`, and confirm all generated leads show score/band/confidence/operator state/review or queue/draft context.

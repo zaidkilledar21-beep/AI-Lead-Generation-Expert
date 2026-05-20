@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { MetricCard } from "@/components/ui/metric-card";
 import { EditCampaignForm } from "../edit-campaign-form";
 import { CampaignDetailControls } from "./campaign-detail-controls";
+import { CampaignLeadsTable } from "@/components/crm/campaign-leads-table";
 import { SettingsDiagnosticsCard } from "@/components/crm/settings-diagnostics-card";
 import { getCampaignDetailData, getSettingsData } from "@/lib/crm/queries";
 
@@ -60,13 +61,6 @@ function formatStatus(value: string | null | undefined) {
 
 function groupItems(value: string[]) {
   return value.length > 0 ? value.join(", ") : "None";
-}
-
-function operatorTone(value: string) {
-  if (value === "Needs review" || value === "Blocked" || value === "Missing contact") return "warning" as const;
-  if (value === "Draft ready" || value === "Queued" || value === "In sequence") return "success" as const;
-  if (value === "Replied" || value === "Closed") return "info" as const;
-  return "muted" as const;
 }
 
 type CampaignDetailSearchParams = { tab?: string | string[] };
@@ -266,7 +260,13 @@ function SupportWarnings({ warnings }: { warnings: string[] }) {
   );
 }
 
-function LatestRunSummary({ latestRun }: { latestRun: CampaignDetail["runs"][number] | null }) {
+function LatestRunSummary({
+  campaignId,
+  latestRun
+}: {
+  campaignId: string;
+  latestRun: CampaignDetail["runs"][number] | null;
+}) {
   if (!latestRun) return null;
 
   return (
@@ -278,7 +278,10 @@ function LatestRunSummary({ latestRun }: { latestRun: CampaignDetail["runs"][num
             Started {formatDateTime(latestRun.startedAt)} / Completed {formatDateTime(latestRun.completedAt)}
           </p>
         </div>
-        <Badge tone={runStatusTone(latestRun.userStatus, latestRun.isStale)}>{latestRun.userStatus}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={runStatusTone(latestRun.userStatus, latestRun.isStale)}>{latestRun.userStatus}</Badge>
+          <a href={`/campaigns/${campaignId}/runs/${latestRun.id}`}>Open run detail</a>
+        </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Candidates checked" value={latestRun.candidatesChecked} />
@@ -358,7 +361,7 @@ function OperatorCockpit({ detail }: { detail: CampaignDetail }) {
             </p>
           </section>
         </div>
-        <LatestRunSummary latestRun={latestRun} />
+        <LatestRunSummary campaignId={detail.campaign.id} latestRun={latestRun} />
       </div>
     </section>
   );
@@ -460,71 +463,11 @@ function LeadsTab({ leads }: { leads: CampaignDetail["leads"] }) {
         </div>
       </div>
       {leads.length > 0 ? (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Business</th>
-                <th>Contact</th>
-                <th>Score</th>
-                <th>Band</th>
-                <th>Confidence</th>
-                <th>Operator state</th>
-                <th>Review</th>
-                <th>Queue / draft</th>
-                <th>Why / next action</th>
-                <th>Open</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((lead) => (
-                <tr key={lead.id}>
-                  <td>
-                    <div className="grid gap-1">
-                      <a href={`/pipeline/${lead.id}`}>{lead.businessName}</a>
-                      <span className="muted text-xs">{formatStatus(lead.status)}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="grid gap-1 text-xs">
-                      <span>{lead.email ?? "No email"}</span>
-                      <span className="muted">{lead.phone ?? "No phone"}</span>
-                      {lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Website</a> : <span className="muted">No website</span>}
-                    </div>
-                  </td>
-                  <td className="mono">{lead.score ?? "--"}</td>
-                  <td>{lead.effectiveBand ?? lead.band ?? "--"}</td>
-                  <td>{lead.confidence ?? "--"}</td>
-                  <td>
-                    <div className="grid gap-1">
-                      <Badge tone={operatorTone(lead.operatorState)}>{lead.operatorState}</Badge>
-                      <span className="muted text-xs">{lead.operatorReason}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="grid gap-1 text-xs">
-                      <span>{formatStatus(lead.manualReviewStatus)}</span>
-                      <span className="muted">{formatStatus(lead.manualReviewReason)}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="grid gap-1 text-xs">
-                      <span>Queue: {formatStatus(lead.queueStatus)}</span>
-                      <span>Draft: {formatStatus(lead.draftStatus)}</span>
-                      {lead.nextSendAt ? <span className="muted">Next {formatDateTime(lead.nextSendAt)}</span> : null}
-                    </div>
-                  </td>
-                  <td>
-                    <p className="muted max-w-[320px] text-xs leading-5">{lead.why ?? lead.latestAction ?? "--"}</p>
-                  </td>
-                  <td>
-                    <a href={`/pipeline/${lead.id}`}>Open</a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CampaignLeadsTable
+          leads={leads}
+          emptyTitle="No leads yet"
+          emptyDescription="Once discovery runs, this campaign's lead list will appear here with banding, owner, and reply context."
+        />
       ) : (
         <EmptyState
           title="No leads yet"
@@ -594,6 +537,7 @@ function RunHistoryTab({ detail }: { detail: CampaignDetail }) {
                 <th>Places</th>
                 <th>Duration</th>
                 <th>Status</th>
+                <th>Open</th>
               </tr>
             </thead>
             <tbody>
@@ -611,6 +555,9 @@ function RunHistoryTab({ detail }: { detail: CampaignDetail }) {
                       <Badge tone={runStatusTone(run.userStatus, run.isStale)}>{runStatusLabel(run.userStatus, run.isStale)}</Badge>
                       {run.errorMessage ? <span className="text-xs text-red-300">{run.errorMessage}</span> : null}
                     </div>
+                  </td>
+                  <td>
+                    <a href={`/campaigns/${detail.campaign.id}/runs/${run.id}`}>Open run</a>
                   </td>
                 </tr>
               ))}
