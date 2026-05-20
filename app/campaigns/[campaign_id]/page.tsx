@@ -21,9 +21,10 @@ function statusTone(status: string) {
 }
 
 function runStatusTone(status: string, isStale: boolean) {
-  if (isStale || status === "failed") return "danger" as const;
-  if (status === "completed") return "success" as const;
-  if (status === "running") return "warning" as const;
+  const normalized = status.toLowerCase();
+  if (isStale || normalized.includes("failed") || normalized.includes("stuck")) return "danger" as const;
+  if (normalized.includes("completed")) return "success" as const;
+  if (normalized.includes("running") || normalized.includes("quota") || normalized.includes("paused")) return "warning" as const;
   return "muted" as const;
 }
 
@@ -52,8 +53,19 @@ function displayValue(value: string | number | null | undefined, fallback = "Non
   return String(value);
 }
 
+function formatStatus(value: string | null | undefined) {
+  return value ? value.replaceAll("_", " ") : "--";
+}
+
 function groupItems(value: string[]) {
   return value.length > 0 ? value.join(", ") : "None";
+}
+
+function operatorTone(value: string) {
+  if (value === "Needs review" || value === "Blocked" || value === "Missing contact") return "warning" as const;
+  if (value === "Draft ready" || value === "Queued" || value === "In sequence") return "success" as const;
+  if (value === "Replied" || value === "Closed") return "info" as const;
+  return "muted" as const;
 }
 
 export default async function CampaignDetailPage({
@@ -69,6 +81,7 @@ export default async function CampaignDetailPage({
   ]);
   if (!detail) notFound();
   const tab = searchParams?.tab ?? "overview";
+  const latestRun = detail.runs[0] ?? null;
   const sequences = settings.sequences as unknown as Array<{ id: string; name?: string | null }>;
   const inboxes = settings.inboxes as unknown as Array<{ id: string; email_address?: string | null }>;
   const inboxLabelMap = new Map(
@@ -161,6 +174,19 @@ export default async function CampaignDetailPage({
     { title: "Warnings", items: detail.readiness.warnings, tone: "warning" as const },
     { title: "Info", items: detail.readiness.info, tone: "info" as const }
   ];
+  const sendingBlocked = detail.campaign.status === "archived" || !detail.campaign.assignedInboxId || detail.globalOutreachPaused;
+  const sendingLabel = detail.globalOutreachPaused
+    ? "Paused globally"
+    : detail.campaign.status === "paused"
+    ? "Campaign paused"
+    : !detail.campaign.assignedInboxId
+    ? "Blocked: no inbox"
+    : "Enabled";
+  const missingSequences = [
+    detail.campaign.sequenceBandA ? null : "Band A sequence is not set.",
+    detail.campaign.sequenceBandB ? null : "Band B sequence is not set.",
+    detail.campaign.sequenceBandC ? null : "Band C sequence is not set."
+  ].filter(Boolean);
 
   return (
     <div className="grid gap-5">
@@ -221,6 +247,98 @@ export default async function CampaignDetailPage({
               />
             </div>
           </section>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Operator cockpit</h2>
+            <p>Plain-language campaign state, latest discovery outcome, and sending readiness.</p>
+          </div>
+          {detail.supportWarnings.length > 0 ? <Badge tone="warning">{detail.supportWarnings.length} data warning{detail.supportWarnings.length === 1 ? "" : "s"}</Badge> : null}
+        </div>
+        <div className="panel-body grid gap-4">
+          {detail.supportWarnings.length > 0 ? (
+            <section className="crm-state-card">
+              <h3 className="text-sm font-semibold">Supporting data warnings</h3>
+              <div className="mt-3 grid gap-2">
+                {detail.supportWarnings.map((warning) => (
+                  <p className="muted text-sm" key={warning}>{warning}</p>
+                ))}
+              </div>
+            </section>
+          ) : null}
+          <div className="campaign-detail-readiness-grid">
+            <section className="crm-state-card">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">Campaign status</h3>
+                <Badge tone={statusTone(detail.campaign.status)}>{formatStatus(detail.campaign.status)}</Badge>
+              </div>
+              <p className="muted mt-2 text-sm">
+                {detail.campaign.status === "active"
+                  ? "This campaign can run discovery when readiness checks pass."
+                  : `This campaign is ${formatStatus(detail.campaign.status)}.`}
+              </p>
+            </section>
+            <section className="crm-state-card">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">Global outreach</h3>
+                <Badge tone={detail.globalOutreachPaused ? "warning" : "success"}>
+                  {detail.globalOutreachPaused ? "Paused" : "Enabled"}
+                </Badge>
+              </div>
+              <p className="muted mt-2 text-sm">
+                {detail.globalOutreachPaused ? "Discovery can still create leads, but sending should remain paused." : "Global outreach is enabled for eligible queued leads."}
+              </p>
+            </section>
+            <section className="crm-state-card">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">Discovery</h3>
+                <Badge tone={latestRun ? runStatusTone(latestRun.userStatus, latestRun.isStale) : readinessTone(detail.readiness.status)}>
+                  {latestRun ? latestRun.userStatus : detail.readiness.status}
+                </Badge>
+              </div>
+              <p className="muted mt-2 text-sm">
+                {latestRun
+                  ? `${latestRun.leadsFound} leads created from ${latestRun.candidatesChecked} checked candidates.`
+                  : "No discovery run has been recorded for this campaign yet."}
+              </p>
+            </section>
+            <section className="crm-state-card">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">Sending</h3>
+                <Badge tone={sendingBlocked ? "warning" : "success"}>{sendingLabel}</Badge>
+              </div>
+              <p className="muted mt-2 text-sm">
+                {missingSequences.length > 0 ? missingSequences.join(" ") : "Band routing sequences are configured."}
+              </p>
+            </section>
+          </div>
+          {latestRun ? (
+            <section className="crm-state-card">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Latest run summary</h3>
+                  <p className="muted mt-1 text-sm">
+                    Started {formatDateTime(latestRun.startedAt)} / Completed {formatDateTime(latestRun.completedAt)}
+                  </p>
+                </div>
+                <Badge tone={runStatusTone(latestRun.userStatus, latestRun.isStale)}>{latestRun.userStatus}</Badge>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <MetricCard label="Candidates checked" value={latestRun.candidatesChecked} />
+                <MetricCard label="Duplicates skipped" value={latestRun.duplicatesSkipped} />
+                <MetricCard label="Leads created" value={latestRun.leadsFound} />
+                <MetricCard label="Scored / queued / drafted" value={`${latestRun.scored} / ${latestRun.queued} / ${latestRun.drafted}`} />
+              </div>
+              <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                <span className="muted">Rejected: <strong>{latestRun.rejected}</strong></span>
+                <span className="muted">Manual review: <strong>{latestRun.manualReview}</strong></span>
+                <span className="muted">Errors/warnings: <strong>{latestRun.errorMessage ?? (latestRun.crawlFailures ? `${latestRun.crawlFailures} crawl failure` : "None")}</strong></span>
+              </div>
+            </section>
+          ) : null}
         </div>
       </section>
 
@@ -331,23 +449,62 @@ export default async function CampaignDetailPage({
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>Lead</th>
+                            <th>Business</th>
+                            <th>Contact</th>
+                            <th>Score</th>
                             <th>Band</th>
-                            <th>Status</th>
-                            <th>Reply</th>
-                            <th>Owner</th>
+                            <th>Confidence</th>
+                            <th>Operator state</th>
+                            <th>Review</th>
+                            <th>Queue / draft</th>
+                            <th>Why / next action</th>
+                            <th>Open</th>
                           </tr>
                         </thead>
                         <tbody>
                           {detail.leads.map((lead) => (
                             <tr key={lead.id}>
                               <td>
-                                <a href={`/pipeline/${lead.id}`}>{lead.businessName}</a>
+                                <div className="grid gap-1">
+                                  <a href={`/pipeline/${lead.id}`}>{lead.businessName}</a>
+                                  <span className="muted text-xs">{formatStatus(lead.status)}</span>
+                                </div>
                               </td>
-                              <td>{lead.effectiveBand ?? "--"}</td>
-                              <td>{lead.status}</td>
-                              <td>{lead.latestReplyIntent ?? "--"}</td>
-                              <td>{lead.assignedTo ?? "--"}</td>
+                              <td>
+                                <div className="grid gap-1 text-xs">
+                                  <span>{lead.email ?? "No email"}</span>
+                                  <span className="muted">{lead.phone ?? "No phone"}</span>
+                                  {lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Website</a> : <span className="muted">No website</span>}
+                                </div>
+                              </td>
+                              <td className="mono">{lead.score ?? "--"}</td>
+                              <td>{lead.effectiveBand ?? lead.band ?? "--"}</td>
+                              <td>{lead.confidence ?? "--"}</td>
+                              <td>
+                                <div className="grid gap-1">
+                                  <Badge tone={operatorTone(lead.operatorState)}>{lead.operatorState}</Badge>
+                                  <span className="muted text-xs">{lead.operatorReason}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="grid gap-1 text-xs">
+                                  <span>{formatStatus(lead.manualReviewStatus)}</span>
+                                  <span className="muted">{formatStatus(lead.manualReviewReason)}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="grid gap-1 text-xs">
+                                  <span>Queue: {formatStatus(lead.queueStatus)}</span>
+                                  <span>Draft: {formatStatus(lead.draftStatus)}</span>
+                                  {lead.nextSendAt ? <span className="muted">Next {formatDateTime(lead.nextSendAt)}</span> : null}
+                                </div>
+                              </td>
+                              <td>
+                                <p className="muted max-w-[320px] text-xs leading-5">{lead.why ?? lead.latestAction ?? "--"}</p>
+                              </td>
+                              <td>
+                                <a href={`/pipeline/${lead.id}`}>Open</a>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -399,7 +556,7 @@ export default async function CampaignDetailPage({
                               <td className="mono">{run.durationSeconds ? `${run.durationSeconds}s` : "--"}</td>
                               <td>
                                 <div className="grid gap-1">
-                                  <Badge tone={runStatusTone(run.status, run.isStale)}>{runStatusLabel(run.status, run.isStale)}</Badge>
+                                  <Badge tone={runStatusTone(run.userStatus, run.isStale)}>{runStatusLabel(run.userStatus, run.isStale)}</Badge>
                                   {run.errorMessage ? <span className="text-xs text-red-300">{run.errorMessage}</span> : null}
                                 </div>
                               </td>
@@ -427,7 +584,7 @@ export default async function CampaignDetailPage({
                         {detail.runEvents.map((event) => (
                           <div key={event.id} className="rounded-xl border border-white/10 bg-white/3 px-4 py-3">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <strong className="text-sm">{event.eventType}</strong>
+                              <strong className="text-sm">{event.label}</strong>
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge tone={event.status === "failed" ? "danger" : event.status === "blocked" ? "warning" : "muted"}>
                                   {event.status}

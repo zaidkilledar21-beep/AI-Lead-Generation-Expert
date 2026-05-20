@@ -7,12 +7,21 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- PR #42 Sonar cleanup for contact extraction regex hotspots and discovery finalization reliability.
+- Phase 1 campaign operator cockpit from `plans/campaign_operator_cockpit_implementation_plan.md`.
 
 ## Current module / PR
 - Campaign manual discovery run path.
 
 ## Last completed work
+- Implemented Phase 1 of `plans/campaign_operator_cockpit_implementation_plan.md` with scoped campaign detail/query changes.
+- Fixed the campaign Open/detail false-404 path by making `getCampaignDetailData(campaignId)` fetch the campaign directly by ID before loading aggregate/supporting data.
+- Changed campaign detail supporting data to degrade with warning messages instead of causing `notFound()` when analytics, runs, timeline, readiness, lead scores, manual review, queue, draft, reply, or outreach-event data cannot be loaded.
+- Replaced campaign detail's global `getPipelineRows(500)` filtering with campaign-scoped lead loading and bounded per-lead support queries for scores, score evidence, manual review, outreach queue, drafts, replies, and outreach events.
+- Added operator-state derivation for campaign leads, including readable states such as Needs review, Draft ready, Queued, Missing contact, Sending paused, Scored only, In sequence, Replied, Closed, Enriched, and New.
+- Added a campaign operator cockpit panel with human-readable campaign status, global outreach status, discovery status, sending readiness, latest run summary, and supporting-data warnings.
+- Expanded the campaign leads table to show business/contact, score, band, confidence, operator state, manual review reason/status, queue/draft status, compact why/next-action text, and lead links.
+- Added user-facing run/timeline labels, including `quota_exhausted` with created leads and no error as `Completed: quota reached`.
+- Invoked a scoped explorer subagent to inspect the existing campaign detail/query 404 and lead-state shape before implementation; it made no file changes.
 - Completed a surgical Sonar cleanup for PR #42 on `codex/pass-6-production-readiness`.
 - Replaced contact extraction's regex-heavy HTML, email, obfuscation, validation, trimming, and phone extraction paths with capped scanner/string helpers over crawled input.
 - Added a 400k-character contact scan cap and index-based stripping for comments plus `script`, `style`, `svg`, and `noscript` blocks.
@@ -98,6 +107,10 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `lib/crm/queries.ts`
+- `app/campaigns/[campaign_id]/page.tsx`
+- `app/campaigns/page.tsx`
+- `status.md`
 - `lib/workflows/contact-extraction.ts`
 - `tests/unit/contact-extraction.test.ts`
 - `lib/workflows/lead-discovery.ts`
@@ -153,6 +166,10 @@ AI Automation CRM / Lead Generation Dashboard
 - Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
 
 ## Validation status
+- campaign operator cockpit Phase 1 lint: passed (`npm run lint`)
+- campaign operator cockpit Phase 1 typecheck: passed (`npm run typecheck`)
+- campaign operator cockpit Phase 1 build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- campaign operator cockpit Phase 1 git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
 - contact extraction focused test: passed (`npm test -- tests/unit/contact-extraction.test.ts`) after Sonar regex hotspot cleanup
 - lint: passed (`npm run lint`) after PR #42 Sonar cleanup
 - typecheck: passed (`npm run typecheck`) after PR #42 Sonar cleanup
@@ -175,6 +192,9 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- Campaign operator cockpit Phase 1 has not been authenticated-browser QA'd; `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db` should be manually opened after deploy to confirm live Supabase data shape.
+- Operator state mapping uses latest bounded per-lead rows; if a lead has multiple historical queue/draft/review rows, the latest row is treated as the current operator signal.
+- Phase 1 intentionally did not fix routing idempotency or silent scored-limbo backend behavior; those remain later plan phases.
 - Sonar should be re-run on PR #42 to confirm the four contact-extraction regex hotspots and the lead-discovery redundant conditional are cleared.
 - Contact extraction behavior is covered by focused unit tests, but production crawl diversity can still reveal edge cases in unusual obfuscation formats.
 - Graphify was stale for exact Phase 4 paths: `graphify explain` did not find `lib/crm/queries.ts` or `app/campaigns/run-now-button.tsx`, so the implementation used the requested graph commands first and then the smallest direct file shortlist.
@@ -196,6 +216,7 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
+- Production QA Phase 1: open `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db`, confirm it no longer 404s, verify latest run reads `Completed: quota reached`, and confirm all generated leads show score/band/confidence/operator state/review or queue/draft context.
 - Deploy/retest with a fresh active campaign: click Run Now, watch `/campaigns` and the campaign detail Run history tab, then compare visible counts/checkpoints with Supabase rows using `plans/04_frontend_run_visibility_prod_qa_checklist.md`.
 - Retest scoring/routing with a fresh reachable lead: confirm `lead_scores`, `automation_hypotheses`, `wf_04_routing` event, and either `outreach_queue.status = 'queued'` for eligible B-band leads or a pending `manual_review_queue` item for A-band, low-confidence, missing-contact, suppressed, or global-pause cases.
 - Retest with a fresh campaign that crawls real websites: confirm candidate `normalized_payload.email` matches `leads.email` for valid selected emails, invalid/junk emails are absent from `leads.email`, and no-contact candidates land in manual review.
