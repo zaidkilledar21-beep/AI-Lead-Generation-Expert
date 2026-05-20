@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { CampaignLeadsTable } from "@/components/crm/campaign-leads-table";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -8,6 +9,7 @@ type RunDetailParams = Promise<{ campaign_id: string; run_id: string }>;
 type CampaignRunDetail = NonNullable<Awaited<ReturnType<typeof getCampaignRunDetailData>>>;
 type RunLead = CampaignRunDetail["leads"][number];
 type RunEvent = CampaignRunDetail["events"][number];
+type MetricItem = { label: string; value: string | number };
 
 function formatDateTime(value: string | null) {
   return value ? new Date(value).toLocaleString() : "--";
@@ -32,13 +34,6 @@ function eventTone(status: string) {
   return "muted" as const;
 }
 
-function operatorTone(value: string) {
-  if (value === "Needs review" || value === "Blocked" || value === "Missing contact") return "warning" as const;
-  if (value === "Draft ready" || value === "Queued" || value === "In sequence") return "success" as const;
-  if (value === "Replied" || value === "Closed") return "info" as const;
-  return "muted" as const;
-}
-
 function runWarningItems(detail: CampaignRunDetail) {
   return [
     detail.run.duplicatesSkipped > 0 ? `${detail.run.duplicatesSkipped} duplicates skipped.` : null,
@@ -48,6 +43,49 @@ function runWarningItems(detail: CampaignRunDetail) {
     detail.run.errorMessage ? detail.run.errorMessage : null,
     ...detail.supportWarnings
   ].filter(Boolean) as string[];
+}
+
+function MetricGrid({ items }: { items: MetricItem[] }) {
+  return (
+    <div className="campaign-detail-metric-grid">
+      {items.map((item) => (
+        <MetricCard label={item.label} value={item.value} key={item.label} />
+      ))}
+    </div>
+  );
+}
+
+function runMetricRows(run: CampaignRunDetail["run"]) {
+  return [
+    [
+      { label: "Candidates checked", value: run.candidatesChecked },
+      { label: "Leads created", value: run.promoted },
+      { label: "Duplicates skipped", value: run.duplicatesSkipped },
+      { label: "Manual review", value: run.manualReview }
+    ],
+    [
+      { label: "Places calls", value: run.totalPlacesCalls },
+      { label: "Rejected", value: run.rejected },
+      { label: "Crawl failures", value: run.crawlFailures },
+      { label: "Duration", value: run.durationSeconds ? `${run.durationSeconds}s` : "--" }
+    ]
+  ];
+}
+
+function RunFactRow({ run }: { run: CampaignRunDetail["run"] }) {
+  const facts = [
+    ["Started", formatDateTime(run.startedAt)],
+    ["Completed", formatDateTime(run.completedAt)],
+    ["Run ID", run.id]
+  ];
+
+  return (
+    <div className="grid gap-2 text-sm sm:grid-cols-3">
+      {facts.map(([label, value]) => (
+        <span className="muted" key={label}>{label}: <strong className={label === "Run ID" ? "mono" : undefined}>{value}</strong></span>
+      ))}
+    </div>
+  );
 }
 
 function RunSummary({ detail }: { detail: CampaignRunDetail }) {
@@ -63,23 +101,10 @@ function RunSummary({ detail }: { detail: CampaignRunDetail }) {
         <Badge tone={statusTone(run.userStatus, run.isStale)}>{run.userStatus}</Badge>
       </div>
       <div className="panel-body grid gap-4">
-        <div className="campaign-detail-metric-grid">
-          <MetricCard label="Candidates checked" value={run.candidatesChecked} />
-          <MetricCard label="Leads created" value={run.promoted} />
-          <MetricCard label="Duplicates skipped" value={run.duplicatesSkipped} />
-          <MetricCard label="Manual review" value={run.manualReview} />
-        </div>
-        <div className="campaign-detail-metric-grid">
-          <MetricCard label="Places calls" value={run.totalPlacesCalls} />
-          <MetricCard label="Rejected" value={run.rejected} />
-          <MetricCard label="Crawl failures" value={run.crawlFailures} />
-          <MetricCard label="Duration" value={run.durationSeconds ? `${run.durationSeconds}s` : "--"} />
-        </div>
-        <div className="grid gap-2 text-sm sm:grid-cols-3">
-          <span className="muted">Started: <strong>{formatDateTime(run.startedAt)}</strong></span>
-          <span className="muted">Completed: <strong>{formatDateTime(run.completedAt)}</strong></span>
-          <span className="muted">Run ID: <strong className="mono">{run.id}</strong></span>
-        </div>
+        {runMetricRows(run).map((items, index) => (
+          <MetricGrid items={items} key={index} />
+        ))}
+        <RunFactRow run={run} />
       </div>
     </section>
   );
@@ -150,75 +175,11 @@ function RunLeadsTable({ leads }: { leads: RunLead[] }) {
         <Badge tone="info">{leads.length}</Badge>
       </div>
       <div className="panel-body">
-        {leads.length > 0 ? (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Business</th>
-                  <th>Contact</th>
-                  <th>Score</th>
-                  <th>Band</th>
-                  <th>Confidence</th>
-                  <th>Operator state</th>
-                  <th>Review</th>
-                  <th>Queue / draft</th>
-                  <th>Why / next action</th>
-                  <th>Open</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead) => (
-                  <tr key={lead.id}>
-                    <td>
-                      <div className="grid gap-1">
-                        <a href={`/pipeline/${lead.id}`}>{lead.businessName}</a>
-                        <span className="muted text-xs">{formatStatus(lead.status)}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="grid gap-1 text-xs">
-                        <span>{lead.email ?? "No email"}</span>
-                        <span className="muted">{lead.phone ?? "No phone"}</span>
-                        {lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Website</a> : <span className="muted">No website</span>}
-                      </div>
-                    </td>
-                    <td className="mono">{lead.score ?? "--"}</td>
-                    <td>{lead.effectiveBand ?? lead.band ?? "--"}</td>
-                    <td>{lead.confidence ?? "--"}</td>
-                    <td>
-                      <div className="grid gap-1">
-                        <Badge tone={operatorTone(lead.operatorState)}>{lead.operatorState}</Badge>
-                        <span className="muted text-xs">{lead.operatorReason}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="grid gap-1 text-xs">
-                        <span>{formatStatus(lead.manualReviewStatus)}</span>
-                        <span className="muted">{formatStatus(lead.manualReviewReason)}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="grid gap-1 text-xs">
-                        <span>Queue: {formatStatus(lead.queueStatus)}</span>
-                        <span>Draft: {formatStatus(lead.draftStatus)}</span>
-                        {lead.nextSendAt ? <span className="muted">Next {formatDateTime(lead.nextSendAt)}</span> : null}
-                      </div>
-                    </td>
-                    <td>
-                      <p className="muted max-w-[320px] text-xs leading-5">{lead.why ?? lead.latestAction ?? "--"}</p>
-                    </td>
-                    <td>
-                      <a href={`/pipeline/${lead.id}`}>Open</a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState title="No leads created in this run" description="This run did not produce any campaign leads." />
-        )}
+        <CampaignLeadsTable
+          leads={leads}
+          emptyTitle="No leads created in this run"
+          emptyDescription="This run did not produce any campaign leads."
+        />
       </div>
     </section>
   );

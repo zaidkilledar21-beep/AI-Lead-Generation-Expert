@@ -7,12 +7,19 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Consolidate the Campaign Operator Cockpit against `plans/campaign_operator_cockpit_implementation_plan.md` and implement the missing Phase 2 run detail slice.
+- Fix Sonar duplicated-lines quality gate failures from the Phase 2 campaign run detail implementation and refresh Graphify via clean temp mirror.
 
 ## Current module / PR
 - Campaign operator cockpit / run detail visibility.
 
 ## Last completed work
+- Fixed Sonar duplicated-lines risk in the Phase 2 campaign run detail implementation without changing route behavior, DB schema, discovery, scoring, routing, drafting, sending, Gmail, or n8n.
+- Extracted the repeated campaign/run lead table into `components/crm/campaign-leads-table.tsx` and reused it from campaign detail and run detail.
+- Refactored run detail repeated metric JSX into config-driven `MetricGrid`, `runMetricRows`, and `RunFactRow` helpers.
+- Consolidated repeated campaign/run lead support query, warning, row-normalization, and index-building logic in `lib/crm/queries.ts`.
+- Preserved `/campaigns/[campaign_id]/runs/[run_id]`, campaign/run ownership guard, and Next 16 async params handling.
+- Refreshed `graphify-out/graph.json` through a clean temp mirror using `graphify update . --no-cluster`, then exported the Obsidian Graphify layer.
+- Clean Graphify refresh result: 1,506 nodes and 2,987 links/edges.
 - Created `plans/campaign_operator_cockpit_consolidation.md` to map the source-of-truth cockpit plan against the current repo state.
 - Verified Phase 1 campaign detail reliability and baseline cockpit are implemented, with authenticated production QA still pending.
 - Implemented the Phase 2 run detail route at `/campaigns/[campaign_id]/runs/[run_id]`.
@@ -130,6 +137,9 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `components/crm/campaign-leads-table.tsx`
+- `graphify-out/graph.json`
+- `docs/obsidian-vault/10_Graphify/`
 - `plans/campaign_operator_cockpit_consolidation.md`
 - `app/campaigns/[campaign_id]/runs/[run_id]/page.tsx`
 - `app/campaigns/[campaign_id]/page.tsx`
@@ -201,6 +211,12 @@ AI Automation CRM / Lead Generation Dashboard
 - Authenticated browser QA is still required for the new run detail route and the existing production campaign detail route.
 
 ## Validation status
+- campaign cockpit duplication cleanup lint: passed (`npm run lint`)
+- campaign cockpit duplication cleanup typecheck: passed (`npm run typecheck`)
+- campaign cockpit duplication cleanup build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- campaign cockpit duplication cleanup git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- campaign cockpit duplication cleanup Sonar/SonarLint: not run locally; no Sonar/SonarLint command or project config was available, and the refactor specifically removed the duplicated structures Sonar reported
+- campaign cockpit duplication cleanup Graphify refresh: completed via clean temp mirror with `graphify update . --no-cluster`; copied `graphify-out/graph.json` back and exported Obsidian Graphify notes; refreshed graph has 1,506 nodes and 2,987 links/edges
 - campaign cockpit Phase 2 run detail lint: passed (`npm run lint`)
 - campaign cockpit Phase 2 run detail typecheck: passed (`npm run typecheck`)
 - campaign cockpit Phase 2 run detail build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
@@ -254,6 +270,7 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- SonarCloud should be re-run on the PR to confirm duplicated lines on new code drops below the quality gate; local Sonar/SonarLint was not available.
 - Phase 2 run detail is validated by lint/typecheck/build, but still needs authenticated production QA against live Supabase data.
 - No DB migration was added; the run detail page uses existing `discovery_runs`, `workflow_events`, `leads`, scores, manual review, queue, draft, reply, and outreach event data.
 - Phase 3 routing idempotency remains implemented, but the full plan taxonomy for explicit routing workflow events such as `routing_started`, `manual_review_already_pending`, and `queue_already_exists` remains a later alignment gap.
