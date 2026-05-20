@@ -96,7 +96,7 @@
           "conditions": [
             {
               "id": "e2663c4f-0db1-4fc2-82d0-c95e6d242730",
-              "leftValue": "={{ ['failed', 'quota_exhausted', 'partial_failed'].includes($json.status) || (($json.errors || []).length > 0) }}",
+              "leftValue": "={{ ($json.notification && $json.notification.needs_attention) === true }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -122,9 +122,9 @@
     {
       "parameters": {
         "sendTo": "={{$env.FOUNDER_NOTIFY_EMAIL}}",
-        "subject": "⚠️ WF-10 Lead Discovery Needs Attention",
+        "subject": "={{ ($json.notification && $json.notification.subject) || 'WF-10 Lead Discovery Finished' }}",
         "emailType": "text",
-        "message": "=WF-10 Lead Discovery needs attention.  Status: {{$json.status || 'unknown'}}  Discovery run: {{$json.discovery_run_id || $json.run_id || 'none'}}  Created: {{$json.created || 0}}  Duplicates: {{$json.duplicates || 0}}  Manual review: {{$json.manual_review || 0}}  First error: {{($json.errors && $json.errors.length > 0) ? $json.errors[0] : 'none'}}  Check the dashboard and workflow_events table for details.",
+        "message": "={{ ($json.notification && $json.notification.body) || 'WF-10 Lead Discovery finished. Check the dashboard for details.' }}",
         "options": {}
       },
       "type": "n8n-nodes-base.gmail",
@@ -192,6 +192,13 @@
     },
     "Run Needs Attention?": {
       "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Send a message",

@@ -7,12 +7,21 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Implement Phase 4 Lead Detail Richness from `plans/campaign_operator_cockpit_implementation_plan.md`.
+- Fix CI/Sonar DoS hotspot in Phase 5 notification helper and repush branch.
 
 ## Current module / PR
-- Campaign operator cockpit / lead detail richness.
+- Campaign operator cockpit / WF-10 discovery notifications.
 
 ## Last completed work
+- Fixed the latest CI/Sonar DoS security hotspot in `lib/workflows/lead-discovery.ts` by replacing the trailing-slash regex in `configuredAppBaseUrl()` with a bounded character-loop trim.
+- Preserved Phase 5 notification behavior and URL generation semantics.
+- Implemented Phase 5 email and notification wording cleanup for WF-10 discovery notifications.
+- Added app-generated discovery notification semantics to `runLeadDiscovery`: subject, final status, needs-attention flag, safe body text, campaign detail link, and run detail link.
+- Mapped `quota_exhausted` with promoted leads to `WF-10 Lead Discovery Finished: Quota Reached` and `Completed: quota reached`.
+- Mapped `quota_exhausted` with no promoted leads to `WF-10 Lead Discovery Finished: Quota Reached - No New Leads` and `Quota reached: no new leads`.
+- Updated the WF-10 importable n8n workflow to use the app response `notification.subject` and `notification.body`; both attention and non-attention branches now send the same prepared founder notification.
+- Updated the WF-10 workflow documentation and cockpit consolidation plan for Phase 5.
+- Refreshed Graphify through the clean temp mirror method including the touched n8n source artifacts, then exported the Obsidian Graphify layer; refreshed graph has 1,897 nodes and 3,383 edges.
 - Implemented Phase 4 Lead Detail Richness as a read-only `/leads/[id]` intelligence page.
 - Replaced the legacy `/leads/[id]` redirect with a lead detail page that shows identity, campaign/source/contact state, operator state, score/band/confidence/manual-review requirement, score evidence, enrichment/contact signals, AI hypothesis, routing state, and draft preview.
 - Extended `getLeadDetail(leadId)` with latest score detail, operator state, campaign identity, routing state, sequence/inbox labels, safe draft preview, and compact enrichment/contact summaries.
@@ -144,6 +153,15 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `lib/workflows/lead-discovery.ts`
+- `status.md`
+- `lib/workflows/lead-discovery.ts`
+- `n8n/importable-json/WF-10 Lead Discovery - Backend Runner.json`
+- `n8n/workflows/WF-10-lead-discovery.md`
+- `plans/campaign_operator_cockpit_consolidation.md`
+- `graphify-out/graph.json`
+- `docs/obsidian-vault/10_Graphify/`
+- `status.md`
 - `app/leads/[id]/page.tsx`
 - `components/crm/campaign-leads-table.tsx`
 - `lib/crm/queries.ts`
@@ -222,9 +240,21 @@ AI Automation CRM / Lead Generation Dashboard
 - `status.md`
 
 ## Current blocker
-- Authenticated browser QA is still required for the new lead detail page, run detail route, and existing production campaign detail route.
+- Authenticated production/n8n QA is still required for the Phase 5 notification wording and links, plus the prior lead detail, run detail, and campaign detail routes.
 
 ## Validation status
+- CI/Sonar DoS hotspot cleanup lint: passed (`npm run lint`)
+- CI/Sonar DoS hotspot cleanup typecheck: passed (`npm run typecheck`)
+- CI/Sonar DoS hotspot cleanup build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- CI/Sonar DoS hotspot cleanup workflow JSON validation: passed (`node scripts/validate-workflow-contracts.mjs`)
+- CI/Sonar DoS hotspot cleanup git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- campaign cockpit Phase 5 notification lint: passed (`npm run lint`)
+- campaign cockpit Phase 5 notification typecheck: passed (`npm run typecheck`)
+- campaign cockpit Phase 5 notification build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- campaign cockpit Phase 5 workflow JSON validation: passed (`node scripts/validate-workflow-contracts.mjs`)
+- campaign cockpit Phase 5 git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- campaign cockpit Phase 5 focused tests: not run; no existing focused notification-helper tests cover the WF-10 response/email mapping, and this slice is covered by lint/typecheck/build plus workflow JSON validation
+- campaign cockpit Phase 5 Graphify refresh: completed via clean temp mirror with `graphify update . --no-cluster`; copied `graphify-out/graph.json` back and exported Obsidian Graphify notes; refreshed graph has 1,897 nodes and 3,383 edges
 - campaign cockpit Phase 4 lead detail lint: passed (`npm run lint`)
 - campaign cockpit Phase 4 lead detail typecheck: passed (`npm run typecheck`)
 - campaign cockpit Phase 4 lead detail build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
@@ -290,13 +320,16 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- Sonar/SonarCloud was not run locally; the flagged regex was removed and the pushed branch should trigger CI revalidation.
+- Phase 5 notification wording is validated statically and by workflow JSON parsing, but production n8n import/execution QA is still needed to verify Gmail receives the prepared subject/body and direct links.
+- WF-10 notification links use `APP_BASE_URL`, then `NEXT_PUBLIC_APP_URL`, then `VERCEL_URL`, and fall back to relative paths if no base URL is configured; production should confirm `APP_BASE_URL` is set.
 - Phase 4 lead detail is validated by lint/typecheck/build, but still needs authenticated production QA against live lead data.
 - `/leads/[id]` now owns the read-only explanation workflow; `/pipeline/[lead_id]` remains the action-heavy pipeline record and is linked from the lead detail page.
 - SonarCloud should be re-run on the PR to confirm duplicated lines on new code drops below the quality gate; local Sonar/SonarLint was not available.
 - Phase 2 run detail is validated by lint/typecheck/build, but still needs authenticated production QA against live Supabase data.
 - No DB migration was added; the run detail page uses existing `discovery_runs`, `workflow_events`, `leads`, scores, manual review, queue, draft, reply, and outreach event data.
 - Phase 3 routing idempotency remains implemented, but the full plan taxonomy for explicit routing workflow events such as `routing_started`, `manual_review_already_pending`, and `queue_already_exists` remains a later alignment gap.
-- Phase 4 lead detail richness and Phase 5 email/notification wording cleanup remain out of scope for this pass.
+- Phase 4 lead detail richness is implemented; Phase 5 notification wording is implemented but still needs production n8n QA.
 - The requested `plans/phase_2_routing_idempotency.md` file was not present; implementation used the user prompt, current `status.md`, Graphify navigation, and the closest existing routing plan `plans/03_scoring_routing_queue_draft_handoff.md`.
 - No migration was added because existing schema already has `manual_review_one_pending_per_lead_idx` and `unique (lead_id, sequence_id)` on `outreach_queue`; production should confirm those constraints exist on the deployed database.
 - Production QA should verify that routed leads no longer remain as scored-only and that workflow event payloads show the explicit routing outcome returned by `routeLead`.
@@ -326,6 +359,7 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
+- Production QA Phase 5: import/update WF-10 in n8n, run a quota-reached discovery for campaign `952cb7ea-37a1-47a2-b443-11cb8ac048db`, and verify the founder email subject/body show quota reached, campaign/run links, created/promoted leads, scored leads, manual review, drafted/queued counts, duplicates, and first error when present.
 - Production QA Phase 4: from `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db` or a run detail page, open each generated lead through the lead table and verify `/leads/<lead_id>` shows identity, score, evidence, enrichment, AI hypothesis, routing, and draft preview without exposing raw payloads or secrets.
 - Production QA Phase 2 run detail: open `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db?tab=runs`, click the latest run/history run link, then verify `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db/runs/<run_id>` shows summary counters, timeline events, warnings/errors, and run-scoped leads without 404.
 - Production QA Phase 2: run discovery/scoring on fresh B-band and A-band leads, confirm B-band reachable leads create one `outreach_queue` row after repeated routing, A/low-confidence/manual-review leads create one pending `manual_review_queue` row, and missing sequence/inbox/global pause/campaign pause cases show explicit routing outcomes.
