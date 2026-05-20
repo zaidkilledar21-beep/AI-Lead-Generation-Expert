@@ -77,11 +77,13 @@ function QueueDraftCell({ lead }: { lead: CampaignLeadRow }) {
 }
 
 function LeadRow({ lead }: { lead: CampaignLeadRow }) {
+  const leadHref = `/leads/${lead.id}`;
+
   return (
     <tr>
       <td>
         <div className="grid gap-1">
-          <a href={`/pipeline/${lead.id}`}>{lead.businessName}</a>
+          <a href={leadHref}>{lead.businessName}</a>
           <span className="muted text-xs">{formatStatus(lead.status)}</span>
         </div>
       </td>
@@ -96,7 +98,7 @@ function LeadRow({ lead }: { lead: CampaignLeadRow }) {
         <p className="muted max-w-[320px] text-xs leading-5">{lead.why ?? lead.latestAction ?? "--"}</p>
       </td>
       <td>
-        <a href={`/pipeline/${lead.id}`}>Open</a>
+        <a href={leadHref}>Open lead</a>
       </td>
     </tr>
   );

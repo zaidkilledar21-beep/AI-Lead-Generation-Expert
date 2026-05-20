@@ -7,12 +7,19 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Fix Sonar duplicated-lines quality gate failures from the Phase 2 campaign run detail implementation and refresh Graphify via clean temp mirror.
+- Implement Phase 4 Lead Detail Richness from `plans/campaign_operator_cockpit_implementation_plan.md`.
 
 ## Current module / PR
-- Campaign operator cockpit / run detail visibility.
+- Campaign operator cockpit / lead detail richness.
 
 ## Last completed work
+- Implemented Phase 4 Lead Detail Richness as a read-only `/leads/[id]` intelligence page.
+- Replaced the legacy `/leads/[id]` redirect with a lead detail page that shows identity, campaign/source/contact state, operator state, score/band/confidence/manual-review requirement, score evidence, enrichment/contact signals, AI hypothesis, routing state, and draft preview.
+- Extended `getLeadDetail(leadId)` with latest score detail, operator state, campaign identity, routing state, sequence/inbox labels, safe draft preview, and compact enrichment/contact summaries.
+- Updated `components/crm/campaign-leads-table.tsx` so campaign detail and run detail lead links open `/leads/[id]`; the existing pipeline action record remains reachable from the lead detail page.
+- Updated `plans/campaign_operator_cockpit_consolidation.md` to mark the scoped Phase 4 read-only richness slice implemented.
+- Preserved Phase 1 campaign cockpit behavior, Phase 2 run detail behavior, Phase 3 routing idempotency behavior, and all discovery/scoring/routing/drafting/sending/Gmail/n8n/database schema behavior.
+- Refreshed Graphify through the clean temp mirror method and exported the Obsidian Graphify layer; refreshed graph has 1,524 nodes and 3,032 links/edges.
 - Fixed Sonar duplicated-lines risk in the Phase 2 campaign run detail implementation without changing route behavior, DB schema, discovery, scoring, routing, drafting, sending, Gmail, or n8n.
 - Extracted the repeated campaign/run lead table into `components/crm/campaign-leads-table.tsx` and reused it from campaign detail and run detail.
 - Refactored run detail repeated metric JSX into config-driven `MetricGrid`, `runMetricRows`, and `RunFactRow` helpers.
@@ -137,6 +144,13 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `app/leads/[id]/page.tsx`
+- `components/crm/campaign-leads-table.tsx`
+- `lib/crm/queries.ts`
+- `plans/campaign_operator_cockpit_consolidation.md`
+- `graphify-out/graph.json`
+- `docs/obsidian-vault/10_Graphify/`
+- `status.md`
 - `components/crm/campaign-leads-table.tsx`
 - `graphify-out/graph.json`
 - `docs/obsidian-vault/10_Graphify/`
@@ -208,9 +222,15 @@ AI Automation CRM / Lead Generation Dashboard
 - `status.md`
 
 ## Current blocker
-- Authenticated browser QA is still required for the new run detail route and the existing production campaign detail route.
+- Authenticated browser QA is still required for the new lead detail page, run detail route, and existing production campaign detail route.
 
 ## Validation status
+- campaign cockpit Phase 4 lead detail lint: passed (`npm run lint`)
+- campaign cockpit Phase 4 lead detail typecheck: passed (`npm run typecheck`)
+- campaign cockpit Phase 4 lead detail build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- campaign cockpit Phase 4 lead detail git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
+- campaign cockpit Phase 4 focused tests: not run; no existing focused tests cover `getLeadDetail` or `/leads/[id]`, and this pass is read-only UI/query mapping covered by lint/typecheck/build
+- campaign cockpit Phase 4 Graphify refresh: completed via clean temp mirror with `graphify update . --no-cluster`; copied `graphify-out/graph.json` back and exported Obsidian Graphify notes; refreshed graph has 1,524 nodes and 3,032 links/edges
 - campaign cockpit duplication cleanup lint: passed (`npm run lint`)
 - campaign cockpit duplication cleanup typecheck: passed (`npm run typecheck`)
 - campaign cockpit duplication cleanup build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
@@ -270,6 +290,8 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- Phase 4 lead detail is validated by lint/typecheck/build, but still needs authenticated production QA against live lead data.
+- `/leads/[id]` now owns the read-only explanation workflow; `/pipeline/[lead_id]` remains the action-heavy pipeline record and is linked from the lead detail page.
 - SonarCloud should be re-run on the PR to confirm duplicated lines on new code drops below the quality gate; local Sonar/SonarLint was not available.
 - Phase 2 run detail is validated by lint/typecheck/build, but still needs authenticated production QA against live Supabase data.
 - No DB migration was added; the run detail page uses existing `discovery_runs`, `workflow_events`, `leads`, scores, manual review, queue, draft, reply, and outreach event data.
@@ -304,6 +326,7 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
+- Production QA Phase 4: from `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db` or a run detail page, open each generated lead through the lead table and verify `/leads/<lead_id>` shows identity, score, evidence, enrichment, AI hypothesis, routing, and draft preview without exposing raw payloads or secrets.
 - Production QA Phase 2 run detail: open `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db?tab=runs`, click the latest run/history run link, then verify `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db/runs/<run_id>` shows summary counters, timeline events, warnings/errors, and run-scoped leads without 404.
 - Production QA Phase 2: run discovery/scoring on fresh B-band and A-band leads, confirm B-band reachable leads create one `outreach_queue` row after repeated routing, A/low-confidence/manual-review leads create one pending `manual_review_queue` row, and missing sequence/inbox/global pause/campaign pause cases show explicit routing outcomes.
 - Deploy and retest `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db` in production to confirm it no longer renders 404 and no longer sends Supabase `.eq("id", undefined)`.

@@ -812,6 +812,18 @@ function buildCampaignLeadRows(input: {
   });
 }
 
+function compactList(value: unknown, limit = 6) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => toStr(item).trim())
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function safeDraftBodyPreview(draft: Record<string, any> | null) {
+  return draft ? previewText(draft.message_body ?? draft.body ?? draft.preview_text ?? "", 360) : null;
+}
+
 export async function getCampaignRunDetailData(campaignId: string, runId: string) {
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) return null;
@@ -920,7 +932,21 @@ export async function getLeadDetail(leadId: string) {
   const { data: lead } = await supabase.from("leads").select("*").eq("id", leadId).maybeSingle();
   if (!lead) return null;
 
-  const [{ data: enrichment }, { data: evidence }, { data: hypothesis }, { data: actions }, { data: replies }, { data: drafts }, { data: notes }, { data: reviews }, { data: outreachEvents }] = await Promise.all([
+  const [
+    { data: enrichment },
+    { data: evidence },
+    { data: hypothesis },
+    { data: actions },
+    { data: replies },
+    { data: drafts },
+    { data: notes },
+    { data: reviews },
+    { data: outreachEvents },
+    { data: score },
+    { data: queue },
+    { data: campaign },
+    { data: globalOutreach }
+  ] = await Promise.all([
     supabase.from("lead_enrichment").select("*").eq("lead_id", leadId).order("last_enriched_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("score_evidence").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }),
     supabase.from("automation_hypotheses").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -929,9 +955,39 @@ export async function getLeadDetail(leadId: string) {
     supabase.from("email_drafts").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
     supabase.from("lead_notes").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
     supabase.from("manual_review_queue").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
-    supabase.from("outreach_events").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50)
+    supabase.from("outreach_events").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(50),
+    supabase.from("lead_scores").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("outreach_queue").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    lead.campaign_id
+      ? supabase.from("campaigns").select("id,name,status,assigned_inbox_id").eq("id", lead.campaign_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase.from("app_settings").select("value").eq("key", "global_outreach").maybeSingle()
   ]);
 
+  const draftsList = asArray(drafts as Array<Record<string, any>>);
+  const reviewsList = asArray(reviews as Array<Record<string, any>>);
+  const latestDraft = draftsList[0] ?? null;
+  const latestReview = reviewsList[0] ?? null;
+  const latestQueue = (queue as Record<string, any> | null) ?? null;
+  const latestScore = (score as Record<string, any> | null) ?? null;
+  const sequenceId = latestQueue?.sequence_id ?? latestDraft?.sequence_id ?? null;
+  const inboxId = (campaign as Record<string, any> | null)?.assigned_inbox_id ?? null;
+  const [{ data: sequence }, { data: inbox }] = await Promise.all([
+    sequenceId
+      ? supabase.from("outreach_sequences").select("id,name,band,active").eq("id", sequenceId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    inboxId ? supabase.from("inboxes").select("id,email_address,provider,active").eq("id", inboxId).maybeSingle() : Promise.resolve({ data: null })
+  ]);
+  const globalSettings = ((globalOutreach as Record<string, any> | null)?.value as Record<string, unknown> | null) ?? {};
+  const operatorState = operatorStateForLead({
+    lead,
+    score: latestScore,
+    manualReview: latestReview,
+    queue: latestQueue,
+    draft: latestDraft,
+    globalPaused: globalSettings.paused === true,
+    campaignStatus: toStr((campaign as Record<string, any> | null)?.status)
+  });
   const timeline = [
     ...asArray(actions as Array<Record<string, any>>).map((item) => ({
       id: `action-${item.id}`,
@@ -974,6 +1030,30 @@ export async function getLeadDetail(leadId: string) {
     }))
   ].sort((a, b) => new Date(b.at ?? 0).getTime() - new Date(a.at ?? 0).getTime());
 
+  const scoreEvidence = asArray(evidence as Array<Record<string, any>>).map((item) => ({
+    id: item.id,
+    metricName: item.metric_name,
+    score: item.score,
+    maxScore: item.max_score,
+    confidence: item.confidence ?? null,
+    evidence: item.evidence ?? item.reasoning_summary ?? null,
+    missingData: item.missing_data ?? null,
+    createdAt: item.created_at ?? null
+  }));
+  const enrichmentRow = enrichment as Record<string, any> | null;
+  const latestDraftPreview = latestDraft
+    ? {
+        id: latestDraft.id,
+        subject: latestDraft.subject_line ?? latestDraft.subject ?? "Draft",
+        bodyPreview: safeDraftBodyPreview(latestDraft),
+        validationPassed: latestDraft.validation_passed ?? null,
+        approvalStatus: latestDraft.approval_status ?? null,
+        warnings: compactList(latestDraft.generation_warnings),
+        failures: compactList(latestDraft.validation_failures),
+        createdAt: latestDraft.created_at ?? null
+      }
+    : null;
+
   return {
     ...(pipelineRow ?? {
       id: lead.id,
@@ -992,6 +1072,8 @@ export async function getLeadDetail(leadId: string) {
       lastActivityAt: lead.updated_at ?? lead.created_at,
       confidence: null
     }),
+    campaignId: lead.campaign_id ?? pipelineRow?.campaignId ?? null,
+    campaignName: pipelineRow?.campaignName ?? (campaign as Record<string, any> | null)?.name ?? null,
     website: lead.website ?? null,
     email: lead.email ?? null,
     phone: lead.phone ?? null,
@@ -1003,14 +1085,19 @@ export async function getLeadDetail(leadId: string) {
     source: lead.source ?? null,
     notes: lead.notes ?? null,
     notesHistory: asArray(notes as Array<Record<string, any>>),
-    scoreEvidence: asArray(evidence as Array<Record<string, any>>).map((item) => ({
-      id: item.id,
-      metricName: item.metric_name,
-      score: item.score,
-      maxScore: item.max_score,
-      evidence: item.evidence,
-      missingData: item.missing_data
-    })),
+    operatorState: operatorState.label,
+    operatorReason: operatorState.reason,
+    scoreDetail: latestScore
+      ? {
+          id: latestScore.id,
+          totalScore: latestScore.total_score ?? null,
+          band: latestScore.band ?? null,
+          confidence: latestScore.confidence ?? null,
+          manualReviewRequired: Boolean(latestScore.manual_review_required),
+          createdAt: latestScore.created_at ?? null
+        }
+      : null,
+    scoreEvidence,
     hypothesis: hypothesis
       ? {
           painPoint: hypothesis.primary_pain_point ?? null,
@@ -1019,12 +1106,47 @@ export async function getLeadDetail(leadId: string) {
           businessImpact: hypothesis.business_impact ?? null,
           outreachHook: hypothesis.outreach_hook ?? null,
           confidence: hypothesis.confidence ?? null
+      }
+      : null,
+    enrichment: enrichmentRow
+      ? {
+          status: enrichmentRow.status ?? null,
+          errorMessage: enrichmentRow.error_message ?? null,
+          lastEnrichedAt: enrichmentRow.last_enriched_at ?? null,
+          websiteTitle: enrichmentRow.website_title ?? null,
+          websiteDescription: enrichmentRow.website_description ?? null,
+          contactPageUrl: enrichmentRow.contact_page_url ?? null,
+          emailFound: enrichmentRow.email_found ?? null,
+          phoneFound: enrichmentRow.phone_found ?? null,
+          whatsappFound: enrichmentRow.whatsapp_found ?? null,
+          contactFormFound: Boolean(enrichmentRow.contact_form_found),
+          bookingLinkFound: Boolean(enrichmentRow.booking_link_found),
+          chatWidgetFound: Boolean(enrichmentRow.chat_widget_found),
+          teamPageFound: Boolean(enrichmentRow.team_page_found),
+          pricingPageFound: Boolean(enrichmentRow.pricing_page_found),
+          faqPageFound: Boolean(enrichmentRow.faq_page_found),
+          calendarToolFound: Boolean(enrichmentRow.calendar_tool_found),
+          servicesOffered: compactList(enrichmentRow.services_offered),
+          detectedTools: compactList(enrichmentRow.detected_tools),
+          summary: enrichmentRow.raw_scrape_summary ? previewText(enrichmentRow.raw_scrape_summary, 360) : null,
+          confidence: enrichmentRow.enrichment_confidence ?? null
         }
       : null,
-    enrichment: enrichment ?? null,
+    routing: {
+      manualReviewStatus: latestReview?.review_status ?? null,
+      manualReviewReason: latestReview?.reason ?? null,
+      queueStatus: latestQueue?.status ?? null,
+      queuePauseReason: latestQueue?.pause_reason ?? null,
+      nextSendAt: latestQueue?.next_send_at ?? null,
+      sequenceName: (sequence as Record<string, any> | null)?.name ?? null,
+      sequenceBand: (sequence as Record<string, any> | null)?.band ?? null,
+      inboxEmail: (inbox as Record<string, any> | null)?.email_address ?? latestQueue?.assigned_inbox ?? null,
+      inboxProvider: (inbox as Record<string, any> | null)?.provider ?? null
+    },
+    draftPreview: latestDraftPreview,
     replies: asArray(replies as Array<Record<string, any>>),
-    drafts: asArray(drafts as Array<Record<string, any>>),
-    reviews: asArray(reviews as Array<Record<string, any>>),
+    drafts: draftsList,
+    reviews: reviewsList,
     timeline
   };
 }
