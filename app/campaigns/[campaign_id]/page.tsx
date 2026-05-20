@@ -68,19 +68,28 @@ function operatorTone(value: string) {
   return "muted" as const;
 }
 
+type CampaignDetailSearchParams = { tab?: string | string[] };
+
 export default async function CampaignDetailPage({
   params,
   searchParams
 }: Readonly<{
-  params: { campaign_id: string };
-  searchParams?: { tab?: string };
+  params: Promise<{ campaign_id: string }>;
+  searchParams?: Promise<CampaignDetailSearchParams>;
 }>) {
+  const searchParamsPromise: Promise<CampaignDetailSearchParams> =
+    searchParams ?? Promise.resolve({});
+  const [{ campaign_id: campaignId }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParamsPromise
+  ]);
+  const rawTab = resolvedSearchParams.tab;
+  const tab = Array.isArray(rawTab) ? rawTab[0] ?? "overview" : rawTab ?? "overview";
   const [detail, settings] = await Promise.all([
-    getCampaignDetailData(params.campaign_id),
+    getCampaignDetailData(campaignId),
     getSettingsData()
   ]);
   if (!detail) notFound();
-  const tab = searchParams?.tab ?? "overview";
   const latestRun = detail.runs[0] ?? null;
   const sequences = settings.sequences as unknown as Array<{ id: string; name?: string | null }>;
   const inboxes = settings.inboxes as unknown as Array<{ id: string; email_address?: string | null }>;
