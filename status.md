@@ -7,12 +7,15 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Implement Phase 2 routing idempotency and clear lead lifecycle states.
+- Fix Sonar quality gate failures from Phase 2 routing idempotency work.
 
 ## Current module / PR
 - Campaign manual discovery run path.
 
 ## Last completed work
+- Fixed Phase 2 Sonar quality gate findings without changing routing behavior.
+- Reduced `routeLeadInternal` cognitive complexity by extracting manual-review decision helpers, manual-review routing, and non-review routing into small named helpers.
+- Removed the thenable mock pattern from `tests/unit/routing.test.ts`; terminal query methods now return explicit promises, and the mock `filters` member is marked `readonly`.
 - Implemented Phase 2 routing idempotency in `lib/workflows/routing.ts`.
 - Made pending manual review creation idempotent by updating an existing pending item and recovering from duplicate insert conflicts against the one-pending-review-per-lead constraint.
 - Made outreach queue creation idempotent by checking existing lead/sequence queue rows, preserving drafted and closed queue outcomes, and recovering from duplicate insert conflicts without creating duplicate queue rows.
@@ -186,6 +189,12 @@ AI Automation CRM / Lead Generation Dashboard
 - Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
 
 ## Validation status
+- Phase 2 Sonar quality-gate cleanup focused tests: passed (`npm test -- tests/unit/routing.test.ts`)
+- Phase 2 Sonar quality-gate cleanup lint: passed (`npm run lint`)
+- Phase 2 Sonar quality-gate cleanup typecheck: passed (`npm run typecheck`)
+- Phase 2 Sonar quality-gate cleanup build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- Phase 2 Sonar quality-gate cleanup git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warning only
+- Phase 2 Sonar quality-gate cleanup Sonar/SonarLint: not run locally; no Sonar/SonarLint npm script was available in `package.json`
 - Phase 2 routing idempotency focused tests: passed (`npm test -- tests/unit/routing.test.ts`)
 - Phase 2 routing idempotency lint: passed (`npm run lint`)
 - Phase 2 routing idempotency typecheck: passed (`npm run typecheck`)

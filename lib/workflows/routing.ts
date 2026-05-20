@@ -221,6 +221,56 @@ export async function routeApprovedLead(leadId: string): Promise<RoutingResult> 
   return queueResult;
 }
 
+function leadNeedsManualReview(input: {
+  band: string;
+  confidence: string;
+  reachable: boolean;
+  weakHypothesis: boolean;
+  manualReviewRequired: boolean;
+}) {
+  return (
+    input.band === "A" ||
+    input.confidence === "low" ||
+    !input.reachable ||
+    input.weakHypothesis ||
+    input.manualReviewRequired
+  );
+}
+
+function manualReviewReasons(input: {
+  band: string;
+  confidence: string;
+  reachable: boolean;
+  email?: string | null;
+  hasValidEmail: boolean;
+  weakHypothesis: boolean;
+  manualReviewRequired: boolean;
+}) {
+  return [
+    input.band === "A" ? "band_a_first_email" : null,
+    input.confidence === "low" ? "low_confidence" : null,
+    !input.reachable ? "missing_contact" : null,
+    input.email && !input.hasValidEmail ? "invalid_email" : null,
+    input.weakHypothesis ? "generic_hypothesis" : null,
+    input.manualReviewRequired ? "scoring_flag" : null
+  ].filter((reason): reason is string => Boolean(reason));
+}
+
+async function routeManualReviewLead(leadId: string, reasons: string[], band: string): Promise<RoutingResult> {
+  await createOrUpdateManualReview(leadId, reasons.join(", "), band === "A" ? "high" : "normal");
+  await updateLeadStatus(leadId, "review_pending");
+  return { status: "manual_review_pending", reasons };
+}
+
+async function routeNonReviewLead(leadId: string, band: string): Promise<RoutingResult> {
+  if (band === "B") {
+    return routeApprovedLead(leadId);
+  }
+
+  await updateLeadStatus(leadId, band === "C" ? "paused" : "archived");
+  return { status: "archived/nurture", reasons: [`band_${band.toLowerCase()}`] };
+}
+
 async function routeLeadInternal(leadId: string): Promise<RoutingResult> {
   const supabase = createSupabaseServiceClient();
 
@@ -247,29 +297,21 @@ async function routeLeadInternal(leadId: string): Promise<RoutingResult> {
   const hasValidEmail = isValidBusinessEmail(lead.email);
   const reachable = Boolean(hasValidEmail || lead.phone || lead.whatsapp);
   const weakHypothesis = !hypothesis?.outreach_hook;
-  const needsReview = score.band === "A" || score.confidence === "low" || !reachable || weakHypothesis || score.manual_review_required;
+  const reviewInput = {
+    band: score.band,
+    confidence: score.confidence,
+    reachable,
+    email: lead.email,
+    hasValidEmail,
+    weakHypothesis,
+    manualReviewRequired: score.manual_review_required
+  };
 
-  if (needsReview) {
-    const reasons = [
-      score.band === "A" ? "band_a_first_email" : null,
-      score.confidence === "low" ? "low_confidence" : null,
-      !reachable ? "missing_contact" : null,
-      lead.email && !hasValidEmail ? "invalid_email" : null,
-      weakHypothesis ? "generic_hypothesis" : null,
-      score.manual_review_required ? "scoring_flag" : null
-    ].filter((reason): reason is string => Boolean(reason));
-
-    await createOrUpdateManualReview(leadId, reasons.join(", "), score.band === "A" ? "high" : "normal");
-    await updateLeadStatus(leadId, "review_pending");
-    return { status: "manual_review_pending", reasons };
+  if (leadNeedsManualReview(reviewInput)) {
+    return routeManualReviewLead(leadId, manualReviewReasons(reviewInput), score.band);
   }
 
-  if (score.band === "B") {
-    return routeApprovedLead(leadId);
-  }
-
-  await updateLeadStatus(leadId, score.band === "C" ? "paused" : "archived");
-  return { status: "archived/nurture", reasons: [`band_${score.band.toLowerCase()}`] };
+  return routeNonReviewLead(leadId, score.band);
 }
 
 export async function routeLead(leadId: string): Promise<RoutingResult> {

@@ -13,7 +13,7 @@ type Db = Record<string, Row[]>;
 
 class MockQuery {
   private action: "select" | "update" | "insert" = "select";
-  private filters: Array<{ column: string; value: any }> = [];
+  private readonly filters: Array<{ column: string; value: any }> = [];
   private payload: Row | null = null;
   private single = false;
   private countHead = false;
@@ -46,7 +46,7 @@ class MockQuery {
 
   eq(column: string, value: any) {
     this.filters.push({ column, value });
-    return this;
+    return this.isTerminalEq() ? this.execute() : this;
   }
 
   order(column: string, options?: { ascending?: boolean }) {
@@ -64,15 +64,16 @@ class MockQuery {
     return this.execute();
   }
 
-  then<TResult1 = any, TResult2 = never>(
-    onfulfilled?: ((value: any) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null
-  ) {
-    return this.execute().then(onfulfilled, onrejected);
-  }
-
   private matches(row: Row) {
     return this.filters.every((filter) => row[filter.column] === filter.value);
+  }
+
+  private isTerminalEq() {
+    if (this.countHead) return true;
+    if (this.action !== "update") return false;
+    const latestFilter = this.filters[this.filters.length - 1];
+    if (this.table === "manual_review_queue") return latestFilter?.column === "id" || this.filters.length >= 2;
+    return this.filters.length >= 1;
   }
 
   private filteredRows() {
