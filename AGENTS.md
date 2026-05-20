@@ -60,17 +60,15 @@ If a command does not exist, state that clearly.
 
 ## graphify
 
-This project uses Graphify outputs under `graphify-out/` as the primary codebase graph.
+After code changes, do not run `graphify update .` directly in this repo.
 
-Rules:
-- For non-trivial codebase questions, investigations, implementation tasks, architecture work, or cross-module changes, consult Graphify before opening raw source files or running broad grep/glob searches.
-- If `graphify-out/GRAPH_REPORT.md` exists, read it first.
-- If `graphify-out/wiki/index.md` exists, use it as the first navigation layer before raw source inspection.
-- If only `graphify-out/graph.json` exists, use Graphify commands to query the graph before raw source inspection:
-  - `graphify query "<question>" --graph graphify-out/graph.json`
-  - `graphify path "<A>" "<B>" --graph graphify-out/graph.json`
-  - `graphify explain "<concept>" --graph graphify-out/graph.json`
-- Use Graphify to shortlist relevant files before opening source files.
-- Do not use Graphify as an excuse to avoid reading exact source files before editing.
-- For tiny known-file edits, Graphify is optional.
-- After modifying code, run `graphify update .` to keep the graph current when practical.
+For full graph refresh, build a clean temp mirror containing only:
+app, lib, components, tests, scripts, types, supabase, and root config files.
+
+Run:
+graphify update . --no-cluster
+
+inside the temp mirror, then copy `graphify-out/graph.json` back to the real repo root.
+
+Then run:
+python scripts/export_graphify_to_obsidian.py --graph graphify-out/graph.json --out docs/obsidian-vault/10_Graphify

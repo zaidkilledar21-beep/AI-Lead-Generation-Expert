@@ -7,12 +7,22 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Fix Sonar typescript:S3776 cognitive complexity issue in `app/campaigns/[campaign_id]/page.tsx`.
+- Fix Sonar quality gate failures from Phase 2 routing idempotency work.
 
 ## Current module / PR
 - Campaign manual discovery run path.
 
 ## Last completed work
+- Fixed Phase 2 Sonar quality gate findings without changing routing behavior.
+- Reduced `routeLeadInternal` cognitive complexity by extracting manual-review decision helpers, manual-review routing, and non-review routing into small named helpers.
+- Removed the thenable mock pattern from `tests/unit/routing.test.ts`; terminal query methods now return explicit promises, and the mock `filters` member is marked `readonly`.
+- Implemented Phase 2 routing idempotency in `lib/workflows/routing.ts`.
+- Made pending manual review creation idempotent by updating an existing pending item and recovering from duplicate insert conflicts against the one-pending-review-per-lead constraint.
+- Made outreach queue creation idempotent by checking existing lead/sequence queue rows, preserving drafted and closed queue outcomes, and recovering from duplicate insert conflicts without creating duplicate queue rows.
+- Added explicit routing outcomes for manual review pending, queued, drafted, blocked missing email, blocked missing sequence, blocked missing inbox, paused campaign, paused global, archived/nurture, and routing failed.
+- Added campaign routing checks for paused/archived campaigns and missing assigned inbox before queueing outreach.
+- Added focused routing unit coverage for duplicate manual review conflict recovery, idempotent B-band queueing, and missing-sequence blocked lifecycle behavior.
+- Refreshed Graphify through the clean temp mirror method and exported the Obsidian Graphify layer.
 - Fixed the Sonar maintainability issue in `app/campaigns/[campaign_id]/page.tsx` by reducing the flagged `CampaignDetailPage` function to a thin async data/loading boundary.
 - Root cause: the campaign detail page function mixed Next route param resolution, data fetching, derived values, and deeply branched/nested cockpit/workspace JSX, pushing cognitive complexity above Sonar's threshold.
 - Extracted small local helpers/components for async route prop resolution, tab normalization, overview/readiness group construction, hero rendering, operator cockpit, readiness, workspace tabs, run checkpoints, and the right rail while preserving the Phase 1 cockpit UI and runtime behavior.
@@ -113,6 +123,11 @@ AI Automation CRM / Lead Generation Dashboard
 - Implemented a visibly stronger global shell pass with a premium sidebar, clearer top bar hierarchy, more deliberate operational status framing, and upgraded loading/error shells.
 
 ## Files changed recently
+- `lib/workflows/routing.ts`
+- `tests/unit/routing.test.ts`
+- `status.md`
+- `graphify-out/graph.json`
+- `docs/obsidian-vault/10_Graphify/`
 - `app/campaigns/[campaign_id]/page.tsx`
 - `status.md`
 - `lib/crm/queries.ts`
@@ -174,6 +189,18 @@ AI Automation CRM / Lead Generation Dashboard
 - Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
 
 ## Validation status
+- Phase 2 Sonar quality-gate cleanup focused tests: passed (`npm test -- tests/unit/routing.test.ts`)
+- Phase 2 Sonar quality-gate cleanup lint: passed (`npm run lint`)
+- Phase 2 Sonar quality-gate cleanup typecheck: passed (`npm run typecheck`)
+- Phase 2 Sonar quality-gate cleanup build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- Phase 2 Sonar quality-gate cleanup git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warning only
+- Phase 2 Sonar quality-gate cleanup Sonar/SonarLint: not run locally; no Sonar/SonarLint npm script was available in `package.json`
+- Phase 2 routing idempotency focused tests: passed (`npm test -- tests/unit/routing.test.ts`)
+- Phase 2 routing idempotency lint: passed (`npm run lint`)
+- Phase 2 routing idempotency typecheck: passed (`npm run typecheck`)
+- Phase 2 routing idempotency build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- Phase 2 routing idempotency git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warning only
+- Phase 2 routing idempotency Graphify refresh: completed via clean temp mirror with `graphify update . --no-cluster`, then exported with `python scripts/export_graphify_to_obsidian.py --graph graphify-out/graph.json --out docs/obsidian-vault/10_Graphify`
 - campaign detail Sonar complexity fix lint: passed (`npm run lint`)
 - campaign detail Sonar complexity fix typecheck: passed (`npm run typecheck`)
 - campaign detail Sonar complexity fix build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
@@ -209,6 +236,9 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- The requested `plans/phase_2_routing_idempotency.md` file was not present; implementation used the user prompt, current `status.md`, Graphify navigation, and the closest existing routing plan `plans/03_scoring_routing_queue_draft_handoff.md`.
+- No migration was added because existing schema already has `manual_review_one_pending_per_lead_idx` and `unique (lead_id, sequence_id)` on `outreach_queue`; production should confirm those constraints exist on the deployed database.
+- Production QA should verify that routed leads no longer remain as scored-only and that workflow event payloads show the explicit routing outcome returned by `routeLead`.
 - Production behavior is expected unchanged after the Sonar refactor, but authenticated production retest is still needed for the campaign detail route because this was a render-structure refactor, not browser QA.
 - The code path is fixed locally, but production still needs an authenticated retest after deploy to confirm live Supabase data loads for the target campaign.
 - Campaign operator cockpit Phase 1 has not been authenticated-browser QA'd; `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db` should be manually opened after deploy to confirm live Supabase data shape.
@@ -235,6 +265,7 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify HTML visualization remains skipped because the graph exceeds the default visualization node limit.
 
 ## Next step
+- Production QA Phase 2: run discovery/scoring on fresh B-band and A-band leads, confirm B-band reachable leads create one `outreach_queue` row after repeated routing, A/low-confidence/manual-review leads create one pending `manual_review_queue` row, and missing sequence/inbox/global pause/campaign pause cases show explicit routing outcomes.
 - Deploy and retest `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db` in production to confirm it no longer renders 404 and no longer sends Supabase `.eq("id", undefined)`.
 - Production QA Phase 1: open `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db`, confirm it no longer 404s, verify latest run reads `Completed: quota reached`, and confirm all generated leads show score/band/confidence/operator state/review or queue/draft context.
 - Deploy/retest with a fresh active campaign: click Run Now, watch `/campaigns` and the campaign detail Run history tab, then compare visible counts/checkpoints with Supabase rows using `plans/04_frontend_run_visibility_prod_qa_checklist.md`.

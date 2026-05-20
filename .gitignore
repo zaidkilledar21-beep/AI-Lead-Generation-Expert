@@ -55,3 +55,12 @@ graphify-out/.graphify_analysis.json
 # Generated local Graphify / Obsidian artifacts
 docs/obsidian-vault/10_Graphify/
 graphify-out/
+
+
+.venv/
+.venv-graphify/
+venv/
+env/
+graphify-out/
+**/graphify-out/
+docs/obsidian-vault/10_Graphify/
