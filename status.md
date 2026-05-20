@@ -7,12 +7,16 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Fix campaign detail 404 caused by Next 16 async route params on `/campaigns/[campaign_id]`.
+- Fix Sonar typescript:S3776 cognitive complexity issue in `app/campaigns/[campaign_id]/page.tsx`.
 
 ## Current module / PR
 - Campaign manual discovery run path.
 
 ## Last completed work
+- Fixed the Sonar maintainability issue in `app/campaigns/[campaign_id]/page.tsx` by reducing the flagged `CampaignDetailPage` function to a thin async data/loading boundary.
+- Root cause: the campaign detail page function mixed Next route param resolution, data fetching, derived values, and deeply branched/nested cockpit/workspace JSX, pushing cognitive complexity above Sonar's threshold.
+- Extracted small local helpers/components for async route prop resolution, tab normalization, overview/readiness group construction, hero rendering, operator cockpit, readiness, workspace tabs, run checkpoints, and the right rail while preserving the Phase 1 cockpit UI and runtime behavior.
+- Preserved the Next 16 async params fix: `params` and `searchParams` remain promised page props, are awaited before use, `campaignId` is resolved before `getCampaignDetailData(campaignId)`, and missing `campaignId` still calls `notFound()`.
 - Fixed the campaign detail page to await Next 16 promised `params` and `searchParams` before loading campaign detail data.
 - Stored the awaited route id as `campaignId`, passed it to `getCampaignDetailData(campaignId)`, and normalized `tab` safely from `string | string[] | undefined`.
 - Implemented Phase 1 of `plans/campaign_operator_cockpit_implementation_plan.md` with scoped campaign detail/query changes.
@@ -170,6 +174,11 @@ AI Automation CRM / Lead Generation Dashboard
 - Browser QA for the authenticated `/analytics` view is blocked by the login gate without a test session.
 
 ## Validation status
+- campaign detail Sonar complexity fix lint: passed (`npm run lint`)
+- campaign detail Sonar complexity fix typecheck: passed (`npm run typecheck`)
+- campaign detail Sonar complexity fix build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- campaign detail Sonar complexity fix git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warning only
+- campaign detail Sonar complexity fix Sonar/SonarLint: not run locally; no local Sonar/SonarLint npm script was available in `package.json`
 - campaign detail Next 16 async params fix lint: passed (`npm run lint`)
 - campaign detail Next 16 async params fix typecheck: passed (`npm run typecheck`)
 - campaign detail Next 16 async params fix build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
@@ -200,6 +209,7 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- Production behavior is expected unchanged after the Sonar refactor, but authenticated production retest is still needed for the campaign detail route because this was a render-structure refactor, not browser QA.
 - The code path is fixed locally, but production still needs an authenticated retest after deploy to confirm live Supabase data loads for the target campaign.
 - Campaign operator cockpit Phase 1 has not been authenticated-browser QA'd; `/campaigns/952cb7ea-37a1-47a2-b443-11cb8ac048db` should be manually opened after deploy to confirm live Supabase data shape.
 - Operator state mapping uses latest bounded per-lead rows; if a lead has multiple historical queue/draft/review rows, the latest row is treated as the current operator signal.
