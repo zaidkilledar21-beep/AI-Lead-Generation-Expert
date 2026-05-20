@@ -47,8 +47,14 @@
 
 ### Plan Phase 4: Lead detail richness
 
-- Not started unless repo proves otherwise:
-  - Existing lead detail has prior UI polish, but this consolidation pass did not verify full Phase 4 score evidence/enrichment/hypothesis completeness.
+- Implemented:
+  - `/leads/[id]` now renders a read-only lead intelligence page instead of redirecting to the pipeline action page.
+  - Lead detail shows identity, campaign/source/contact state, operator state, score/band/confidence/manual-review requirement, score evidence, enrichment/contact signals, AI hypothesis, routing state, and draft preview.
+  - Campaign and run lead tables now link to `/leads/[id]`.
+- Missing:
+  - None found for the scoped Phase 4 read-only richness slice.
+- Needs QA:
+  - Authenticated production QA for the three known leads from campaign `952cb7ea-37a1-47a2-b443-11cb8ac048db`.
 
 ### Plan Phase 5: Email and notification wording cleanup
 
