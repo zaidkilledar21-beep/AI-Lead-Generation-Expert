@@ -7,12 +7,14 @@ AI Automation CRM / Lead Generation Dashboard
 `codex/pass-6-production-readiness`
 
 ## Current task
-- Implement Phase 5 Email and notification wording cleanup from `plans/campaign_operator_cockpit_implementation_plan.md`.
+- Fix CI/Sonar DoS hotspot in Phase 5 notification helper and repush branch.
 
 ## Current module / PR
 - Campaign operator cockpit / WF-10 discovery notifications.
 
 ## Last completed work
+- Fixed the latest CI/Sonar DoS security hotspot in `lib/workflows/lead-discovery.ts` by replacing the trailing-slash regex in `configuredAppBaseUrl()` with a bounded character-loop trim.
+- Preserved Phase 5 notification behavior and URL generation semantics.
 - Implemented Phase 5 email and notification wording cleanup for WF-10 discovery notifications.
 - Added app-generated discovery notification semantics to `runLeadDiscovery`: subject, final status, needs-attention flag, safe body text, campaign detail link, and run detail link.
 - Mapped `quota_exhausted` with promoted leads to `WF-10 Lead Discovery Finished: Quota Reached` and `Completed: quota reached`.
@@ -152,6 +154,8 @@ AI Automation CRM / Lead Generation Dashboard
 
 ## Files changed recently
 - `lib/workflows/lead-discovery.ts`
+- `status.md`
+- `lib/workflows/lead-discovery.ts`
 - `n8n/importable-json/WF-10 Lead Discovery - Backend Runner.json`
 - `n8n/workflows/WF-10-lead-discovery.md`
 - `plans/campaign_operator_cockpit_consolidation.md`
@@ -239,6 +243,11 @@ AI Automation CRM / Lead Generation Dashboard
 - Authenticated production/n8n QA is still required for the Phase 5 notification wording and links, plus the prior lead detail, run detail, and campaign detail routes.
 
 ## Validation status
+- CI/Sonar DoS hotspot cleanup lint: passed (`npm run lint`)
+- CI/Sonar DoS hotspot cleanup typecheck: passed (`npm run typecheck`)
+- CI/Sonar DoS hotspot cleanup build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
+- CI/Sonar DoS hotspot cleanup workflow JSON validation: passed (`node scripts/validate-workflow-contracts.mjs`)
+- CI/Sonar DoS hotspot cleanup git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
 - campaign cockpit Phase 5 notification lint: passed (`npm run lint`)
 - campaign cockpit Phase 5 notification typecheck: passed (`npm run typecheck`)
 - campaign cockpit Phase 5 notification build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
@@ -311,6 +320,7 @@ AI Automation CRM / Lead Generation Dashboard
 - Graphify CLI now runs from `.venv-graphify\\Scripts\\graphify.exe`; `graphify watch` skipped HTML viz because the graph is over the default node limit
 
 ## Known risks
+- Sonar/SonarCloud was not run locally; the flagged regex was removed and the pushed branch should trigger CI revalidation.
 - Phase 5 notification wording is validated statically and by workflow JSON parsing, but production n8n import/execution QA is still needed to verify Gmail receives the prepared subject/body and direct links.
 - WF-10 notification links use `APP_BASE_URL`, then `NEXT_PUBLIC_APP_URL`, then `VERCEL_URL`, and fall back to relative paths if no base URL is configured; production should confirm `APP_BASE_URL` is set.
 - Phase 4 lead detail is validated by lint/typecheck/build, but still needs authenticated production QA against live lead data.

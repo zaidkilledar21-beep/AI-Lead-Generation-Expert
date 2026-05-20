@@ -147,7 +147,11 @@ function configuredAppBaseUrl() {
   const baseUrl = process.env.APP_BASE_URL
     ?? process.env.NEXT_PUBLIC_APP_URL
     ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  return baseUrl.replace(/\/+$/, "");
+  let end = baseUrl.length;
+  while (end > 0 && baseUrl.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return baseUrl.slice(0, end);
 }
 
 function appPath(path: string) {
