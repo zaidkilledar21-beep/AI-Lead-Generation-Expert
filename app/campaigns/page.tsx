@@ -31,10 +31,10 @@ function formatDateTime(value: string | null) {
 }
 
 function runStatusTone(status: string | null, isStale: boolean) {
-  if (isStale || status === "failed") return "danger" as const;
-  if (status === "completed") return "success" as const;
-  if (status === "running") return "warning" as const;
-  if (status === "quota_exhausted" || status === "blocked") return "warning" as const;
+  const normalized = status?.toLowerCase() ?? "";
+  if (isStale || normalized.includes("failed") || normalized.includes("stuck")) return "danger" as const;
+  if (normalized.includes("completed")) return "success" as const;
+  if (normalized.includes("running") || normalized.includes("quota") || normalized.includes("blocked")) return "warning" as const;
   return "muted" as const;
 }
 
@@ -316,8 +316,8 @@ export default async function CampaignsPage({
                         <div className="grid gap-2 rounded-xl border border-white/10 bg-white/3 p-3 text-xs">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="muted">Latest run {latestRunLabel}</span>
-                            <Badge tone={runStatusTone(campaign.latestRunStatus, campaign.latestRunIsStale)}>
-                              {formatRunStatus(campaign.latestRunStatus, campaign.latestRunIsStale)}
+                            <Badge tone={runStatusTone(campaign.latestRunUserStatus ?? campaign.latestRunStatus, campaign.latestRunIsStale)}>
+                              {campaign.latestRunUserStatus ?? formatRunStatus(campaign.latestRunStatus, campaign.latestRunIsStale)}
                             </Badge>
                           </div>
                           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
