@@ -60,7 +60,7 @@ Band thresholds are deterministic: A = 76-100, B = 51-75, C = 26-50, D = 0-25. S
 
 export async function scoreLead(leadId: string) {
   const supabase = createSupabaseServiceClient();
-  const [{ data: lead }, { data: enrichment }] = await Promise.all([
+  const [{ data: lead }, { data: enrichment }, { data: existingScore, error: existingScoreError }] = await Promise.all([
     supabase.from("leads").select("*").eq("id", leadId).maybeSingle(),
     supabase
       .from("lead_enrichment")
@@ -68,10 +68,31 @@ export async function scoreLead(leadId: string) {
       .eq("lead_id", leadId)
       .order("last_enriched_at", { ascending: false })
       .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("lead_scores")
+      .select("id,total_score,band,confidence")
+      .eq("lead_id", leadId)
+      .eq("prompt_version", scoringPromptVersion)
+      .eq("model", process.env.DEEPSEEK_MODEL ?? "deepseek-chat")
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle()
   ]);
 
   if (!lead) throw new Error("Lead not found");
+  if (existingScoreError) throw new Error(existingScoreError.message);
+  if (existingScore) {
+    await supabase.from("leads").update({ status: "scored" }).eq("id", leadId);
+    return {
+      status: "skipped_existing_score",
+      lead_id: leadId,
+      lead_score_id: existingScore.id,
+      total_score: existingScore.total_score,
+      band_recommendation: existingScore.band,
+      confidence: existingScore.confidence
+    };
+  }
 
   let scoreId: string | null = null;
 
@@ -159,6 +180,28 @@ export async function scoreLead(leadId: string) {
       .select("id")
       .single();
 
+    if (scoreError?.code === "23505") {
+      const { data: concurrentScore } = await supabase
+        .from("lead_scores")
+        .select("id,total_score,band,confidence")
+        .eq("lead_id", leadId)
+        .eq("prompt_version", scoringPromptVersion)
+        .eq("model", process.env.DEEPSEEK_MODEL ?? "deepseek-chat")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (concurrentScore) {
+        await supabase.from("leads").update({ status: "scored" }).eq("id", leadId);
+        return {
+          status: "skipped_concurrent_score",
+          lead_id: leadId,
+          lead_score_id: concurrentScore.id,
+          total_score: concurrentScore.total_score,
+          band_recommendation: concurrentScore.band,
+          confidence: concurrentScore.confidence
+        };
+      }
+    }
     if (scoreError) throw new Error(scoreError.message);
     scoreId = score.id;
 

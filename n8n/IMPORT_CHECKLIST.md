@@ -36,6 +36,14 @@ Updated workflow JSON exports are committed under `n8n/importable-json/`. The pr
 - `sending_global_outreach_allowed`
 - `update_email_send_state`
 - `sync_send_block_contract_columns`
+- `acquire_discovery_recovery_lease`
+- `release_discovery_recovery_lease`
+- `sync_wf05_queue_action`
+
+## Required Safe Views
+
+- `wf04_scored_leads`
+- `wf05_due_queue_items`
 
 `pause_queue_after_reply` must own reply-triggered manual review queueing. `WF-07 Reply Detection` should pause the queue and notify founders after classification; it should not call `queue_manual_review_item` separately for reply classification results.
 

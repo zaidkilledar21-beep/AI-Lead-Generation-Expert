@@ -24,16 +24,10 @@
     {
       "parameters": {
         "operation": "getAll",
-        "tableId": "leads",
+        "tableId": "wf04_scored_leads",
         "limit": 25,
         "filters": {
-          "conditions": [
-            {
-              "keyName": "status",
-              "condition": "eq",
-              "keyValue": "scored"
-            }
-          ]
+          "conditions": []
         }
       },
       "type": "n8n-nodes-base.supabase",
@@ -63,7 +57,7 @@
           "conditions": [
             {
               "id": "c7a161b9-1c41-47b8-83e7-97da4e958e79",
-              "leftValue": "={{ \n  $node[\"Select Latest Score\"].json.manual_review_required === true ||\n  $node[\"Select Latest Score\"].json.confidence === \"low\"\n}}",
+              "leftValue": "={{\n  $json.band === \"A\" ||\n  $json.manual_review_required === true ||\n  $json.confidence === \"low\" ||\n  !($json.email || $json.phone || $json.whatsapp) ||\n  !$json.outreach_hook\n}}",
               "rightValue": false,
               "operator": {
                 "type": "boolean",
@@ -87,58 +81,13 @@
     },
     {
       "parameters": {
-        "url": "={{$env.SUPABASE_URL}}/rest/v1/lead_scores?lead_id=eq.{{$node[\"Select Scored Leads\"].json.id}}&order=created_at.desc&limit=1",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "supabaseApi",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        -128,
-        -112
-      ],
-      "id": "a129f3e2-2f13-4aa3-a4c3-06968b457c12",
-      "name": "Select Latest Score",
-      "credentials": {
-        "supabaseApi": {
-          "id": "G2PWTNFTSzofNG19",
-          "name": "Supabase account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "url": "={{$env.SUPABASE_URL}}/rest/v1/automation_hypotheses?lead_id=eq.{{$node[\"Select Scored Leads\"].json.id}}&order=created_at.desc&limit=1",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "supabaseApi",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        80,
-        -112
-      ],
-      "id": "6f66cb21-db49-4eaf-a6c9-419eb8692be2",
-      "name": "Select Latest Hypothesis",
-      "alwaysOutputData": true,
-      "credentials": {
-        "supabaseApi": {
-          "id": "G2PWTNFTSzofNG19",
-          "name": "Supabase account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/queue_manual_review_item",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"p_lead_id\": \"{{$node['Select Scored Leads'].json.id}}\",\n  \"p_reason\": \"{{$node['Select Latest Score'].json.manual_review_required === true ? 'score_requires_manual_review' : 'low_confidence_requires_manual_review'}}\",\n  \"p_priority\": \"{{$node['Select Latest Score'].json.band === 'A' ? 'high' : 'normal'}}\"\n}",
+        "jsonBody": "={\n  \"p_lead_id\": \"{{$node['Select Scored Leads'].json.id}}\",\n  \"p_reason\": \"{{$node['Select Scored Leads'].json.band === 'A' ? 'band_a_approval' : !$node['Select Scored Leads'].json.email && !$node['Select Scored Leads'].json.phone && !$node['Select Scored Leads'].json.whatsapp ? 'missing_contact' : !$node['Select Scored Leads'].json.outreach_hook ? 'missing_outreach_hook' : 'score_requires_manual_review'}}\",\n  \"p_priority\": \"{{$node['Select Scored Leads'].json.band === 'A' ? 'high' : 'normal'}}\"\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -164,7 +113,7 @@
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"p_lead_id\": \"{{$node['Select Scored Leads'].json.id}}\",\n  \"p_band\": \"{{$node['Select Latest Score'].json.band}}\",\n  \"p_niche\": \"{{$node['Select Scored Leads'].json.niche || null}}\"\n}",
+        "jsonBody": "={\n  \"p_lead_id\": \"{{$node['Select Scored Leads'].json.id}}\",\n  \"p_band\": \"{{$node['Select Scored Leads'].json.band}}\",\n  \"p_niche\": \"{{$node['Select Scored Leads'].json.niche || null}}\"\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -200,28 +149,6 @@
       "main": [
         [
           {
-            "node": "Select Latest Score",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Select Latest Score": {
-      "main": [
-        [
-          {
-            "node": "Select Latest Hypothesis",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Select Latest Hypothesis": {
-      "main": [
-        [
-          {
             "node": "Manual Review Required",
             "type": "main",
             "index": 0
@@ -248,7 +175,7 @@
       ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",

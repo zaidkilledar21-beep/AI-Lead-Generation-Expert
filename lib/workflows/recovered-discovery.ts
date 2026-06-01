@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { enrichLead } from "@/lib/workflows/enrichment";
 import { scoreLead } from "@/lib/workflows/scoring";
@@ -65,6 +66,26 @@ async function logBatchEvent(
   });
 
   if (error) throw new Error(error.message);
+}
+
+async function acquireRecoveryLease(discoveryRunId: string, leaseToken: string) {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase.rpc("acquire_discovery_recovery_lease", {
+    p_discovery_run_id: discoveryRunId,
+    p_lease_token: leaseToken,
+    p_lease_seconds: 300
+  });
+
+  if (error) throw new Error(error.message);
+  if (data !== true) throw new Error("Recovered discovery processing is already running for this discovery_run_id");
+}
+
+async function releaseRecoveryLease(discoveryRunId: string, leaseToken: string) {
+  const supabase = createSupabaseServiceClient();
+  await supabase.rpc("release_discovery_recovery_lease", {
+    p_discovery_run_id: discoveryRunId,
+    p_lease_token: leaseToken
+  });
 }
 
 async function hasLeadScore(leadId: string) {
@@ -187,7 +208,10 @@ export async function processRecoveredDiscoveryLeads(input: ProcessRecoveredDisc
 
   if (runError) throw new Error(runError.message);
   if (!run) throw new Error("Discovery run not found");
+  const leaseToken = randomUUID();
+  await acquireRecoveryLease(discoveryRunId, leaseToken);
 
+  try {
   const { data: leads, error: leadsError } = await supabase
     .from("leads")
     .select("id,business_name,status,campaign_id,lead_scores()")
@@ -254,4 +278,7 @@ export async function processRecoveredDiscoveryLeads(input: ProcessRecoveredDisc
     ...counts,
     perLeadResults
   };
+  } finally {
+    await releaseRecoveryLease(discoveryRunId, leaseToken);
+  }
 }

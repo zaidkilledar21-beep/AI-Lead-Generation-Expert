@@ -116,6 +116,8 @@ for (const workflowFile of workflowFiles) {
 
 const leadIntakeWorkflow = readJson("n8n/importable-json/WF-01 Lead Intake - Backend Proxy.json");
 const discoveryWorkflow = readJson("n8n/importable-json/WF-10 Lead Discovery - Backend Runner.json");
+const routingWorkflow = readJson("n8n/importable-json/WF-04 Routing.json");
+const draftWorkflow = readJson("n8n/importable-json/WF-05 Draft Generation.json");
 
 const leadIntakeNode = requireHttpNode(leadIntakeWorkflow, "/api/workflows/lead-intake");
 const discoveryNode = requireHttpNode(discoveryWorkflow, "/api/workflows/discovery/run");
@@ -161,7 +163,8 @@ assert(
 
 for (const routePath of [
   "app/api/workflows/lead-intake/route.ts",
-  "app/api/workflows/discovery/run/route.ts"
+  "app/api/workflows/discovery/run/route.ts",
+  "app/api/workflows/discovery/process-recovered/route.ts"
 ]) {
   assert(fs.existsSync(path.join(root, routePath)), `${routePath} does not exist`);
   assert(readText(routePath).includes("requireWorkflowAuth"), `${routePath} must enforce workflow auth`);
@@ -193,6 +196,42 @@ assert(
   quotaMigration.includes("grant execute on function reserve_places_quota"),
   "migration must grant execute on reserve_places_quota"
 );
+assert(
+  leadDiscovery.includes("loadPromotableCandidatesFromDb"),
+  "lead discovery must reload promotable candidates from persisted DB state"
+);
+assert(
+  !leadDiscovery.includes('from "@/lib/workflows/routing"'),
+  "backend discovery must stop at WF-03; n8n owns WF-04 routing"
+);
+
+const routingSource = routingWorkflow.nodes?.find((node) => node.name === "Select Scored Leads");
+assert(routingWorkflow.active === false, "WF-04 importable workflow must be inactive by default");
+assert(routingSource?.parameters?.tableId === "wf04_scored_leads", "WF-04 must read from wf04_scored_leads");
+
+const draftSource = draftWorkflow.nodes?.find((node) => node.name === "Select Due Outreach Queue");
+const draftSwitch = draftWorkflow.nodes?.find((node) => node.name === "Switch WF-05 Action");
+const draftValidation = draftWorkflow.nodes?.find((node) => node.name === "Validate Draft");
+assert(draftWorkflow.active === false, "WF-05 importable workflow must be inactive by default");
+assert(draftSource?.parameters?.tableId === "wf05_due_queue_items", "WF-05 must read from wf05_due_queue_items");
+assert(draftSwitch, "WF-05 must switch on wf05_action before draft context loading");
+assert(
+  draftValidation?.parameters?.mode === "runOnceForAllItems",
+  "WF-05 Validate Draft must process the full input batch"
+);
+assert(
+  !draftValidation?.parameters?.jsCode?.includes("$input.first()") &&
+    !draftValidation?.parameters?.jsCode?.includes('$(\"Load Draft Context\").first()'),
+  "WF-05 Validate Draft must not collapse execution to the first item"
+);
+for (const token of [
+  "create or replace view public.wf04_scored_leads",
+  "create or replace view public.wf05_due_queue_items",
+  "create or replace function public.sync_wf05_queue_action",
+  "create or replace function public.acquire_discovery_recovery_lease"
+]) {
+  assert(migrationText.toLowerCase().includes(token), `Supabase migrations are missing ${token}`);
+}
 
 const workflowDocs = fs
   .readdirSync(path.join(root, "n8n", "workflows"))

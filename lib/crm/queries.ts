@@ -54,7 +54,7 @@ function numberFrom(value: unknown) {
 }
 
 function isStaleRunningRun(run: Record<string, any> | null | undefined) {
-  if (!run || run.status !== "running" || !run.started_at) return false;
+  if (!run || run.status !== "running" || !run.started_at || run.completed_at) return false;
   return Date.now() - new Date(run.started_at).getTime() > 15 * 60 * 1000;
 }
 
@@ -128,6 +128,7 @@ function userRunStatus(run: Record<string, any>) {
   const status = toStr(run.status, "completed");
   const promoted = numberFrom(run.candidates_promoted);
   const hasError = Boolean(run.error_message);
+  if (status === "running" && run.completed_at) return hasError ? "Failed" : "Completed";
   if (isStaleRunningRun(run)) return "Stuck";
   if (status === "quota_exhausted" && promoted > 0 && !hasError) return "Completed: quota reached";
   if (status === "quota_exhausted") return "Quota reached: no new leads";
@@ -154,6 +155,7 @@ function workflowEventLabel(eventType: string) {
     wf_04_routing: "Routing decision",
     finalize_started: "Finalizing run",
     finalize_completed: "Run finalized",
+    run_finalized: "Run finalized",
     finalize_failed: "Finalization failed"
   };
   return labels[eventType] ?? eventType.replaceAll("_", " ");
@@ -882,6 +884,7 @@ export async function getCampaignRunDetailData(campaignId: string, runId: string
     leads: leadsList,
     supportRows: leadSupportRowsFromResults(leadSupportResults)
   });
+  const missingEmailBlocks = leads.filter((lead) => lead.queueStatus === "blocked" && lead.queuePauseReason === "missing_email").length;
 
   return {
     campaign: {
@@ -904,6 +907,7 @@ export async function getCampaignRunDetailData(campaignId: string, runId: string
       promoted: numberFrom(run.candidates_promoted),
       manualReview: numberFrom(run.manual_review_candidates),
       crawlFailures: numberFrom(run.crawl_failures),
+      missingEmailBlocks,
       textSearchCalls: numberFrom(run.places_text_search_calls),
       detailsCalls: numberFrom(run.places_details_calls),
       totalPlacesCalls: numberFrom(run.total_places_calls),

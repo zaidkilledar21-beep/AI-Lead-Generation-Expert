@@ -7,16 +7,16 @@ Trigger:
 1. Schedule Trigger every 30 minutes.
 2. Manual Trigger for a single `lead_id`.
 
-Source query:
+Safe source query:
 
 ```sql
-select q.*
-from outreach_queue q
-where q.status = 'queued'
-  and q.next_send_at <= now()
-order by q.next_send_at asc
+select *
+from wf05_due_queue_items
+order by next_send_at asc
 limit 25;
 ```
+
+`wf05_due_queue_items` exposes queue, lead, campaign, discovery-run, existing-draft, pending-review, and `wf05_action` fields. Manual production testing may add `campaign_id` or `discovery_run_id` filters.
 
 Regeneration source query:
 
@@ -35,8 +35,13 @@ Node Skeleton:
 
 2. Supabase Select due `outreach_queue`
 
-3. Split In Batches
-   - Batch size: `5`.
+3. Switch `wf05_action`
+   - `generate_draft`: continue to context loading and DeepSeek.
+   - `block_missing_email`: sync queue blocked, lead review pending, and one manual review item.
+   - `skip_existing_draft`: sync queue and lead drafted.
+   - `skip_existing_manual_review`: sync queue blocked and lead review pending without inserting another review.
+   - `block_invalid_lead_status`: block and create or reuse one review item.
+   - `block_missing_lead`: block the orphaned queue item.
 
 4. Safety Checks
    - Lead exists.
@@ -60,6 +65,8 @@ Node Skeleton:
    - Must return PRD Section 15.3 schema.
 
 7. Function `Validate Draft`
+   - Processes every input item and returns one output item per DeepSeek response.
+   - Preserves stable `queue_id` and `lead_id` from the matched context.
    - Subject present.
    - Body present.
    - Word limit by band/step.
@@ -96,4 +103,5 @@ Success criteria:
 - No email is sent by this workflow.
 - All drafts are stored before sending.
 - Blocked drafts are auditable.
+- Stale, duplicate, and missing-email queue rows are synchronized before DeepSeek and cannot crash the eligible batch.
 - Founder regeneration requests are persisted as `approval_status = regeneration_requested`; they are not represented as sent.

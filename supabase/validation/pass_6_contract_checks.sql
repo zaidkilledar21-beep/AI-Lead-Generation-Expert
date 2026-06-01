@@ -18,6 +18,9 @@ with required_functions(function_name, identity_arguments) as (
     ('insert_reply_event', 'p_lead_id uuid, p_from_email text, p_to_email text, p_reply_body text, p_provider_message_id text, p_provider_thread_id text'),
     ('match_reply_to_lead', 'p_from_email text, p_provider_message_id text, p_provider_thread_id text'),
     ('reserve_places_quota', 'target_campaign_id uuid, counter_name text, increment_by integer, counter_max_allowed integer, total_max_allowed integer')
+    ,('acquire_discovery_recovery_lease', 'p_discovery_run_id uuid, p_lease_token uuid, p_lease_seconds integer')
+    ,('release_discovery_recovery_lease', 'p_discovery_run_id uuid, p_lease_token uuid')
+    ,('sync_wf05_queue_action', 'p_queue_id uuid, p_action text')
 ),
 actual_functions as (
   select
@@ -53,6 +56,9 @@ with sensitive_functions(function_name) as (
     ('insert_reply_event'),
     ('match_reply_to_lead'),
     ('reserve_places_quota')
+    ,('acquire_discovery_recovery_lease')
+    ,('release_discovery_recovery_lease')
+    ,('sync_wf05_queue_action')
 ),
 actual_functions as (
   select p.oid, p.oid::regprocedure as signature, p.proname as function_name
@@ -84,3 +90,7 @@ where not has_function_privilege('authenticated', 'public.dashboard_update_lead_
    or not has_function_privilege('service_role', 'public.dashboard_update_lead_status(uuid, text)', 'execute')
    or has_function_privilege('public', 'public.dashboard_update_lead_status(uuid, text)', 'execute')
    or has_function_privilege('anon', 'public.dashboard_update_lead_status(uuid, text)', 'execute');
+
+select 'missing_required_view' as check_name, required_view
+from (values ('wf04_scored_leads'), ('wf05_due_queue_items')) required(required_view)
+where to_regclass('public.' || required_view) is null;

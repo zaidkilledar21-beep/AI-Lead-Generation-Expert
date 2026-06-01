@@ -10,12 +10,13 @@ Trigger:
 Supabase source query:
 
 ```sql
-select id
-from leads
-where status = 'scored'
+select *
+from wf04_scored_leads
 order by updated_at asc
 limit 50;
 ```
+
+`wf04_scored_leads` is the committed safe source view. It returns only scored leads that have a persisted `lead_scores` row and flattens latest band, confidence, manual-review requirement, contact paths, and outreach hook for deterministic routing. Manual production testing may apply `campaign_id` or `discovery_run_id` filters without changing the global scheduled source.
 
 Node Skeleton:
 
@@ -39,8 +40,9 @@ Node Skeleton:
      - `manual_review_required = true`
 
 7. Manual Review Branch
-   - Supabase Upsert `manual_review_queue`
+   - RPC `queue_manual_review_item`
      - One pending row per lead.
+     - If a pending row already exists for a different reason, update and reuse it.
      - `priority = high` for Band A.
    - Supabase Update `leads.status = review_pending`.
 
@@ -62,5 +64,7 @@ Node Skeleton:
 Success criteria:
 
 - Reruns do not duplicate pending review rows.
+- Reruns do not duplicate outreach queue rows.
 - Only eligible Band B leads enter `outreach_queue`.
 - Band A always goes through founder review first.
+- WF-01/WF-02/WF-03 remain backend-owned. n8n begins at WF-04.
