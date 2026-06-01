@@ -17,7 +17,7 @@ export default async function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = (await headers()).get("x-pathname") ?? "/";
-  const isPublicRoute = pathname === "/login" || pathname.startsWith("/api/");
+  const isPublicRoute = pathname === "/login" || pathname === "/" || pathname.startsWith("/api/");
 
   if (isPublicRoute) {
     return (
