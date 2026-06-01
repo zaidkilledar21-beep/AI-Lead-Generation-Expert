@@ -9,7 +9,7 @@ const NAV_LINKS = [
   { label: "Process", href: "#process" },
   { label: "About", href: "#about" },
   { label: "Contact", href: "#contact" },
-];
+] as const;
 
 export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);

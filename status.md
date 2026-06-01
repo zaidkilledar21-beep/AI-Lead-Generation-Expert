@@ -7,11 +7,14 @@
 - Process manually recovered discovery leads through backend WF-02 enrichment and WF-03 scoring only.
 
 ## Last completed work
+- Fixed the Vercel production typecheck failure in the landing-page marketing components by preserving literal hash-link types and narrowing the shared Framer easing tuple.
 - Manual SQL recovery promoted 35 leads for discovery run `393b508a-7c50-4f0b-a2d5-4887e5190bca`.
 - Added a temporary authenticated backend recovery endpoint to enrich and score recovered leads idempotently in bounded batches.
 - WF-04 remains n8n-owned; the recovery endpoint does not route leads or create n8n triggers for enrichment/scoring.
 
 ## Files changed recently
+- `components/marketing/header.tsx`
+- `components/marketing/hero.tsx`
 - `app/api/workflows/discovery/process-recovered/route.ts`
 - `lib/workflows/recovered-discovery.ts`
 - `status.md`
@@ -21,7 +24,8 @@
 
 ## Validation status
 - lint: passed (`npm run lint`)
-- typecheck: blocked by pre-existing untracked marketing component errors in `components/marketing/header.tsx` and `components/marketing/hero.tsx`; no error was reported for the recovery endpoint files
+- typecheck: passed (`npm run typecheck`)
+- build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
 - Graphify: refreshed through the required clean temp mirror and exported to Obsidian (`1,107` nodes, `2,674` edges)
 
 ## Known risks
