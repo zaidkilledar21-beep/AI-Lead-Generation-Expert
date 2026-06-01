@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
       discovery_run_id?: string;
       limit?: number;
       dry_run?: boolean;
+      include_review_pending?: boolean;
     };
     const result = await processRecoveredDiscoveryLeads(body);
 
