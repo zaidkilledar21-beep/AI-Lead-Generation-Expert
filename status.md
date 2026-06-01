@@ -7,6 +7,8 @@
 - Process manually recovered discovery leads through backend WF-02 enrichment and WF-03 scoring only.
 
 ## Last completed work
+- Aligned recovered discovery processing with the real backend WF-02/WF-03 flow: failed enrichment is counted and reported but no longer prevents scoring.
+- Added deterministic recovered-lead ordering, opt-in `include_review_pending`, per-lead endpoint outcomes, and fatal per-lead workflow events.
 - Fixed the Vercel production typecheck failure in the landing-page marketing components by preserving literal hash-link types and narrowing the shared Framer easing tuple.
 - Manual SQL recovery promoted 35 leads for discovery run `393b508a-7c50-4f0b-a2d5-4887e5190bca`.
 - Added a temporary authenticated backend recovery endpoint to enrich and score recovered leads idempotently in bounded batches.
@@ -23,14 +25,16 @@
 - Production invocation and database result verification remain manual.
 
 ## Validation status
-- lint: passed (`npm run lint`)
+- lint: passed (`npm run lint`) after recovered discovery behavior alignment
 - typecheck: passed (`npm run typecheck`)
+- git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
 - build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
-- Graphify: refreshed through the required clean temp mirror and exported to Obsidian (`1,107` nodes, `2,674` edges)
+- Graphify: refreshed through the required clean temp mirror and exported to Obsidian (`1,112` nodes, `2,685` edges)
 
 ## Known risks
 - Recovery processing calls live crawl and DeepSeek dependencies when `dry_run` is false.
 - Repeated invocations are idempotent against persisted enrichment and scoring rows, but concurrent invocations should be avoided.
+- `review_pending` recovery is opt-in through `include_review_pending: true`; default batches select only `new` and `enriched` leads.
 
 ## Next step
 - Invoke the recovery endpoint for run `393b508a-7c50-4f0b-a2d5-4887e5190bca` in batches and verify scored leads remain `status = 'scored'` for n8n WF-04 pickup.
