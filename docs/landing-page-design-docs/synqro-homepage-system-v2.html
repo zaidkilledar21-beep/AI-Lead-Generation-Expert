@@ -1,0 +1,1066 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synqro Homepage System v2</title>
+  <style>
+    :root {
+      --bg: #070A12;
+      --surface: #0D1220;
+      --surface-raised: #121827;
+      --surface-soft: #171F33;
+      --fg: #F8FAFC;
+      --muted: #94A3B8;
+      --muted-strong: #CBD5E1;
+      --accent: #6D5DF6;
+      --accent-purple: #8251EE;
+      --accent-blue: #3B82F6;
+      --success: #10B981;
+      --review: #F59E0B;
+      --danger: #EF4444;
+      --border: rgba(255,255,255,0.08);
+      --border-strong: rgba(255,255,255,0.16);
+      --light-bg: #F8FAFC;
+      --light-surface: #FFFFFF;
+      --light-fg: #0F172A;
+      --light-muted: #475569;
+      --light-border: #E2E8F0;
+      --font-display: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+      --font-body: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      line-height: 1.5;
+      text-rendering: optimizeLegibility;
+    }
+    a { color: inherit; }
+    button, input, textarea { font: inherit; }
+    .page { overflow: hidden; }
+    .shell { width: min(1200px, calc(100% - 40px)); margin: 0 auto; }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: blur(18px);
+      background: rgba(7,10,18,0.78);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 22px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 720;
+      font-size: 22px;
+      letter-spacing: 0;
+      text-decoration: none;
+    }
+    .mark {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      position: relative;
+      background: linear-gradient(135deg, rgba(109,93,246,0.2), rgba(59,130,246,0.08));
+    }
+    .mark::before,
+    .mark::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      background: var(--accent-blue);
+    }
+    .mark::before {
+      width: 6px;
+      height: 6px;
+      left: 7px;
+      top: 8px;
+      box-shadow: 11px 10px 0 var(--accent);
+    }
+    .mark::after {
+      width: 15px;
+      height: 2px;
+      border-radius: 2px;
+      left: 8px;
+      top: 14px;
+      transform: rotate(42deg);
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent));
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      color: var(--muted-strong);
+      font-size: 14px;
+    }
+    .nav-links a {
+      text-decoration: none;
+      transition: color .18s ease;
+    }
+    .nav-links a:hover { color: var(--fg); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 18px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 680;
+      font-size: 14px;
+      transition: transform .22s ease, border-color .22s ease, background .22s ease, box-shadow .22s ease;
+      cursor: pointer;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,0.28);
+    }
+    .btn-primary {
+      color: white;
+      background: linear-gradient(135deg, var(--accent), var(--accent-blue));
+      box-shadow: 0 18px 46px rgba(109,93,246,0.24);
+    }
+    .btn-secondary {
+      color: var(--fg);
+      background: rgba(255,255,255,0.04);
+    }
+    .light .btn-secondary {
+      color: var(--light-fg);
+      border-color: var(--light-border);
+      background: white;
+    }
+
+    .hero {
+      min-height: 900px;
+      position: relative;
+      display: grid;
+      align-items: center;
+      padding: 88px 0 116px;
+      background:
+        radial-gradient(circle at 76% 24%, rgba(109,93,246,0.22), transparent 32%),
+        radial-gradient(circle at 90% 58%, rgba(59,130,246,0.14), transparent 30%),
+        linear-gradient(180deg, #070A12 0%, #090D18 100%);
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .22;
+      background-image:
+        linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.7) 54%, transparent 100%);
+      animation: gridDrift 24s linear infinite;
+    }
+    .hero-grid {
+      position: relative;
+      display: grid;
+      grid-template-columns: .9fr 1.1fr;
+      gap: 56px;
+      align-items: center;
+    }
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      color: var(--muted-strong);
+      font: 750 12px/1 var(--font-mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .kicker::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 18px rgba(16,185,129,.55);
+    }
+    h1, h2, h3, h4 { margin: 0; font-family: var(--font-display); letter-spacing: 0; }
+    h1 {
+      max-width: 760px;
+      font-size: 78px;
+      line-height: 1;
+      font-weight: 760;
+    }
+    .hero-copy p {
+      max-width: 660px;
+      margin: 24px 0 0;
+      color: var(--muted-strong);
+      font-size: 20px;
+      line-height: 1.58;
+    }
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 34px;
+    }
+    .support-line {
+      margin-top: 24px;
+      max-width: 600px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .operating-stage {
+      min-height: 604px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)),
+        rgba(13,18,32,.8);
+      box-shadow: 0 32px 110px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .stage-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      color: var(--muted);
+      font: 700 11px/1 var(--font-mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .stage-canvas {
+      position: absolute;
+      inset: 68px 22px 22px;
+    }
+    .tool-node,
+    .output-node,
+    .core-node,
+    .decision-node {
+      position: absolute;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(18,24,39,.9);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .tool-node {
+      width: 142px;
+      padding: 12px;
+      opacity: 0;
+      transform: translateY(12px);
+      animation: nodeEnter .7s cubic-bezier(.16,1,.3,1) forwards;
+    }
+    .tool-node b,
+    .output-node b,
+    .core-node b,
+    .decision-node b {
+      display: block;
+      color: var(--fg);
+      font-size: 13px;
+      line-height: 1.2;
+      margin-bottom: 5px;
+    }
+    .tool-node span,
+    .output-node span,
+    .core-node span,
+    .decision-node span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .crm { left: 0; top: 0; animation-delay: .16s; }
+    .email { left: 20px; top: 118px; animation-delay: .28s; }
+    .reports { left: 0; top: 236px; animation-delay: .4s; }
+    .support { left: 24px; top: 354px; animation-delay: .52s; }
+    .manual { left: 184px; bottom: 8px; animation-delay: .64s; }
+    .core-node {
+      left: 50%;
+      top: 126px;
+      width: 238px;
+      min-height: 178px;
+      padding: 16px;
+      transform: translateX(-50%) scale(.96);
+      opacity: 0;
+      border-color: rgba(109,93,246,.42);
+      background: linear-gradient(180deg, rgba(109,93,246,.18), rgba(18,24,39,.94));
+      animation: layerForm .8s cubic-bezier(.16,1,.3,1) 1.15s forwards;
+    }
+    .core-stack {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .core-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.045);
+      color: var(--muted-strong);
+      font-size: 11px;
+    }
+    .core-row i {
+      color: var(--accent-blue);
+      font-style: normal;
+      font-weight: 720;
+    }
+    .decision-node {
+      right: 0;
+      top: 18px;
+      width: 184px;
+      padding: 13px;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: nodeEnter .65s cubic-bezier(.16,1,.3,1) 1.55s forwards;
+    }
+    .review-node {
+      right: 26px;
+      top: 180px;
+      border-color: rgba(245,158,11,.4);
+      animation-delay: 1.78s;
+    }
+    .review-node b { color: var(--review); }
+    .review-dot {
+      position: absolute;
+      right: 18px;
+      top: 18px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--review);
+      animation: checkpointPulse 2.6s ease-in-out 2s infinite;
+    }
+    .synced-node {
+      right: 0;
+      bottom: 34px;
+      border-color: rgba(16,185,129,.38);
+      animation-delay: 2.05s;
+    }
+    .synced-node b { color: var(--success); }
+    .path {
+      position: absolute;
+      height: 2px;
+      transform-origin: left center;
+      background: linear-gradient(90deg, transparent, var(--accent-blue), var(--accent));
+      filter: drop-shadow(0 0 10px rgba(59,130,246,.48));
+      clip-path: inset(0 100% 0 0);
+      animation: pathDraw .9s cubic-bezier(.16,1,.3,1) forwards;
+    }
+    .p1 { width: 246px; left: 130px; top: 58px; transform: rotate(18deg); animation-delay: .82s; }
+    .p2 { width: 220px; left: 152px; top: 174px; transform: rotate(3deg); animation-delay: .94s; }
+    .p3 { width: 238px; left: 130px; top: 292px; transform: rotate(-16deg); animation-delay: 1.06s; }
+    .p4 { width: 176px; left: 300px; bottom: 78px; transform: rotate(-42deg); animation-delay: 1.18s; }
+    .p5 { width: 170px; right: 174px; top: 150px; transform: rotate(-18deg); animation-delay: 1.46s; }
+    .p6 { width: 166px; right: 162px; bottom: 126px; transform: rotate(20deg); animation-delay: 1.86s; }
+
+    .section { padding: 108px 0; }
+    .section.light { background: var(--light-bg); color: var(--light-fg); }
+    .section.dark { background: var(--bg); color: var(--fg); }
+    .section-head {
+      display: grid;
+      grid-template-columns: .84fr 1fr;
+      gap: 48px;
+      align-items: end;
+      margin-bottom: 44px;
+    }
+    .eyebrow {
+      color: var(--accent-blue);
+      font: 800 12px/1 var(--font-mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .light .eyebrow { color: #4F46E5; }
+    h2 {
+      font-size: 52px;
+      line-height: 1.06;
+      font-weight: 740;
+    }
+    .section-head p,
+    .lead {
+      margin: 0;
+      color: var(--muted-strong);
+      font-size: 18px;
+      line-height: 1.58;
+    }
+    .light .section-head p,
+    .light .lead { color: var(--light-muted); }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      background: rgba(255,255,255,.035);
+      transition: transform .22s ease, border-color .22s ease, background .22s ease;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(109,93,246,.4);
+      background: rgba(255,255,255,.055);
+    }
+    .light .card {
+      border-color: var(--light-border);
+      background: var(--light-surface);
+      box-shadow: 0 16px 44px rgba(15,23,42,.055);
+    }
+    .card h3 { font-size: 22px; line-height: 1.14; margin-bottom: 10px; }
+    .card p { margin: 0; color: var(--muted-strong); font-size: 15px; }
+    .light .card p { color: var(--light-muted); }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 9px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: var(--muted-strong);
+      background: rgba(255,255,255,.035);
+      font: 650 11px/1 var(--font-mono);
+    }
+    .light .chip {
+      border-color: var(--light-border);
+      color: var(--light-muted);
+      background: #F8FAFC;
+    }
+    .chip.review { color: var(--review); border-color: rgba(245,158,11,.35); }
+    .chip.success { color: var(--success); border-color: rgba(16,185,129,.35); }
+    .chip.blue { color: #93C5FD; border-color: rgba(59,130,246,.35); }
+
+    .wireframe-row {
+      display: grid;
+      grid-template-columns: 220px 1fr 1fr 1fr;
+      border: 1px solid var(--light-border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: white;
+    }
+    .wireframe-row > div {
+      padding: 18px;
+      border-right: 1px solid var(--light-border);
+      border-bottom: 1px solid var(--light-border);
+      min-height: 122px;
+    }
+    .wireframe-row > div:nth-child(4n) { border-right: 0; }
+    .wireframe-row b { display: block; margin-bottom: 8px; font-size: 14px; }
+    .wireframe-row span { color: var(--light-muted); font-size: 14px; }
+
+    .mockup-board {
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: 18px;
+    }
+    .module {
+      min-height: 320px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.025));
+      overflow: hidden;
+    }
+    .module.large { min-height: 440px; }
+    .module-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+      color: var(--muted);
+      font: 750 11px/1 var(--font-mono);
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+    .assessment-table {
+      display: grid;
+      gap: 8px;
+    }
+    .assessment-row {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr .8fr .8fr;
+      gap: 8px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,.035);
+      color: var(--muted-strong);
+      font-size: 12px;
+      opacity: 0;
+      animation: rowReveal .55s ease forwards;
+    }
+    .assessment-row:nth-child(2) { animation-delay: .12s; }
+    .assessment-row:nth-child(3) { animation-delay: .24s; }
+    .assessment-row:nth-child(4) { animation-delay: .36s; }
+    .assessment-row.header {
+      color: var(--muted);
+      font: 750 10px/1 var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      opacity: 1;
+      animation: none;
+    }
+    .decision-card {
+      display: grid;
+      gap: 12px;
+    }
+    .decision-line {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255,255,255,.035);
+    }
+    .decision-line b {
+      display: block;
+      color: var(--fg);
+      font-size: 13px;
+      margin-bottom: 5px;
+    }
+    .decision-line span { color: var(--muted); font-size: 12px; }
+    .queue-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,.035);
+      margin-top: 10px;
+      color: var(--muted-strong);
+      font-size: 13px;
+    }
+    .dashboard-bars {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .dash-bar {
+      display: grid;
+      grid-template-columns: 120px 1fr 46px;
+      gap: 12px;
+      align-items: center;
+      color: var(--muted-strong);
+      font-size: 12px;
+    }
+    .bar-track {
+      height: 8px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.08);
+      overflow: hidden;
+    }
+    .bar-track i {
+      display: block;
+      height: 100%;
+      width: var(--w);
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-blue));
+      animation: fillBar .9s ease forwards;
+      transform-origin: left;
+    }
+
+    .storyboard {
+      display: grid;
+      gap: 14px;
+    }
+    .story-step {
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 16px;
+      align-items: start;
+      padding: 18px;
+      border: 1px solid var(--light-border);
+      border-radius: 8px;
+      background: white;
+    }
+    .step-id {
+      color: #4F46E5;
+      font: 800 12px/1 var(--font-mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .story-step b { display: block; margin-bottom: 6px; }
+    .story-step span { color: var(--light-muted); font-size: 14px; }
+
+    .copy-skeleton {
+      display: grid;
+      grid-template-columns: .8fr 1.2fr;
+      gap: 18px;
+    }
+    .copy-block {
+      border: 1px solid var(--light-border);
+      border-radius: 8px;
+      padding: 20px;
+      background: white;
+    }
+    .copy-block h3 { color: var(--light-fg); font-size: 22px; margin-bottom: 10px; }
+    .copy-block p, .copy-block li { color: var(--light-muted); font-size: 15px; }
+
+    .prompt-box {
+      max-height: 520px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      background: rgba(255,255,255,.035);
+      color: var(--muted-strong);
+      white-space: pre-wrap;
+      font: 13px/1.6 var(--font-mono);
+    }
+    .checklist {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+    .check-card {
+      border: 1px solid var(--light-border);
+      border-radius: 8px;
+      padding: 18px;
+      background: white;
+    }
+    .check-card h3 { color: var(--light-fg); font-size: 18px; margin-bottom: 10px; }
+    .check-card ul { margin: 0; padding-left: 18px; color: var(--light-muted); font-size: 14px; }
+
+    .contact-band {
+      display: grid;
+      grid-template-columns: .85fr 1.15fr;
+      gap: 28px;
+      align-items: start;
+      border: 1px solid rgba(109,93,246,.38);
+      border-radius: 8px;
+      padding: 34px;
+      background:
+        radial-gradient(circle at 16% 0%, rgba(109,93,246,.18), transparent 34%),
+        rgba(18,24,39,.88);
+    }
+    .form-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .field {
+      min-height: 48px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,.04);
+      color: var(--muted-strong);
+    }
+    .field.large { min-height: 96px; resize: vertical; }
+
+    .footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    @keyframes gridDrift { to { background-position: 64px 64px; } }
+    @keyframes nodeEnter { to { opacity: 1; transform: translateY(0); } }
+    @keyframes layerForm { to { opacity: 1; transform: translateX(-50%) scale(1); } }
+    @keyframes pathDraw { to { clip-path: inset(0 0 0 0); } }
+    @keyframes checkpointPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.0); }
+      42% { box-shadow: 0 0 0 10px rgba(245,158,11,.14); }
+    }
+    @keyframes rowReveal { to { opacity: 1; transform: translateY(0); } from { opacity: 0; transform: translateY(8px); } }
+    @keyframes fillBar { from { transform: scaleX(.2); } to { transform: scaleX(1); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+      .tool-node, .output-node, .core-node, .decision-node, .assessment-row {
+        opacity: 1;
+        transform: none;
+      }
+      .core-node { transform: translateX(-50%); }
+      .path { clip-path: inset(0 0 0 0); }
+    }
+
+    @media (max-width: 1040px) {
+      .nav-links { display: none; }
+      .hero { min-height: auto; padding: 72px 0 92px; }
+      .hero-grid,
+      .section-head,
+      .mockup-board,
+      .copy-skeleton,
+      .contact-band { grid-template-columns: 1fr; }
+      h1 { font-size: 56px; }
+      h2 { font-size: 40px; }
+      .grid-4, .grid-3, .grid-2, .checklist { grid-template-columns: 1fr 1fr; }
+      .wireframe-row { grid-template-columns: 1fr 1fr; }
+      .wireframe-row > div:nth-child(2n) { border-right: 0; }
+    }
+
+    @media (max-width: 680px) {
+      .shell { width: min(100% - 28px, 1200px); }
+      .hero { padding: 54px 0 72px; }
+      h1 { font-size: 42px; line-height: 1.04; }
+      h2 { font-size: 34px; line-height: 1.08; }
+      .hero-copy p { font-size: 18px; }
+      .section { padding: 72px 0; }
+      .grid-4, .grid-3, .grid-2, .checklist, .wireframe-row { grid-template-columns: 1fr; }
+      .wireframe-row > div { border-right: 0; }
+      .operating-stage { min-height: 760px; padding: 18px; }
+      .stage-canvas { position: relative; inset: auto; margin-top: 18px; display: grid; gap: 10px; }
+      .tool-node, .output-node, .core-node, .decision-node {
+        position: relative;
+        inset: auto;
+        left: auto;
+        right: auto;
+        top: auto;
+        bottom: auto;
+        width: auto;
+        opacity: 1;
+        transform: none;
+      }
+      .core-node { transform: none; }
+      .path { display: none; }
+      .assessment-row, .dash-bar { grid-template-columns: 1fr; }
+      .story-step { grid-template-columns: 1fr; }
+      .contact-band { padding: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="nav">
+      <div class="shell nav-inner">
+        <a class="brand" href="#top" aria-label="Synqro"><span class="mark" aria-hidden="true"></span><span>synqro</span></a>
+        <div class="nav-links">
+          <a href="#wireframe">Wireframe</a>
+          <a href="#motion">Motion</a>
+          <a href="#modules">Modules</a>
+          <a href="#copy">Copy</a>
+          <a class="btn btn-primary" href="#stitch">Stitch Prompt</a>
+        </div>
+      </div>
+    </nav>
+
+    <header class="hero" id="top">
+      <div class="shell hero-grid">
+        <div class="hero-copy">
+          <div class="kicker">Homepage execution system v2</div>
+          <h1>Turn scattered tools and manual workflows into a connected operating system for your business.</h1>
+          <p>We help service-led SMBs connect their tools, automate repetitive work, and build AI-assisted workflows that improve operations without disrupting the systems they already use.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="#contact">Request Free Assessment</a>
+            <a class="btn btn-secondary" href="#wireframe">See How It Works</a>
+          </div>
+          <div class="support-line">The homepage should make automation feel like reusable operating infrastructure: cleaner workflows, fewer manual bottlenecks, safer decisions, and better team focus.</div>
+        </div>
+
+        <div class="operating-stage" aria-label="Hero operating-layer motion storyboard preview">
+          <div class="stage-top"><span>Hero motion storyboard</span><span>scattered to synchronized</span></div>
+          <div class="stage-canvas">
+            <div class="path p1"></div>
+            <div class="path p2"></div>
+            <div class="path p3"></div>
+            <div class="path p4"></div>
+            <div class="path p5"></div>
+            <div class="path p6"></div>
+
+            <div class="tool-node crm"><b>CRM</b><span>Records updated manually</span></div>
+            <div class="tool-node email"><b>Email Ops</b><span>Drafts and replies need review</span></div>
+            <div class="tool-node reports"><b>Reports</b><span>Scattered source data</span></div>
+            <div class="tool-node support"><b>Support</b><span>Requests need routing</span></div>
+            <div class="tool-node manual"><b>Manual Tasks</b><span>Repeated handoffs and checks</span></div>
+
+            <div class="core-node">
+              <b>Synqro Operating Layer</b>
+              <span>Workflow orchestration, context rules, approval design, and audit-friendly records.</span>
+              <div class="core-stack">
+                <div class="core-row"><span>Context rules</span><i>mapped</i></div>
+                <div class="core-row"><span>Workflow state</span><i>visible</i></div>
+                <div class="core-row"><span>Audit trail</span><i>ready</i></div>
+              </div>
+            </div>
+
+            <div class="decision-node"><b>AI Decision</b><span>Classify, summarize, score, draft, or route using approved rules.</span></div>
+            <div class="decision-node review-node"><span class="review-dot"></span><b>Human Review</b><span>Sensitive or high-impact actions pause for approval.</span></div>
+            <div class="decision-node synced-node"><b>Synced Record</b><span>Approved actions update the right system state.</span></div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section light" id="wireframe">
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">01 / Homepage Wireframe</div>
+              <h2>Section-by-section build specification.</h2>
+            </div>
+            <p>Every section has a defined purpose, visual job, motion behavior, and avoidance rule. This is meant to be handed directly to Stitch or a web designer.</p>
+          </div>
+          <div class="wireframe-row">
+            <div><b>Hero</b><span>Dark cinematic command center. Copy left, labeled operating-layer visual right. Primary CTA anchors to form.</span></div>
+            <div><b>Problem</b><span>Light section. Show tool sprawl, manual handoffs, reporting gaps, and approval uncertainty.</span></div>
+            <div><b>Services</b><span>Four build categories with outcome copy and capability chips. No generic icons.</span></div>
+            <div><b>AI Agents</b><span>Dark technical panel defining context, structured decision, approved action, and audit trail.</span></div>
+            <div><b>Process</b><span>Four-step path from current workflow map to reusable operating layer.</span></div>
+            <div><b>Examples</b><span>Representative workflows only. CRM routing, reporting, email approval, support triage.</span></div>
+            <div><b>Trust</b><span>Moderate security stance: access, minimization, auditability, credentials, review.</span></div>
+            <div><b>Founder teaser</b><span>Initial cards for Zaid and Uzair. Keep concise; full bios belong on About.</span></div>
+            <div><b>Short form</b><span>Name, work email, company, workflow to improve. High-value assessment framing.</span></div>
+            <div><b>FAQ</b><span>Practical objections: fit, tools, AI safety, assessment, timeline.</span></div>
+            <div><b>Footer</b><span>Dark minimal footer with wordmark, nav, and capability line.</span></div>
+            <div><b>Responsive</b><span>Mobile simplifies diagrams into labeled final states. No horizontal overflow.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section dark">
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">02 / Component System</div>
+              <h2>Premium consultancy components with technical system anatomy.</h2>
+            </div>
+            <p>Cards, chips, forms, diagrams, founder teasers, and status states should look like they belong to the same operating layer.</p>
+          </div>
+          <div class="grid-4">
+            <article class="card">
+              <h3>Workflow Automation</h3>
+              <p>Connect repetitive steps across the tools your team already uses.</p>
+              <div class="chips"><span class="chip">n8n orchestration</span><span class="chip">CRM automation</span><span class="chip review">approvals</span></div>
+            </article>
+            <article class="card">
+              <h3>AI Agents</h3>
+              <p>Add structured decisions inside business processes with review where it matters.</p>
+              <div class="chips"><span class="chip blue">classify</span><span class="chip">score</span><span class="chip">draft</span><span class="chip">route</span></div>
+            </article>
+            <article class="card">
+              <h3>Reporting Dashboards</h3>
+              <p>Turn scattered activity into visible operating intelligence.</p>
+              <div class="chips"><span class="chip">Power BI</span><span class="chip">SQL</span><span class="chip success">source sync</span></div>
+            </article>
+            <article class="card">
+              <h3>Internal Ops Systems</h3>
+              <p>Build lightweight systems around the way the business actually runs.</p>
+              <div class="chips"><span class="chip">Supabase</span><span class="chip">Vercel</span><span class="chip">MongoDB</span></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section light" id="motion">
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">03 / Hero Motion Storyboard</div>
+              <h2>The animation must explain synchronization.</h2>
+            </div>
+            <p>The hero is the only big motion moment. It should be cinematic, controlled, and readable, with a static reduced-motion final state.</p>
+          </div>
+          <div class="storyboard">
+            <div class="story-step"><div class="step-id">00</div><div><b>Calm dark canvas</b><span>Headline and CTAs are visible immediately. The visual starts in a quiet scattered state.</span></div></div>
+            <div class="story-step"><div class="step-id">01</div><div><b>Input nodes enter</b><span>CRM, Email Ops, Reports, Support, and Manual Tasks appear as labeled disconnected cards.</span></div></div>
+            <div class="story-step"><div class="step-id">02</div><div><b>Paths draw</b><span>Blue and indigo paths connect inputs to the Synqro Operating Layer in sequence.</span></div></div>
+            <div class="story-step"><div class="step-id">03</div><div><b>Operating layer forms</b><span>The central panel sharpens with workflow orchestration, context rules, and audit trail rows.</span></div></div>
+            <div class="story-step"><div class="step-id">04</div><div><b>Review checkpoint pulses</b><span>AI Decision appears first. Human Review pulses amber once. Synced Record resolves green.</span></div></div>
+            <div class="story-step"><div class="step-id">05</div><div><b>CTA emphasis</b><span>After the visual settles, the primary CTA gets one subtle premium emphasis, never flashing.</span></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section dark" id="modules">
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">04 / Required Mockup Modules</div>
+              <h2>Realistic modules without fake proof.</h2>
+            </div>
+            <p>These modules show process credibility, not client work. They use safe dummy content, labels, and state language.</p>
+          </div>
+          <div class="mockup-board">
+            <div class="module large">
+              <div class="module-title"><span>Automation Opportunity Assessment preview</span><span>representative</span></div>
+              <div class="assessment-table">
+                <div class="assessment-row header"><span>Workflow</span><span>Current friction</span><span>Review</span><span>First layer</span></div>
+                <div class="assessment-row"><span>Lead intake</span><span>Duplicate manual entry</span><span class="chip review">yes</span><span>routing flow</span></div>
+                <div class="assessment-row"><span>Weekly reporting</span><span>Copy/paste updates</span><span class="chip success">no</span><span>source sync</span></div>
+                <div class="assessment-row"><span>Support triage</span><span>Unclear ownership</span><span class="chip review">yes</span><span>assignment flow</span></div>
+              </div>
+            </div>
+
+            <div class="module">
+              <div class="module-title"><span>AI Agent Decision Card</span><span>safe content</span></div>
+              <div class="decision-card">
+                <div class="decision-line"><b>Context read</b><span>Recent request, CRM status, routing rules.</span></div>
+                <div class="decision-line"><b>Decision type</b><span>Classify and route.</span></div>
+                <div class="decision-line"><b>Suggested action</b><span>Send to human review.</span></div>
+                <div class="decision-line"><b>Audit note</b><span>Action held for approval before record update.</span></div>
+              </div>
+            </div>
+
+            <div class="module">
+              <div class="module-title"><span>Human Approval Queue</span><span>checkpoint</span></div>
+              <div class="queue-item"><span>Email draft ready for review</span><span class="chip review">Needs review</span></div>
+              <div class="queue-item"><span>Lead routing requires approval</span><span class="chip review">Approve</span></div>
+              <div class="queue-item"><span>Support ticket assigned to ops</span><span class="chip success">Synced</span></div>
+            </div>
+
+            <div class="module">
+              <div class="module-title"><span>Reporting Dashboard Snapshot</span><span>no metrics claims</span></div>
+              <div class="dashboard-bars">
+                <div class="dash-bar"><span>Source health</span><span class="bar-track"><i style="--w:78%"></i></span><span>active</span></div>
+                <div class="dash-bar"><span>Review queue</span><span class="bar-track"><i style="--w:46%; background: var(--review)"></i></span><span>open</span></div>
+                <div class="dash-bar"><span>Synced records</span><span class="bar-track"><i style="--w:68%; background: var(--success)"></i></span><span>ready</span></div>
+                <div class="dash-bar"><span>Bottlenecks</span><span class="bar-track"><i style="--w:34%"></i></span><span>mapped</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section light" id="copy">
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">05 / Homepage Copy Skeleton</div>
+              <h2>Draft copy that is specific without pretending proof exists.</h2>
+            </div>
+            <p>The copy should be sharp, practical, founder-friendly, and infrastructure-framed. No buzzword fog and no invented outcomes.</p>
+          </div>
+          <div class="copy-skeleton">
+            <div class="copy-block">
+              <h3>Problem</h3>
+              <p>Your tools are working. The workflow between them is not. Most service-led businesses do not need another disconnected platform. They need the handoffs, duplicate updates, approval gaps, and reporting delays between their current tools cleaned up and connected.</p>
+            </div>
+            <div class="copy-block">
+              <h3>AI agents</h3>
+              <p>Custom AI agents that understand context, make structured decisions, and trigger approved workflow actions. Synqro builds agents that sit inside business processes: classifying, summarizing, scoring, drafting, routing, and updating records with human review where it matters.</p>
+            </div>
+            <div class="copy-block">
+              <h3>Trust and security</h3>
+              <p>Synqro's implementation approach is informed by common security and governance practices, including least-privilege access, data minimization, auditability, secure credential handling, and human-in-the-loop review for sensitive or high-impact actions.</p>
+            </div>
+            <div class="copy-block">
+              <h3>Founder teaser</h3>
+              <p>Built by operators, not template sellers. Zaid leads automation and data systems. Uzair leads AI workflow strategy and CRM operations.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section dark" id="contact">
+        <div class="shell contact-band">
+          <div>
+            <div class="eyebrow">06 / Short CTA Form</div>
+            <h2>Request a Free Automation Opportunity Assessment.</h2>
+            <p class="lead" style="margin-top:18px">Tell us one workflow your team wants to improve. We will look for where automation can become cleaner, reusable operating infrastructure for your business.</p>
+          </div>
+          <form class="form-grid">
+            <input class="field" aria-label="Name" placeholder="Name">
+            <input class="field" aria-label="Work email" placeholder="Work email">
+            <input class="field" aria-label="Company" placeholder="Company">
+            <textarea class="field large" aria-label="Workflow to improve" placeholder="Workflow to improve"></textarea>
+            <button class="btn btn-primary" type="button">Request Free Assessment</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="section dark" id="stitch">
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">07 / Stitch Master Prompt v2</div>
+              <h2>Ready-to-paste homepage prototype prompt.</h2>
+            </div>
+            <p>This prompt keeps the design locked: premium systems studio, labeled hero transformation, representative modules, reduced-motion behavior, and no fake proof.</p>
+          </div>
+          <div class="prompt-box">Build a high-fidelity responsive homepage prototype for Synqro, a founder-led AI automation studio and consultancy.
+
+Visual direction: Balanced Premium Systems Studio. Hybrid of premium consultancy, technical automation studio, Stripe-style systems storytelling, and Linear/Vercel-style technical polish. The page must feel expensive, precise, animated, memorable, and practical.
+
+Use the exact hero headline: Turn scattered tools and manual workflows into a connected operating system for your business.
+
+Use the exact subheadline: We help service-led SMBs connect their tools, automate repetitive work, and build AI-assisted workflows that improve operations without disrupting the systems they already use.
+
+Primary CTA: Request Free Assessment. Secondary CTA: See How It Works.
+
+Section order: Hero, Problem, Services, AI agents explanation, How Synqro works, Representative workflow examples, Trust/security, Founder teaser, Short CTA/contact form, FAQ, Footer.
+
+Hero visual must clearly show CRM, Email Ops, Reports, Support, Manual Tasks, Synqro Operating Layer, AI Decision, Human Review, and Synced Record. Animate scattered inputs into the operating layer, pulse the review checkpoint once, and settle the synced record into green. Include reduced-motion fallback.
+
+Required mockup modules: Automation Opportunity Assessment preview, Workflow Map, AI Agent Decision Card, Human Approval Queue, Reporting Dashboard Snapshot. Label all modules as representative or example visuals.
+
+Restrictions: no fake client names, fake ROI, fake logos, fake testimonials, official logos, copied UI screenshots, cartoon robots, AI sparkles, stock business people, neon cyberpunk dashboards, or internal dev-agent tooling references.</div>
+        </div>
+      </section>
+
+      <section class="section light">
+        <div class="shell">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">08 / Critique Checklist</div>
+              <h2>How to judge the Stitch output.</h2>
+            </div>
+            <p>Accept the output only if it clears the premium bar, explains the category fast, and avoids fake proof or generic AI agency tropes.</p>
+          </div>
+          <div class="checklist">
+            <div class="check-card"><h3>Premium feel</h3><ul><li>Expensive first viewport</li><li>Precise spacing and type</li><li>Restrained accent budget</li></ul></div>
+            <div class="check-card"><h3>Three-second clarity</h3><ul><li>Category is obvious</li><li>Headline leads</li><li>CTA feels high value</li></ul></div>
+            <div class="check-card"><h3>Hero synchronization</h3><ul><li>Required labels visible</li><li>Scattered to connected is clear</li><li>Final state feels orderly</li></ul></div>
+            <div class="check-card"><h3>Motion quality</h3><ul><li>Controlled, not gimmicky</li><li>Reduced-motion exists</li><li>Motion helps comprehension</li></ul></div>
+            <div class="check-card"><h3>No cliches</h3><ul><li>No sparkles or robots</li><li>No fake proof</li><li>No copied branded UI</li></ul></div>
+            <div class="check-card"><h3>Mobile strength</h3><ul><li>No horizontal scroll</li><li>Diagram simplifies</li><li>44px hit targets</li></ul></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="shell footer-inner">
+        <a class="brand" href="#top"><span class="mark" aria-hidden="true"></span><span>synqro</span></a>
+        <div>AI automation studio for cleaner workflows and connected operating systems.</div>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>
