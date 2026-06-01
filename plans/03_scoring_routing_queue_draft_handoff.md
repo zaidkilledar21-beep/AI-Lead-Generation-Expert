@@ -1,5 +1,7 @@
 # Phase 3: Scoring, Routing, Queueing, and Draft Handoff
 
+> Superseded ownership note: GitHub Issue #52 preserves backend ownership for WF-01/WF-02/WF-03 and moves WF-04 routing back to n8n. Backend discovery must leave successfully scored leads as `status = 'scored'` for the n8n WF-04 safe source.
+
 ## Goal
 
 Move valid discovered leads from `new/enriched/scored` into the correct next operational state: manual review, queued outreach, or paused/archived. Discovery alone is not enough.

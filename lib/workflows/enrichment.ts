@@ -32,6 +32,26 @@ export async function enrichLead(leadId: string): Promise<EnrichLeadOutput> {
 
   if (error) throw new Error(error.message);
   if (!lead) throw new Error("Lead not found");
+  const { data: completedEnrichment, error: completedEnrichmentError } = await supabase
+    .from("lead_enrichment")
+    .select("enrichment_confidence,email_found")
+    .eq("lead_id", leadId)
+    .eq("status", "completed")
+    .order("last_enriched_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (completedEnrichmentError) throw new Error(completedEnrichmentError.message);
+  if (completedEnrichment) {
+    return {
+      lead_id: leadId,
+      status: "completed",
+      enrichment_confidence: completedEnrichment.enrichment_confidence ?? "low",
+      email_found: completedEnrichment.email_found ?? undefined,
+      workflow_signals: []
+    };
+  }
+
   const existingLeadEmail = isValidBusinessEmail(lead.email) ? lead.email : null;
   if (!lead.website) {
     await logEnrichmentFailure(leadId, "Lead has no website");

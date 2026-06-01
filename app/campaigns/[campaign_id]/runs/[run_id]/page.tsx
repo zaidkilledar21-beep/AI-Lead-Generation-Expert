@@ -39,6 +39,7 @@ function runWarningItems(detail: CampaignRunDetail) {
     detail.run.duplicatesSkipped > 0 ? `${detail.run.duplicatesSkipped} duplicates skipped.` : null,
     detail.run.rejected > 0 ? `${detail.run.rejected} candidates rejected.` : null,
     detail.run.crawlFailures > 0 ? `${detail.run.crawlFailures} crawl failure${detail.run.crawlFailures === 1 ? "" : "s"}.` : null,
+    detail.run.missingEmailBlocks > 0 ? `${detail.run.missingEmailBlocks} missing-email queue block${detail.run.missingEmailBlocks === 1 ? "" : "s"}.` : null,
     detail.run.userStatus.toLowerCase().includes("quota") ? `Quota reached after ${detail.run.candidatesChecked} checked candidates.` : null,
     detail.run.errorMessage ? detail.run.errorMessage : null,
     ...detail.supportWarnings

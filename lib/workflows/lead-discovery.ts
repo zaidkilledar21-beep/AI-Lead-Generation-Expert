@@ -4,7 +4,6 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { buildLeadDedupeKey, importDiscoveredLeads, type RawLeadInput } from "@/lib/workflows/discovery";
 import { enrichLead } from "@/lib/workflows/enrichment";
 import { scoreLead } from "@/lib/workflows/scoring";
-import { routeLead } from "@/lib/workflows/routing";
 import { normalizePhone, selectBestBusinessEmail } from "@/lib/workflows/contact-extraction";
 import { crawlBusinessWebsite, extractWebsiteSignals } from "@/lib/workflows/website-crawler";
 
@@ -627,6 +626,13 @@ async function getCampaign(campaignId?: string) {
   return data as CampaignRow | null;
 }
 
+async function getCampaignById(campaignId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase.from("campaigns").select("*").eq("id", campaignId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as CampaignRow | null;
+}
+
 async function candidateExists(placeId: string) {
   const supabase = createSupabaseServiceClient();
   const [{ count: existingLeads }, { count: existingCandidates }] = await Promise.all([
@@ -716,7 +722,7 @@ async function processLeadEnrichmentAndScoring(
   leadId: string,
   campaign: CampaignRow,
   runId: string
-): Promise<{ enriched: boolean; scored: boolean; routeStatus?: string; error?: string }> {
+): Promise<{ enriched: boolean; scored: boolean; error?: string }> {
   let enriched = false;
   let scored = false;
 
@@ -777,30 +783,29 @@ async function processLeadEnrichmentAndScoring(
     return { enriched, scored, error: errorMsg };
   }
 
-  try {
-    const routeResult = await routeLead(leadId);
-    await logWorkflowEvent({
-      campaign_id: campaign.id,
-      discovery_run_id: runId,
-      event_type: "wf_04_routing",
-      status: "completed",
-      payload: { lead_id: leadId, route_status: routeResult.status, reasons: routeResult.reasons }
-    });
-    return { enriched, scored, routeStatus: routeResult.status };
-  } catch (error) {
-    const errorMsg = error instanceof Error ? `WF-04 routing failed for ${leadId}: ${error.message}` : `WF-04 routing failed for ${leadId}`;
-    await logWorkflowEvent({
-      campaign_id: campaign.id,
-      discovery_run_id: runId,
-      event_type: "wf_04_routing",
-      status: "failed",
-      error_message: error instanceof Error ? error.message : "Unknown routing error",
-      payload: { lead_id: leadId }
-    });
-    return { enriched, scored, error: errorMsg };
-  }
-
   return { enriched, scored };
+}
+
+export async function loadPromotableCandidatesFromDb(runId: string, campaignId: string): Promise<RawLeadInput[]> {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("lead_candidates")
+    .select("id,business_name,normalized_payload")
+    .eq("discovery_run_id", runId)
+    .eq("campaign_id", campaignId)
+    .eq("candidate_status", "details_fetched")
+    .is("final_lead_id", null)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    ...((row.normalized_payload as RawLeadInput | null) ?? {}),
+    business_name: row.business_name,
+    candidate_id: row.id,
+    campaign_id: campaignId,
+    discovery_run_id: runId
+  }));
 }
 
 async function promoteAndProcessLeads(
@@ -877,11 +882,9 @@ async function promoteAndProcessLeads(
     })
   });
   for (const leadId of importResult.created_lead_ids ?? []) {
-    const { enriched, scored, routeStatus, error } = await processLeadEnrichmentAndScoring(leadId, campaign, runId);
+    const { enriched, scored, error } = await processLeadEnrichmentAndScoring(leadId, campaign, runId);
     if (enriched) results.enriched += 1;
     if (scored) results.scored += 1;
-    if (routeStatus === "queued") results.routing.queued += 1;
-    if (routeStatus === "drafted") results.routing.drafted += 1;
     if (error) results.errors.push(error);
   }
   await logDiscoveryCheckpoint({
@@ -1352,6 +1355,7 @@ async function safeFinalizeDiscoveryRun(
 
   const finalStatus = resolveRunStatus(status === "quota_exhausted", finalizationErrors.length, reconciledStats.created);
   const completedAt = new Date().toISOString();
+  const persistedRun = await getDiscoveryRun(runId);
   const errorDetails = finalizationErrors.map((message) => ({ message, recorded_at: completedAt })).slice(0, 20);
   const { error } = await supabase
     .from("discovery_runs")
@@ -1368,7 +1372,8 @@ async function safeFinalizeDiscoveryRun(
       crawl_failures: reconciledStats.crawlFailures,
       error_message: finalizationErrors[0] ?? null,
       error_details: errorDetails,
-      completed_at: completedAt
+      completed_at: completedAt,
+      duration_seconds: Math.max(0, Math.round((Date.parse(completedAt) - Date.parse(persistedRun?.started_at ?? completedAt)) / 1000))
     })
     .eq("id", runId);
 
@@ -1408,6 +1413,13 @@ async function safeFinalizeDiscoveryRun(
     payload: { status: finalStatus, stats: statsSummary(reconciledStats) }
   });
 
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "run_finalized",
+    payload: { status: finalStatus, error_count: finalizationErrors.length, stats: statsSummary(reconciledStats) }
+  });
+
   await logWorkflowEvent({
     campaign_id: campaign.id,
     discovery_run_id: runId,
@@ -1439,8 +1451,62 @@ async function recoverStaleDiscoveryRun(run: DiscoveryRunRow) {
 
   const fatalEvent = (events ?? []).find((event) => event.status === "failed");
   const quotaEvent = (events ?? []).find((event) => event.event_type === "quota_enforced" && event.status === "blocked");
-  const reconciled = await reconcileDiscoveryRunStats(run.id);
-  const errors = fatalEvent?.error_message ? [fatalEvent.error_message] : run.error_message ? [run.error_message] : [];
+  const campaign = await getCampaignById(run.campaign_id);
+  if (!campaign) throw new Error(`Campaign not found for stale discovery run: ${run.id}`);
+  const promotable = await loadPromotableCandidatesFromDb(run.id, run.campaign_id);
+  let recoveredPromotion = emptyDiscoveryStats();
+  const recoveryErrors: string[] = [];
+  if (promotable.length > 0) {
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId: run.id,
+      eventType: "promotion_recovered",
+      payload: { promotable_count: promotable.length }
+    });
+    const results = await promoteAndProcessLeads(promotable, campaign, run.id, false);
+    recoveryErrors.push(...results.errors);
+    recoveredPromotion = {
+      ...recoveredPromotion,
+      created: results.created,
+      duplicates: results.duplicates,
+      enriched: results.enriched,
+      scored: results.scored
+    };
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId: run.id,
+      eventType: "enrichment_scoring_recovered",
+      payload: { created: results.created, enriched: results.enriched, scored: results.scored, errors_count: results.errors.length }
+    });
+  }
+  const { data: unscoredLeads, error: unscoredLeadsError } = await supabase
+    .from("leads")
+    .select("id,lead_scores()")
+    .eq("discovery_run_id", run.id)
+    .is("lead_scores", null)
+    .order("created_at", { ascending: true });
+  if (unscoredLeadsError) throw new Error(unscoredLeadsError.message);
+  let recoveredEnriched = 0;
+  let recoveredScored = 0;
+  for (const lead of unscoredLeads ?? []) {
+    const result = await processLeadEnrichmentAndScoring(lead.id, campaign, run.id);
+    if (result.enriched) recoveredEnriched += 1;
+    if (result.scored) recoveredScored += 1;
+    if (result.error) recoveryErrors.push(result.error);
+  }
+  if ((unscoredLeads ?? []).length > 0) {
+    await logDiscoveryCheckpoint({
+      campaign,
+      runId: run.id,
+      eventType: "enrichment_scoring_recovered",
+      payload: { recovered_leads: unscoredLeads?.length ?? 0, enriched: recoveredEnriched, scored: recoveredScored, errors_count: recoveryErrors.length }
+    });
+  }
+  const reconciled = await reconcileDiscoveryRunStats(run.id, recoveredPromotion);
+  const errors = [
+    ...(fatalEvent?.error_message ? [fatalEvent.error_message] : run.error_message ? [run.error_message] : []),
+    ...recoveryErrors
+  ];
   let status: DiscoveryRunStatus = "failed";
   if (quotaEvent) {
     status = "quota_exhausted";
@@ -1595,13 +1661,16 @@ export async function runLeadDiscovery(input: RunLeadDiscoveryInput = {}): Promi
       throw new Error("No Google Places search queries were generated for this campaign");
     }
 
-    const { promotable, quotaExhausted } = await executeSearchQueries(queries, campaign, runId, stats, errors);
+    const { promotable: searchedPromotable, quotaExhausted } = await executeSearchQueries(queries, campaign, runId, stats, errors);
+    const promotable = input.dry_run
+      ? searchedPromotable
+      : await loadPromotableCandidatesFromDb(runId, campaign.id);
 
     await logDiscoveryCheckpoint({
       campaign,
       runId,
       eventType: "promotion_started",
-      payload: { promotable_count: promotable.length, stats: statsSummary(stats) }
+      payload: { promotable_count: promotable.length, persisted_reload: !input.dry_run, stats: statsSummary(stats) }
     });
     const promotionResults = await promoteAndProcessLeads(promotable, campaign, runId, !!input.dry_run);
     stats.created = promotionResults.created;

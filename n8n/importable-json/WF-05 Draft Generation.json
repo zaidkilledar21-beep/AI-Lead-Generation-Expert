@@ -24,21 +24,10 @@
     {
       "parameters": {
         "operation": "getAll",
-        "tableId": "outreach_queue",
+        "tableId": "wf05_due_queue_items",
         "limit": 25,
         "filters": {
-          "conditions": [
-            {
-              "keyName": "status",
-              "condition": "eq",
-              "keyValue": "queued"
-            },
-            {
-              "keyName": "next_send_at",
-              "condition": "lte",
-              "keyValue": "={{ $now.toISO() }}"
-            }
-          ]
+          "conditions": []
         }
       },
       "type": "n8n-nodes-base.supabase",
@@ -64,7 +53,7 @@
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"p_queue_id\": \"{{$json.id}}\"\n}",
+        "jsonBody": "={\n  \"p_queue_id\": \"{{$json.queue_id}}\"\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -111,7 +100,8 @@
     },
     {
       "parameters": {
-        "jsCode": "const context = $(\"Load Draft Context\").first().json;\nconst deepseek = $input.first().json;\n\nlet draft;\n\ntry {\n  const content = deepseek.choices?.[0]?.message?.content;\n\n  if (typeof content === \"string\") {\n    draft = JSON.parse(content);\n  } else if (typeof content === \"object\" && content !== null) {\n    draft = content;\n  } else {\n    draft = {\n      valid: false,\n      block_reason: \"deepseek_response_missing_content\"\n    };\n  }\n} catch (error) {\n  draft = {\n    valid: false,\n    block_reason: \"deepseek_response_not_valid_json\"\n  };\n}\n\nconst evidence = context.evidence || [];\nconst step = context.step || {};\nconst score = context.score || {};\nconst lead = context.lead || {};\nconst queue = context.queue || {};\n\nconst errors = [];\n\nif (!Array.isArray(evidence) || evidence.length === 0) {\n  errors.push(\"missing_score_evidence\");\n}\n\nif (!draft.subject || String(draft.subject).trim().length === 0) {\n  errors.push(\"missing_subject\");\n}\n\nif (!draft.body || String(draft.body).trim().length === 0) {\n  errors.push(\"missing_body\");\n}\n\nif (draft.subject && String(draft.subject).length > 70) {\n  errors.push(\"subject_too_long\");\n}\n\nif (draft.body && String(draft.body).split(/\\s+/).filter(Boolean).length > 160) {\n  errors.push(\"body_too_long\");\n}\n\nif (!draft.observation_used || String(draft.observation_used).trim().length < 10) {\n  errors.push(\"missing_observation\");\n}\n\nif (!draft.automation_idea || String(draft.automation_idea).trim().length < 10) {\n  errors.push(\"missing_automation_idea\");\n}\n\nif (!draft.cta || String(draft.cta).trim().length < 5) {\n  errors.push(\"missing_cta\");\n}\n\nconst forbidden = [\n  \"guaranteed\",\n  \"i noticed your business is struggling\",\n  \"you are losing customers\",\n  \"we can 10x\",\n  \"limited time offer\",\n  \"act now\",\n  \"free money\",\n  \"risk-free\"\n];\n\nconst combined = `${draft.subject || \"\"} ${draft.body || \"\"}`.toLowerCase();\n\nfor (const phrase of forbidden) {\n  if (combined.includes(phrase)) {\n    errors.push(`forbidden_phrase:${phrase}`);\n  }\n}\n\nconst hasLink = /https?:\\/\\//i.test(draft.body || \"\");\n\nconst stepAllowsLink =\n  step.allow_link === true ||\n  step.requires_link === true ||\n  step.include_link === true;\n\nif (hasLink && !stepAllowsLink) {\n  errors.push(\"link_not_allowed_for_step\");\n}\n\nconst isValid = draft.valid === true && errors.length === 0;\n\nreturn [\n  {\n    json: {\n      queue_id: queue.id,\n      lead_id: lead.id || queue.lead_id,\n      band: score.band,\n      step_number: queue.current_step,\n      draft,\n      validation_errors: errors,\n      is_valid: isValid,\n      approval_status:\n        isValid && score.band === \"A\" && queue.current_step === 1\n          ? \"pending\"\n          : isValid\n            ? \"auto_approved\"\n            : \"blocked\"\n    }\n  }\n];"
+        "jsCode": "const contexts = $(\"Load Draft Context\").all().map((item) => item.json || {});\nconst responses = $input.all();\n\nreturn responses.map((item, index) => {\n  const context = contexts[index] || {};\n  const deepseek = item.json || {};\n  let draft;\n\n  try {\n    const content = deepseek.choices?.[0]?.message?.content;\n    if (typeof content === \"string\") draft = JSON.parse(content);\n    else if (typeof content === \"object\" && content !== null) draft = content;\n    else draft = { valid: false, block_reason: \"deepseek_response_missing_content\" };\n  } catch {\n    draft = { valid: false, block_reason: \"deepseek_response_not_valid_json\" };\n  }\n\n  const evidence = context.evidence || [];\n  const step = context.step || {};\n  const score = context.score || {};\n  const lead = context.lead || {};\n  const queue = context.queue || {};\n  const errors = [];\n\n  if (!Array.isArray(evidence) || evidence.length === 0) errors.push(\"missing_score_evidence\");\n  if (!draft.subject || String(draft.subject).trim().length === 0) errors.push(\"missing_subject\");\n  if (!draft.body || String(draft.body).trim().length === 0) errors.push(\"missing_body\");\n  if (draft.subject && String(draft.subject).length > 70) errors.push(\"subject_too_long\");\n  if (draft.body && String(draft.body).split(/\\s+/).filter(Boolean).length > 160) errors.push(\"body_too_long\");\n  if (!draft.observation_used || String(draft.observation_used).trim().length < 10) errors.push(\"missing_observation\");\n  if (!draft.automation_idea || String(draft.automation_idea).trim().length < 10) errors.push(\"missing_automation_idea\");\n  if (!draft.cta || String(draft.cta).trim().length < 5) errors.push(\"missing_cta\");\n\n  const forbidden = [\"guaranteed\", \"i noticed your business is struggling\", \"you are losing customers\", \"we can 10x\", \"limited time offer\", \"act now\", \"free money\", \"risk-free\"];\n  const combined = `${draft.subject || \"\"} ${draft.body || \"\"}`.toLowerCase();\n  for (const phrase of forbidden) if (combined.includes(phrase)) errors.push(`forbidden_phrase:${phrase}`);\n\n  const hasLink = /https?:\\/\\//i.test(draft.body || \"\");\n  const stepAllowsLink = step.allow_link === true || step.requires_link === true || step.include_link === true;\n  if (hasLink && !stepAllowsLink) errors.push(\"link_not_allowed_for_step\");\n\n  const isValid = draft.valid === true && errors.length === 0;\n  return {\n    json: {\n      queue_id: queue.id,\n      lead_id: lead.id || queue.lead_id,\n      band: score.band,\n      step_number: queue.current_step,\n      draft,\n      validation_errors: errors,\n      is_valid: isValid,\n      approval_status: isValid && score.band === \"A\" && queue.current_step === 1 ? \"pending\" : isValid ? \"auto_approved\" : \"blocked\"\n    },\n    pairedItem: { item: index }\n  };\n});",
+        "mode": "runOnceForAllItems"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -162,6 +152,175 @@
       ],
       "id": "1c30d296-8802-4871-a7ac-6e44d0c7d0d3",
       "name": "Build Draft Prompt"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.wf05_action}}",
+                    "rightValue": "generate_draft",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "generate_draft"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.wf05_action}}",
+                    "rightValue": "block_missing_email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "block_missing_email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.wf05_action}}",
+                    "rightValue": "skip_existing_draft",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "skip_existing_draft"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.wf05_action}}",
+                    "rightValue": "skip_existing_manual_review",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "skip_existing_manual_review"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.wf05_action}}",
+                    "rightValue": "block_invalid_lead_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "block_invalid_lead_status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.wf05_action}}",
+                    "rightValue": "block_missing_lead",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "block_missing_lead"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf05-action-switch",
+      "name": "Switch WF-05 Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/sync_wf05_queue_action",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_queue_id\": \"{{$json.queue_id}}\",\n  \"p_action\": \"{{$json.wf05_action}}\"\n}",
+        "options": {}
+      },
+      "id": "wf05-sync-non-generation-action",
+      "name": "Sync Non-Generation Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        500
+      ]
     }
   ],
   "pinData": {},
@@ -181,7 +340,7 @@
       "main": [
         [
           {
-            "node": "Load Draft Context",
+            "node": "Switch WF-05 Action",
             "type": "main",
             "index": 0
           }
@@ -231,9 +390,55 @@
           }
         ]
       ]
+    },
+    "Switch WF-05 Action": {
+      "main": [
+        [
+          {
+            "node": "Load Draft Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sync Non-Generation Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sync Non-Generation Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sync Non-Generation Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sync Non-Generation Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sync Non-Generation Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",

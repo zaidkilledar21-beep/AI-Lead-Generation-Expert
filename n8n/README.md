@@ -112,7 +112,7 @@ The checked-in workflow exports use n8n env expressions for Supabase/app URLs an
 
 `WF-01` and `WF-10` call the deployed Vercel app through `APP_BASE_URL`. `WF-04` through `WF-08` should be exported from the live n8n instance after confirming they call the live Supabase RPC endpoints. The checked-in table/schema migration supports those RPC contracts, but do not treat placeholder JSON exports as production-ready if they only contain source-query nodes and sticky notes.
 
-Discovery implementation lives in the app, but orchestration ownership is n8n. `WF-10` is the scheduled and CRM-manual wrapper around `/api/workflows/discovery/run`; the CRM manual run button posts to the WF-10 webhook, and WF-10 calls the authenticated app workflow endpoint. Keep `/api/workflows/discovery/run` for n8n/internal workflow use only. Downstream enrichment, scoring, routing, drafting, sending, reply detection, and reporting remain n8n/Supabase workflow concerns.
+Discovery, enrichment, and scoring implementation lives in the app. `WF-10` is the scheduled and CRM-manual wrapper around `/api/workflows/discovery/run`; the CRM manual run button posts to the WF-10 webhook, and WF-10 calls the authenticated app workflow endpoint. Keep `/api/workflows/discovery/run` for n8n/internal workflow use only. n8n begins at WF-04 routing. WF-05 drafting, WF-06 sending, WF-07 reply detection, and WF-08 reporting remain n8n/Supabase workflow concerns.
 
 ### Lifecycle Contract Checks
 
