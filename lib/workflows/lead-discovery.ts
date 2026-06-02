@@ -1319,7 +1319,7 @@ async function updateDiscoveryRunProgress(
   });
 }
 
-async function safeFinalizeDiscoveryRun(
+export async function safeFinalizeDiscoveryRun(
   campaign: Pick<CampaignRow, "id">,
   runId: string,
   stats: Partial<DiscoveryStats>,

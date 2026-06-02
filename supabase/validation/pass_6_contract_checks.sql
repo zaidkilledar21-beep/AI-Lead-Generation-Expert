@@ -10,8 +10,9 @@ with required_functions(function_name, identity_arguments) as (
     ('dashboard_update_lead_status', 'target_lead_id uuid, next_status text'),
     ('pause_queue_after_reply', 'p_lead_id uuid, p_intent_classification text, p_sentiment text, p_requires_human_review boolean, p_reply_event_id uuid, p_summary text, p_suggested_next_action text, p_ai_draft_reply text, p_raw_classifier_response jsonb'),
     ('queue_manual_review_item', 'p_lead_id uuid, p_reason text, p_priority text'),
-    ('queue_manual_review_item', 'p_lead_id uuid, p_reason text, p_priority text, p_force boolean'),
-    ('queue_manual_review_item', 'target_lead_id uuid, review_reason text, review_priority text, assigned_founder text, review_metadata jsonb'),
+    ('queue_manual_review_item_sync', 'p_lead_id uuid, p_reason text, p_priority text, p_force boolean'),
+    ('queue_manual_review_item_force', 'p_lead_id uuid, p_reason text, p_priority text'),
+    ('sync_run_review_pending', 'p_discovery_run_id uuid'),
     ('select_approved_due_email_draft', ''),
     ('update_email_send_state', 'p_draft_id uuid, p_queue_id uuid, p_lead_id uuid, p_inbox_id uuid, p_gmail_message_id text, p_gmail_thread_id text'),
     ('sending_global_outreach_allowed', ''),
@@ -60,6 +61,9 @@ with sensitive_functions(function_name) as (
     ,('acquire_discovery_recovery_lease')
     ,('release_discovery_recovery_lease')
     ,('sync_wf05_queue_action')
+    ,('queue_manual_review_item_sync')
+    ,('queue_manual_review_item_force')
+    ,('sync_run_review_pending')
 ),
 actual_functions as (
   select p.oid, p.oid::regprocedure as signature, p.proname as function_name
@@ -95,3 +99,12 @@ where not has_function_privilege('authenticated', 'public.dashboard_update_lead_
 select 'missing_required_view' as check_name, required_view
 from (values ('wf04_scored_leads'), ('wf05_due_queue_items')) required(required_view)
 where to_regclass('public.' || required_view) is null;
+
+-- Issue #52 RPC ambiguity guard: there must be exactly ONE function named queue_manual_review_item
+-- so PostgREST/route_scored_lead can resolve it without "function is not unique" errors.
+select 'ambiguous_queue_manual_review_item' as check_name, proname, count(*) as overload_count
+from pg_proc
+where pronamespace = 'public'::regnamespace
+  and proname = 'queue_manual_review_item'
+group by proname
+having count(*) <> 1;
