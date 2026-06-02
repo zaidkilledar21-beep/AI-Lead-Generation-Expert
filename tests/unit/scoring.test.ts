@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createMockClient, type Db } from "./mock-supabase-client";
 
 const mockState = vi.hoisted(() => ({
   client: null as any
@@ -14,81 +15,6 @@ vi.mock("@/lib/deepseek", () => ({ callDeepSeekJson: vi.fn() }));
 vi.mock("@/lib/contracts", () => ({ assertScoringOutput: vi.fn() }));
 vi.mock("@/lib/config/icp", () => ({ icpConfig: {} }));
 vi.mock("@/lib/workflows/routing", () => ({ createOrUpdateManualReview: vi.fn() }));
-
-type Row = Record<string, any>;
-type Db = Record<string, Row[]>;
-
-class MockQuery {
-  private action: "select" | "update" = "select";
-  private readonly filters: Array<{ column: string; value: any }> = [];
-  private payload: Row | null = null;
-  private limitCount: number | null = null;
-  private orderSpec: { column: string; ascending: boolean } | null = null;
-
-  constructor(private readonly table: string, private readonly db: Db) {}
-
-  select() {
-    this.action = "select";
-    return this;
-  }
-
-  update(payload: Row) {
-    this.action = "update";
-    this.payload = payload;
-    return this;
-  }
-
-  eq(column: string, value: any) {
-    this.filters.push({ column, value });
-    return this.action === "update" ? this.executeUpdate() : this;
-  }
-
-  order(column: string, options?: { ascending?: boolean }) {
-    this.orderSpec = { column, ascending: options?.ascending ?? true };
-    return this;
-  }
-
-  limit(count: number) {
-    this.limitCount = count;
-    return this;
-  }
-
-  maybeSingle() {
-    const rows = this.filteredRows();
-    return Promise.resolve({ data: rows[0] ?? null, error: null });
-  }
-
-  private matches(row: Row) {
-    return this.filters.every((filter) => row[filter.column] === filter.value);
-  }
-
-  private filteredRows() {
-    let rows = [...(this.db[this.table] ?? [])].filter((row) => this.matches(row));
-    if (this.orderSpec) {
-      const { column, ascending } = this.orderSpec;
-      rows = rows.sort((left, right) => {
-        const leftValue = String(left[column] ?? "");
-        const rightValue = String(right[column] ?? "");
-        return ascending ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
-      });
-    }
-    return this.limitCount == null ? rows : rows.slice(0, this.limitCount);
-  }
-
-  private executeUpdate() {
-    this.filteredRows().forEach((row) => Object.assign(row, this.payload));
-    return Promise.resolve({ data: null, error: null });
-  }
-}
-
-function createMockClient(db: Db) {
-  return {
-    from(table: string) {
-      if (!db[table]) db[table] = [];
-      return new MockQuery(table, db);
-    }
-  };
-}
 
 function dbWithLeadStatus(status: string): Db {
   return {
