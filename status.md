@@ -6,6 +6,28 @@
 ## Current task
 - Implement GitHub Issue #52 permanent pipeline hardening through backend WF-01/WF-02/WF-03, n8n WF-04 routing, and n8n WF-05 draft generation.
 
+## WF-04 RPC ambiguity root cause fixed permanently (migration 017)
+- Root cause: `queue_manual_review_item_sync` in migration 016 contained
+  `on conflict (lead_id) where review_status = 'pending'`. Postgres could not
+  disambiguate the bare `lead_id` in the conflict target from the function's own
+  return-table column also named `lead_id`, raising "column reference 'lead_id' is
+  ambiguous". WF-04 failed at the `Route Scored Lead` node.
+- Live DB was manually hotfixed. Migration `017_fix_manual_review_rpc_lead_id_ambiguity.sql`
+  makes that fix permanent.
+- Fix: replaced `on conflict (lead_id)` with explicit SELECT → INSERT (no conflict clause)
+  → `unique_violation` exception handler → re-SELECT pattern. All references inside the
+  function body use qualified aliases (`mrq.*`, `l.*`). External RPC contract unchanged.
+- `supabase/validation/pass_6_contract_checks.sql` extended with a regression guard that
+  fails if the `_sync` function body still contains `on conflict (lead_id)`.
+- After manual hotfix, WF-04 ran successfully (7 items output).
+- Lead status distribution post-fix: review_pending: 11, drafted: 6, pending_approval: 6,
+  in_sequence: 4, queued: 3.
+- outreach_queue distribution: drafted/null: 6, queued/null: 4, blocked/missing_email: 3.
+- **Environments that did NOT receive the manual DB hotfix must apply migration 017 before
+  running WF-04.**
+- Validation: lint, typecheck, npm test (38 tests / 12 files), validate:workflows (12 files),
+  build all pass; `git diff --check` clean (LF→CRLF warnings only).
+
 ## Issue #52 holistic follow-up: RPC ambiguity + resumable worker (migration 016)
 - Root causes:
   - WF-04 failed at `Route Scored Lead` with `queue_manual_review_item(uuid, unknown, unknown) is
