@@ -140,25 +140,20 @@ function formatReason(value: string | null | undefined) {
   return value ? value.replaceAll("_", " ") : null;
 }
 
+function runningUserStatus(run: Record<string, any>, context: RunProgressContext) {
+  if (run.completed_at) return Boolean(run.error_message) ? "Failed" : "Completed";
+  if (isStaleRunningRun(run, context)) return "Stuck";
+  if ((context.processingLeadCount ?? 0) > 0 || context.hasActiveLease) return "Processing enrichment & scoring";
+  return "Processing discovery";
+}
+
 function userRunStatus(run: Record<string, any>, context: RunProgressContext = {}) {
   const status = toStr(run.status, "completed");
   const promoted = numberFrom(run.candidates_promoted);
   const hasError = Boolean(run.error_message);
-  const routeableScored = context.routeableScoredCount ?? 0;
-  const processing = context.processingLeadCount ?? 0;
-
-  if (status === "running" && run.completed_at) return hasError ? "Failed" : "Completed";
-  if (status === "running") {
-    if (isStaleRunningRun(run, context)) return "Stuck";
-    if (processing > 0 || context.hasActiveLease) return "Processing enrichment & scoring";
-    return "Processing discovery";
-  }
-  if (status === "quota_exhausted" && promoted > 0 && !hasError) return "Completed: quota reached";
-  if (status === "quota_exhausted") return "Quota reached: no new leads";
-  if (status === "completed") {
-    if (routeableScored > 0) return "Backend complete: awaiting WF-04 routing";
-    return "Completed";
-  }
+  if (status === "running") return runningUserStatus(run, context);
+  if (status === "quota_exhausted") return promoted > 0 && !hasError ? "Completed: quota reached" : "Quota reached: no new leads";
+  if (status === "completed") return (context.routeableScoredCount ?? 0) > 0 ? "Backend complete: awaiting WF-04 routing" : "Completed";
   if (status === "failed") return "Failed";
   if (status === "paused") return "Paused";
   return status.replaceAll("_", " ");
@@ -918,7 +913,7 @@ export async function getCampaignRunDetailData(campaignId: string, runId: string
   const missingEmailBlocks = leads.filter((lead) => lead.queueStatus === "blocked" && lead.queuePauseReason === "missing_email").length;
 
   // Run-progress context so the UI distinguishes healthy in-flight processing from a truly stuck run.
-  const lastEventAt = events.length > 0 ? toStr(events[events.length - 1].created_at) || null : null;
+  const lastEventAt = events.length > 0 ? toStr(events.at(-1)?.created_at) || null : null;
   const hasActiveLease = Boolean(leaseResult.data);
   const routeableScoredCount = leadsList.filter((lead) => toStr(lead.status) === "scored").length;
   const processingLeadCount = leadsList.filter((lead) => ["new", "enriched"].includes(toStr(lead.status))).length;

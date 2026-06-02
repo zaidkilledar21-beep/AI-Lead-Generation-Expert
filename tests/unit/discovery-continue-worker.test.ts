@@ -23,84 +23,35 @@ vi.mock("@/lib/workflows/lead-discovery", () => ({
 type Row = Record<string, any>;
 type Db = Record<string, Row[]>;
 
-// Thenable Supabase mock supporting the query chains the worker uses: select(+head count),
-// eq/in/is/gt filters, multi-key order, limit, maybeSingle, insert, and rpc.
-class MockQuery {
-  private action: "select" | "insert" = "select";
-  private headCount = false;
-  private readonly eqs: Array<{ column: string; value: any }> = [];
-  private inFilter: { column: string; values: any[] } | null = null;
-  private readonly isNullColumns = new Set<string>();
-  private readonly gts: Array<{ column: string; value: any }> = [];
-  private readonly orderSpecs: Array<{ column: string; ascending: boolean }> = [];
-  private limitN: number | null = null;
-  private payload: Row | null = null;
+// Factory-function Supabase mock (no class, so S6958 "Do not add then to a class" cannot fire).
+// limit() returns a Promise enriched with .maybeSingle() so both `await query.limit(n)` and
+// `await query.limit(n).maybeSingle()` work correctly.
+function buildMockQuery(table: string, db: Db) {
+  let action: "select" | "insert" = "select";
+  let headCount = false;
+  const eqs: Array<{ column: string; value: any }> = [];
+  let inFilter: { column: string; values: any[] } | null = null;
+  const isNullColumns = new Set<string>();
+  const gts: Array<{ column: string; value: any }> = [];
+  const orderSpecs: Array<{ column: string; ascending: boolean }> = [];
+  let limitN: number | null = null;
+  let insertPayload: Row | null = null;
 
-  constructor(private readonly table: string, private readonly db: Db) {}
-
-  select(_columns = "*", options?: { count?: "exact"; head?: boolean }) {
-    this.action = "select";
-    this.headCount = options?.head === true;
-    return this;
+  function rowHasScore(row: Row) {
+    return (db.lead_scores ?? []).some((s) => s.lead_id === row.id);
   }
 
-  insert(payload: Row) {
-    this.action = "insert";
-    this.payload = payload;
-    return this;
-  }
-
-  eq(column: string, value: any) {
-    this.eqs.push({ column, value });
-    return this;
-  }
-
-  in(column: string, values: any[]) {
-    this.inFilter = { column, values };
-    return this;
-  }
-
-  is(column: string, value: null) {
-    if (value === null) this.isNullColumns.add(column);
-    return this;
-  }
-
-  gt(column: string, value: any) {
-    this.gts.push({ column, value });
-    return this;
-  }
-
-  order(column: string, options?: { ascending?: boolean }) {
-    this.orderSpecs.push({ column, ascending: options?.ascending ?? true });
-    return this;
-  }
-
-  limit(count: number) {
-    this.limitN = count;
-    return this;
-  }
-
-  maybeSingle() {
-    const rows = this.computeRows();
-    return Promise.resolve({ data: rows[0] ?? null, error: null });
-  }
-
-  private rowHasScore(row: Row) {
-    return (this.db.lead_scores ?? []).some((score) => score.lead_id === row.id);
-  }
-
-  private computeRows() {
-    let rows = [...(this.db[this.table] ?? [])];
-    rows = rows.filter((row) => this.eqs.every((f) => row[f.column] === f.value));
-    if (this.inFilter) rows = rows.filter((row) => this.inFilter!.values.includes(row[this.inFilter!.column]));
-    for (const col of this.isNullColumns) {
-      // Emulates PostgREST embedded `lead_scores()` + `.is("lead_scores", null)`.
-      if (col === "lead_scores") rows = rows.filter((row) => !this.rowHasScore(row));
+  function computeRows() {
+    let rows = [...(db[table] ?? [])];
+    rows = rows.filter((row) => eqs.every((f) => row[f.column] === f.value));
+    if (inFilter) rows = rows.filter((row) => inFilter!.values.includes(row[inFilter!.column]));
+    for (const col of isNullColumns) {
+      if (col === "lead_scores") rows = rows.filter((row) => !rowHasScore(row));
     }
-    rows = rows.filter((row) => this.gts.every((f) => new Date(row[f.column]).getTime() > new Date(f.value).getTime()));
-    if (this.orderSpecs.length > 0) {
+    rows = rows.filter((row) => gts.every((f) => new Date(row[f.column]).getTime() > new Date(f.value).getTime()));
+    if (orderSpecs.length > 0) {
       rows.sort((left, right) => {
-        for (const spec of this.orderSpecs) {
+        for (const spec of orderSpecs) {
           const l = String(left[spec.column] ?? "");
           const r = String(right[spec.column] ?? "");
           if (l !== r) return spec.ascending ? l.localeCompare(r) : r.localeCompare(l);
@@ -108,30 +59,65 @@ class MockQuery {
         return 0;
       });
     }
-    return this.limitN == null ? rows : rows.slice(0, this.limitN);
+    return limitN == null ? rows : rows.slice(0, limitN);
   }
 
-  private resolve() {
-    if (this.action === "insert") {
-      this.db[this.table] = this.db[this.table] ?? [];
-      this.db[this.table].push({ id: `${this.table}-${this.db[this.table].length + 1}`, ...this.payload });
+  function buildResult() {
+    if (action === "insert") {
+      db[table] = db[table] ?? [];
+      db[table].push({ id: `${table}-${db[table].length + 1}`, ...insertPayload });
       return { data: null, error: null };
     }
-    const rows = this.computeRows();
-    if (this.headCount) return { data: null, count: rows.length, error: null };
+    const rows = computeRows();
+    if (headCount) return { data: null, count: rows.length, error: null };
     return { data: rows, count: rows.length, error: null };
   }
 
-  then(onFulfilled: (value: any) => any, onRejected?: (reason: any) => any) {
-    return Promise.resolve(this.resolve()).then(onFulfilled, onRejected);
+  // Returns a Promise that also exposes .maybeSingle() so `limit(n).maybeSingle()` chains work.
+  // The `then` here is a plain object property, not a class method — S6958 does not apply.
+  function limitResult() {
+    const result = buildResult();
+    const rows = Array.isArray((result as any).data) ? (result as any).data as Row[] : [];
+    return Object.assign(Promise.resolve(result), {
+      maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null })
+    });
   }
+
+  const query = {
+    select(_columns = "*", options?: { count?: "exact"; head?: boolean }) {
+      action = "select";
+      headCount = options?.head === true;
+      return query;
+    },
+    insert(payload: Row) {
+      action = "insert";
+      insertPayload = payload;
+      return Promise.resolve(buildResult());
+    },
+    eq(column: string, value: any) {
+      eqs.push({ column, value });
+      // head-count queries are terminal after eq (PostgREST behaviour).
+      return headCount ? Promise.resolve(buildResult()) : query;
+    },
+    in(column: string, values: any[]) { inFilter = { column, values }; return query; },
+    is(column: string, value: null) { if (value === null) isNullColumns.add(column); return query; },
+    gt(column: string, value: any) { gts.push({ column, value }); return query; },
+    order(column: string, options?: { ascending?: boolean }) {
+      orderSpecs.push({ column, ascending: options?.ascending ?? true });
+      return query;
+    },
+    limit(count: number) { limitN = count; return limitResult(); },
+    maybeSingle() { return Promise.resolve({ data: computeRows()[0] ?? null, error: null }); }
+  };
+
+  return query;
 }
 
 function createMockClient(db: Db, rpcResponses: Record<string, (args: any) => any>) {
   return {
     from(table: string) {
       if (!db[table]) db[table] = [];
-      return new MockQuery(table, db);
+      return buildMockQuery(table, db);
     },
     rpc(name: string, args: any) {
       const handler = rpcResponses[name];

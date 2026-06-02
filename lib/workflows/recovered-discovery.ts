@@ -386,6 +386,58 @@ type ContinueRunResult = {
   error_message?: string;
 };
 
+type WorkerAggregate = {
+  runs_processed: number;
+  leads_processed: number;
+  enriched: number;
+  scored: number;
+  failed: number;
+  finalized: number;
+};
+
+async function processOneRun(
+  run: { id: string; campaign_id: string | null },
+  perRunLimit: number,
+  processableStatuses: string[],
+  dryRun: boolean,
+  aggregate: WorkerAggregate
+): Promise<ContinueRunResult> {
+  const counts = emptyCounts();
+  const perLeadResults: PerLeadResult[] = [];
+  await logRunEvent(run.id, run.campaign_id ?? null, "recovery_batch_started", "started", {
+    dry_run: dryRun,
+    limit: perRunLimit
+  });
+
+  const leads = await selectProcessableLeads(run.id, processableStatuses, perRunLimit);
+  await processLeadBatch(leads, run.id, counts, perLeadResults, dryRun);
+
+  aggregate.runs_processed += 1;
+  aggregate.leads_processed += counts.processed;
+  aggregate.enriched += counts.enriched;
+  aggregate.scored += counts.scored;
+  aggregate.failed += counts.failed;
+
+  await logRunEvent(run.id, run.campaign_id ?? null, "recovery_batch_completed", "completed", {
+    dry_run: dryRun,
+    ...counts
+  });
+
+  let finalized = false;
+  let awaitingWf04 = false;
+  if (!dryRun) {
+    const remaining = await selectProcessableLeads(run.id, processableStatuses, 1);
+    if (remaining.length === 0) {
+      const outcome = await finalizeRunAfterProcessing(run.id, run.campaign_id ?? null);
+      finalized = outcome.finalized;
+      awaitingWf04 = outcome.routeableScored > 0;
+      if (finalized) aggregate.finalized += 1;
+    }
+  }
+
+  return { run_id: run.id, result: "processed", processed: counts.processed, enriched: counts.enriched, scored: counts.scored, failed: counts.failed, finalized, awaiting_wf04: awaitingWf04 };
+}
+
 // Bounded, resumable worker. Finds `running` discovery runs and processes a small batch per run
 // under a runtime guard, finalizing any run whose WF-02/WF-03 work is complete. Safe to call
 // repeatedly (Vercel Cron or a lightweight n8n scheduler). n8n must NOT own WF-02/WF-03 logic;
@@ -396,8 +448,7 @@ export async function continueDiscoveryProcessing(input: ContinueDiscoveryInput 
   const maxRuns = clampInt(input.max_runs, defaultMaxRuns, 1, maxRunsCap);
   const maxRuntimeMs = clampInt(input.max_runtime_ms, defaultMaxRuntimeMs, minRuntimeMs, maxRuntimeCap);
   const dryRun = input.dry_run === true;
-  const includeReviewPending = input.include_review_pending === true;
-  const processableStatuses = resolveProcessableStatuses(includeReviewPending);
+  const processableStatuses = resolveProcessableStatuses(input.include_review_pending === true);
 
   const supabase = createSupabaseServiceClient();
   const { data: runs, error } = await supabase
@@ -409,15 +460,7 @@ export async function continueDiscoveryProcessing(input: ContinueDiscoveryInput 
 
   if (error) throw new Error(error.message);
 
-  const aggregate = {
-    runs_seen: runs?.length ?? 0,
-    runs_processed: 0,
-    leads_processed: 0,
-    enriched: 0,
-    scored: 0,
-    failed: 0,
-    finalized: 0
-  };
+  const aggregate: WorkerAggregate = { runs_processed: 0, leads_processed: 0, enriched: 0, scored: 0, failed: 0, finalized: 0 };
   const perRun: ContinueRunResult[] = [];
 
   for (const run of runs ?? []) {
@@ -430,54 +473,8 @@ export async function continueDiscoveryProcessing(input: ContinueDiscoveryInput 
     let leased = false;
     try {
       leased = await tryAcquireRecoveryLease(run.id, leaseToken);
-      if (!leased) {
-        perRun.push({ run_id: run.id, result: "lease_unavailable" });
-        continue;
-      }
-
-      const counts = emptyCounts();
-      const perLeadResults: PerLeadResult[] = [];
-      await logRunEvent(run.id, run.campaign_id ?? null, "recovery_batch_started", "started", {
-        dry_run: dryRun,
-        limit: perRunLimit
-      });
-
-      const leads = await selectProcessableLeads(run.id, processableStatuses, perRunLimit);
-      await processLeadBatch(leads, run.id, counts, perLeadResults, dryRun);
-
-      aggregate.runs_processed += 1;
-      aggregate.leads_processed += counts.processed;
-      aggregate.enriched += counts.enriched;
-      aggregate.scored += counts.scored;
-      aggregate.failed += counts.failed;
-
-      await logRunEvent(run.id, run.campaign_id ?? null, "recovery_batch_completed", "completed", {
-        dry_run: dryRun,
-        ...counts
-      });
-
-      let finalized = false;
-      let awaitingWf04 = false;
-      if (!dryRun) {
-        const remaining = await selectProcessableLeads(run.id, processableStatuses, 1);
-        if (remaining.length === 0) {
-          const outcome = await finalizeRunAfterProcessing(run.id, run.campaign_id ?? null);
-          finalized = outcome.finalized;
-          awaitingWf04 = outcome.routeableScored > 0;
-          if (finalized) aggregate.finalized += 1;
-        }
-      }
-
-      perRun.push({
-        run_id: run.id,
-        result: "processed",
-        processed: counts.processed,
-        enriched: counts.enriched,
-        scored: counts.scored,
-        failed: counts.failed,
-        finalized,
-        awaiting_wf04: awaitingWf04
-      });
+      if (!leased) { perRun.push({ run_id: run.id, result: "lease_unavailable" }); continue; }
+      perRun.push(await processOneRun(run, perRunLimit, processableStatuses, dryRun, aggregate));
     } catch (workerError) {
       perRun.push({ run_id: run.id, result: "failed", error_message: errorMessage(workerError) });
     } finally {
@@ -491,6 +488,7 @@ export async function continueDiscoveryProcessing(input: ContinueDiscoveryInput 
     max_runs: maxRuns,
     max_runtime_ms: maxRuntimeMs,
     runtime_ms: Date.now() - startTime,
+    runs_seen: runs?.length ?? 0,
     ...aggregate,
     per_run: perRun
   };
