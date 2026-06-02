@@ -164,7 +164,8 @@ assert(
 for (const routePath of [
   "app/api/workflows/lead-intake/route.ts",
   "app/api/workflows/discovery/run/route.ts",
-  "app/api/workflows/discovery/process-recovered/route.ts"
+  "app/api/workflows/discovery/process-recovered/route.ts",
+  "app/api/workflows/discovery/continue/route.ts"
 ]) {
   assert(fs.existsSync(path.join(root, routePath)), `${routePath} does not exist`);
   assert(readText(routePath).includes("requireWorkflowAuth"), `${routePath} must enforce workflow auth`);
@@ -281,14 +282,38 @@ for (const [earlier, later] of [
   );
 }
 
-// queue_manual_review_item must preserve existing pending reviews unless explicitly forced.
+// Issue #52 RPC ambiguity + worker hotfix (migration 016): exactly one canonical
+// queue_manual_review_item RPC, force behavior via a differently named function, and the
+// review-pending sync helper for run finalization.
+const rpcMigration = readText("supabase/migrations/016_issue_52_rpc_ambiguity_and_worker.sql").toLowerCase();
 assert(
-  hotfixMigration.includes("p_force boolean default false"),
-  "queue_manual_review_item must expose an explicit force/replace parameter"
+  rpcMigration.includes("drop function if exists public.queue_manual_review_item(uuid, text, text, boolean)"),
+  "migration 016 must drop the ambiguous 4-arg queue_manual_review_item overload"
 );
 assert(
-  /reason = case when v_force then excluded\.reason else manual_review_queue\.reason end/.test(hotfixMigration),
-  "queue_manual_review_item must preserve an existing pending review reason/priority by default"
+  rpcMigration.includes("drop function if exists public.queue_manual_review_item(uuid, text, text, text, jsonb)"),
+  "migration 016 must drop the legacy 5-arg queue_manual_review_item overload"
+);
+assert(
+  /create or replace function public\.queue_manual_review_item_sync\(/.test(rpcMigration) &&
+    rpcMigration.includes("p_force boolean default false"),
+  "migration 016 must define the shared queue_manual_review_item_sync(... p_force) implementation"
+);
+assert(
+  /reason = case when v_force then excluded\.reason else manual_review_queue\.reason end/.test(rpcMigration),
+  "queue_manual_review_item_sync must preserve an existing pending review reason/priority unless forced"
+);
+assert(
+  rpcMigration.includes("create or replace function public.queue_manual_review_item_force("),
+  "migration 016 must expose force behavior via a differently named queue_manual_review_item_force function"
+);
+assert(
+  !/create or replace function public\.queue_manual_review_item\([^)]*p_force/.test(rpcMigration),
+  "queue_manual_review_item must not be re-created as an overloaded (… boolean) signature"
+);
+assert(
+  rpcMigration.includes("create or replace function public.sync_run_review_pending("),
+  "migration 016 must define sync_run_review_pending for run finalization review sync"
 );
 
 // Draft uniqueness backstop for the persist_draft_or_block ON CONFLICT target.

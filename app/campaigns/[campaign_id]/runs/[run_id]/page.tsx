@@ -22,8 +22,16 @@ function formatStatus(value: string | null | undefined) {
 function statusTone(status: string, isStale = false) {
   const normalized = status.toLowerCase();
   if (isStale || normalized.includes("failed") || normalized.includes("stuck")) return "danger" as const;
-  if (normalized.includes("completed")) return "success" as const;
-  if (normalized.includes("running") || normalized.includes("quota") || normalized.includes("paused")) return "warning" as const;
+  if (normalized.includes("awaiting")) return "info" as const;
+  if (normalized.includes("complete")) return "success" as const;
+  if (
+    normalized.includes("processing") ||
+    normalized.includes("running") ||
+    normalized.includes("quota") ||
+    normalized.includes("paused")
+  ) {
+    return "warning" as const;
+  }
   return "muted" as const;
 }
 

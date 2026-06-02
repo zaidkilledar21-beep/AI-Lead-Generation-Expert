@@ -6,6 +6,41 @@
 ## Current task
 - Implement GitHub Issue #52 permanent pipeline hardening through backend WF-01/WF-02/WF-03, n8n WF-04 routing, and n8n WF-05 draft generation.
 
+## Issue #52 holistic follow-up: RPC ambiguity + resumable worker (migration 016)
+- Root causes:
+  - WF-04 failed at `Route Scored Lead` with `queue_manual_review_item(uuid, unknown, unknown) is
+    not unique`. Migration 015 added a 4-arg `(uuid,text,text,boolean default false)` overload that
+    collided with the 3-arg form for `unknown`-literal calls; a legacy 5-arg overload also shared
+    the name.
+  - Backend WF-01/WF-02/WF-03 processed all leads in one request and timed out, leaving
+    `discovery_runs` stuck `running` with `completed_at = null` and leads at `new`; recovery never
+    finalized the parent run.
+- Implemented hotfix (migration `016_issue_52_rpc_ambiguity_and_worker.sql`, additive):
+  - Dropped the 4-arg boolean and legacy 5-arg overloads. Single canonical
+    `queue_manual_review_item(uuid,text,text)` (preserve-by-default) + differently named
+    `queue_manual_review_item_force(uuid,text,text)`; both delegate to a private
+    `queue_manual_review_item_sync(uuid,text,text,boolean)` impl. All four are service_role-only
+    (also fixed a prior anon/authenticated grant drift on the 3-arg).
+  - Added `sync_run_review_pending(uuid)` (scored→review_pending sync, never overriding terminal),
+    and worker indexes `leads (discovery_run_id, status)` + `discovery_runs (status, started_at)`.
+  - New bounded resumable worker `POST /api/workflows/discovery/continue` →
+    `continueDiscoveryProcessing()`: finds running runs, processes small bounded batches, skips
+    enriched/scored leads, uses leases, runtime-guarded, finalizes via the reused
+    `safeFinalizeDiscoveryRun`, emits `recovery_batch_started/completed`, `run_finalized`,
+    `awaiting_wf04`. Backend never triggers WF-04.
+  - Run detail (`lib/crm/queries.ts` + run page): "Stuck" now requires no recent event AND no
+    active lease; added "Processing discovery", "Processing enrichment & scoring",
+    "Backend complete: awaiting WF-04 routing".
+- Migration 016 applied to production via Supabase MCP and validated: exactly one
+  `queue_manual_review_item` (count=1), the previously failing unknown-literal call now plans
+  cleanly, all manual-review RPCs + worker helper are service_role-only, no missing required
+  functions, worker indexes present.
+- n8n WF-04/WF-05 JSON unchanged (same RPC name + params) — **no re-import required**.
+- Validation: lint, typecheck, `npm test` (38 tests / 12 files), `validate:workflows`, build all
+  pass; `git diff --check` clean (LF→CRLF warnings only).
+- Remaining: schedule `/api/workflows/discovery/continue` (Vercel Cron or n8n scheduler, ~2-5 min)
+  and run one fresh campaign to confirm auto-finalization + WF-04 routing end-to-end.
+
 ## Issue #52 hotfix follow-up (post PR #53)
 - Root cause: PR #53 left four dedup/ordering gaps and one status-regression risk.
   - `wf04_scored_leads` only filtered on `status = 'scored'`, so leads already holding a pending

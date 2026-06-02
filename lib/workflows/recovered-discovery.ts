@@ -1,15 +1,32 @@
 import { randomUUID } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { enrichLead } from "@/lib/workflows/enrichment";
+import { safeFinalizeDiscoveryRun } from "@/lib/workflows/lead-discovery";
 import { scoreLead } from "@/lib/workflows/scoring";
 
 const defaultLimit = 5;
 const maxLimit = 10;
 const defaultProcessableStatuses = ["new", "enriched"];
 
+// Bounded-worker defaults. The worker stops launching new per-run work once the runtime guard is
+// reached so it returns before the serverless timeout (route maxDuration = 300s).
+const defaultMaxRuns = 5;
+const maxRunsCap = 20;
+const defaultMaxRuntimeMs = 240_000;
+const maxRuntimeCap = 280_000;
+const minRuntimeMs = 10_000;
+
 type ProcessRecoveredDiscoveryInput = {
   discovery_run_id?: string;
   limit?: number;
+  dry_run?: boolean;
+  include_review_pending?: boolean;
+};
+
+type ContinueDiscoveryInput = {
+  limit?: number;
+  max_runs?: number;
+  max_runtime_ms?: number;
   dry_run?: boolean;
   include_review_pending?: boolean;
 };
@@ -39,9 +56,45 @@ type PerLeadResult = {
   error_message?: string;
 };
 
+function clampInt(value: number | undefined, fallback: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(Math.max(Math.trunc(value ?? fallback), min), max);
+}
+
 function normalizeLimit(limit?: number) {
-  if (!Number.isFinite(limit)) return defaultLimit;
-  return Math.min(Math.max(Math.trunc(limit ?? defaultLimit), 1), maxLimit);
+  return clampInt(limit, defaultLimit, 1, maxLimit);
+}
+
+function emptyCounts(): BatchCounts {
+  return { processed: 0, enriched: 0, enrichment_failed: 0, scored: 0, failed: 0 };
+}
+
+function resolveProcessableStatuses(includeReviewPending: boolean) {
+  return includeReviewPending ? [...defaultProcessableStatuses, "review_pending"] : defaultProcessableStatuses;
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown recovered lead processing error";
+}
+
+async function logRunEvent(
+  discoveryRunId: string,
+  campaignId: string | null,
+  eventType: string,
+  status: "started" | "completed" | "failed",
+  payload: Record<string, unknown>
+) {
+  const supabase = createSupabaseServiceClient();
+  const { error } = await supabase.from("workflow_events").insert({
+    workflow_name: "WF-02/WF-03 Recovered Discovery Processing",
+    campaign_id: campaignId,
+    discovery_run_id: discoveryRunId,
+    event_type: eventType,
+    status,
+    payload: { discovery_run_id: discoveryRunId, ...payload }
+  });
+
+  if (error) throw new Error(error.message);
 }
 
 async function logBatchEvent(
@@ -51,24 +104,21 @@ async function logBatchEvent(
   counts: BatchCounts,
   dryRun: boolean
 ) {
-  const supabase = createSupabaseServiceClient();
-  const { error } = await supabase.from("workflow_events").insert({
-    workflow_name: "WF-02/WF-03 Recovered Discovery Processing",
-    campaign_id: campaignId,
-    discovery_run_id: discoveryRunId,
-    event_type: eventType,
-    status: eventType === "recovered_processing_started" ? "started" : "completed",
-    payload: {
-      discovery_run_id: discoveryRunId,
-      dry_run: dryRun,
-      ...counts
-    }
-  });
-
-  if (error) throw new Error(error.message);
+  await logRunEvent(
+    discoveryRunId,
+    campaignId,
+    eventType,
+    eventType === "recovered_processing_started" ? "started" : "completed",
+    { dry_run: dryRun, ...counts }
+  );
 }
 
 async function acquireRecoveryLease(discoveryRunId: string, leaseToken: string) {
+  const acquired = await tryAcquireRecoveryLease(discoveryRunId, leaseToken);
+  if (!acquired) throw new Error("Recovered discovery processing is already running for this discovery_run_id");
+}
+
+async function tryAcquireRecoveryLease(discoveryRunId: string, leaseToken: string) {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase.rpc("acquire_discovery_recovery_lease", {
     p_discovery_run_id: discoveryRunId,
@@ -77,7 +127,7 @@ async function acquireRecoveryLease(discoveryRunId: string, leaseToken: string) 
   });
 
   if (error) throw new Error(error.message);
-  if (data !== true) throw new Error("Recovered discovery processing is already running for this discovery_run_id");
+  return data === true;
 }
 
 async function releaseRecoveryLease(discoveryRunId: string, leaseToken: string) {
@@ -121,7 +171,25 @@ async function getLatestEnrichmentStatusSafely(leadId: string) {
   }
 }
 
-async function logLeadProcessingFailure(lead: RecoveredLead, discoveryRunId: string, errorMessage: string) {
+// Bounded, indexed-filter selection of leads still needing WF-02/WF-03 work for one run.
+async function selectProcessableLeads(discoveryRunId: string, processableStatuses: string[], limit: number) {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id,business_name,status,campaign_id,lead_scores()")
+    .eq("discovery_run_id", discoveryRunId)
+    .in("status", processableStatuses)
+    .is("lead_scores", null)
+    .order("updated_at", { ascending: true })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as RecoveredLead[];
+}
+
+async function logLeadProcessingFailure(lead: RecoveredLead, discoveryRunId: string, message: string) {
   const supabase = createSupabaseServiceClient();
   const { error } = await supabase.from("workflow_events").insert({
     workflow_name: "WF-02/WF-03 Recovered Discovery Processing",
@@ -130,20 +198,16 @@ async function logLeadProcessingFailure(lead: RecoveredLead, discoveryRunId: str
     discovery_run_id: discoveryRunId,
     event_type: "recovered_lead_processing_failed",
     status: "failed",
-    error_message: errorMessage,
+    error_message: message,
     payload: {
       lead_id: lead.id,
       campaign_id: lead.campaign_id ?? null,
       discovery_run_id: discoveryRunId,
-      error_message: errorMessage
+      error_message: message
     }
   });
 
   if (error) throw new Error(error.message);
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown recovered lead processing error";
 }
 
 async function processLead(lead: RecoveredLead, counts: BatchCounts): Promise<PerLeadResult> {
@@ -189,54 +253,15 @@ async function processLead(lead: RecoveredLead, counts: BatchCounts): Promise<Pe
   };
 }
 
-export async function processRecoveredDiscoveryLeads(input: ProcessRecoveredDiscoveryInput) {
-  const discoveryRunId = input.discovery_run_id?.trim();
-  if (!discoveryRunId) throw new Error("discovery_run_id is required");
-
-  const limit = normalizeLimit(input.limit);
-  const dryRun = input.dry_run === true;
-  const includeReviewPending = input.include_review_pending === true;
-  const processableStatuses = includeReviewPending
-    ? [...defaultProcessableStatuses, "review_pending"]
-    : defaultProcessableStatuses;
-  const supabase = createSupabaseServiceClient();
-  const { data: run, error: runError } = await supabase
-    .from("discovery_runs")
-    .select("id,campaign_id")
-    .eq("id", discoveryRunId)
-    .maybeSingle();
-
-  if (runError) throw new Error(runError.message);
-  if (!run) throw new Error("Discovery run not found");
-  const leaseToken = randomUUID();
-  await acquireRecoveryLease(discoveryRunId, leaseToken);
-
-  try {
-  const { data: leads, error: leadsError } = await supabase
-    .from("leads")
-    .select("id,business_name,status,campaign_id,lead_scores()")
-    .eq("discovery_run_id", discoveryRunId)
-    .in("status", processableStatuses)
-    .is("lead_scores", null)
-    .order("updated_at", { ascending: true })
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true })
-    .limit(limit);
-
-  if (leadsError) throw new Error(leadsError.message);
-
-  const counts: BatchCounts = {
-    processed: 0,
-    enriched: 0,
-    enrichment_failed: 0,
-    scored: 0,
-    failed: 0
-  };
-  const perLeadResults: PerLeadResult[] = [];
-
-  await logBatchEvent(discoveryRunId, run.campaign_id ?? null, "recovered_processing_started", counts, dryRun);
-
-  for (const lead of leads ?? []) {
+// Shared per-lead loop used by both the single-run endpoint and the bounded continue worker.
+async function processLeadBatch(
+  leads: RecoveredLead[],
+  discoveryRunId: string,
+  counts: BatchCounts,
+  perLeadResults: PerLeadResult[],
+  dryRun: boolean
+) {
+  for (const lead of leads) {
     counts.processed += 1;
     if (dryRun) {
       perLeadResults.push({
@@ -267,18 +292,204 @@ export async function processRecoveredDiscoveryLeads(input: ProcessRecoveredDisc
       });
     }
   }
+}
 
-  await logBatchEvent(discoveryRunId, run.campaign_id ?? null, "recovered_processing_completed", counts, dryRun);
+async function countRouteableScored(discoveryRunId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { count, error } = await supabase
+    .from("wf04_scored_leads")
+    .select("id", { count: "exact", head: true })
+    .eq("discovery_run_id", discoveryRunId);
 
-  return {
-    discovery_run_id: discoveryRunId,
-    dry_run: dryRun,
-    include_review_pending: includeReviewPending,
-    limit,
-    ...counts,
-    perLeadResults
-  };
+  if (error) return 0;
+  return count ?? 0;
+}
+
+async function syncRunReviewPending(discoveryRunId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase.rpc("sync_run_review_pending", { p_discovery_run_id: discoveryRunId });
+  if (error) throw new Error(error.message);
+  return typeof data === "number" ? data : 0;
+}
+
+// Reconcile + finalize the parent run when no WF-02/WF-03 work remains. Reuses the canonical
+// finalizer from lead-discovery so counts, completed_at, duration, and run_finalized events match
+// the synchronous discovery path exactly.
+async function finalizeRunAfterProcessing(discoveryRunId: string, campaignId: string | null) {
+  if (!campaignId) return { finalized: false, routeableScored: 0, reviewSynced: 0 };
+
+  const reviewSynced = await syncRunReviewPending(discoveryRunId);
+  const result = await safeFinalizeDiscoveryRun({ id: campaignId }, discoveryRunId, {}, [], "completed");
+  const routeableScored = await countRouteableScored(discoveryRunId);
+
+  if (result.finalized && routeableScored > 0) {
+    await logRunEvent(discoveryRunId, campaignId, "awaiting_wf04", "completed", {
+      routeable_scored: routeableScored,
+      review_synced: reviewSynced
+    });
+  }
+
+  return { finalized: result.finalized, routeableScored, reviewSynced };
+}
+
+export async function processRecoveredDiscoveryLeads(input: ProcessRecoveredDiscoveryInput) {
+  const discoveryRunId = input.discovery_run_id?.trim();
+  if (!discoveryRunId) throw new Error("discovery_run_id is required");
+
+  const limit = normalizeLimit(input.limit);
+  const dryRun = input.dry_run === true;
+  const includeReviewPending = input.include_review_pending === true;
+  const processableStatuses = resolveProcessableStatuses(includeReviewPending);
+  const supabase = createSupabaseServiceClient();
+  const { data: run, error: runError } = await supabase
+    .from("discovery_runs")
+    .select("id,campaign_id")
+    .eq("id", discoveryRunId)
+    .maybeSingle();
+
+  if (runError) throw new Error(runError.message);
+  if (!run) throw new Error("Discovery run not found");
+  const leaseToken = randomUUID();
+  await acquireRecoveryLease(discoveryRunId, leaseToken);
+
+  try {
+    const leads = await selectProcessableLeads(discoveryRunId, processableStatuses, limit);
+    const counts = emptyCounts();
+    const perLeadResults: PerLeadResult[] = [];
+
+    await logBatchEvent(discoveryRunId, run.campaign_id ?? null, "recovered_processing_started", counts, dryRun);
+    await processLeadBatch(leads, discoveryRunId, counts, perLeadResults, dryRun);
+    await logBatchEvent(discoveryRunId, run.campaign_id ?? null, "recovered_processing_completed", counts, dryRun);
+
+    return {
+      discovery_run_id: discoveryRunId,
+      dry_run: dryRun,
+      include_review_pending: includeReviewPending,
+      limit,
+      ...counts,
+      perLeadResults
+    };
   } finally {
     await releaseRecoveryLease(discoveryRunId, leaseToken);
   }
+}
+
+type ContinueRunResult = {
+  run_id: string;
+  result: string;
+  processed?: number;
+  enriched?: number;
+  scored?: number;
+  failed?: number;
+  finalized?: boolean;
+  awaiting_wf04?: boolean;
+  error_message?: string;
+};
+
+type WorkerAggregate = {
+  runs_processed: number;
+  leads_processed: number;
+  enriched: number;
+  scored: number;
+  failed: number;
+  finalized: number;
+};
+
+async function processOneRun(
+  run: { id: string; campaign_id: string | null },
+  perRunLimit: number,
+  processableStatuses: string[],
+  dryRun: boolean,
+  aggregate: WorkerAggregate
+): Promise<ContinueRunResult> {
+  const counts = emptyCounts();
+  const perLeadResults: PerLeadResult[] = [];
+  await logRunEvent(run.id, run.campaign_id ?? null, "recovery_batch_started", "started", {
+    dry_run: dryRun,
+    limit: perRunLimit
+  });
+
+  const leads = await selectProcessableLeads(run.id, processableStatuses, perRunLimit);
+  await processLeadBatch(leads, run.id, counts, perLeadResults, dryRun);
+
+  aggregate.runs_processed += 1;
+  aggregate.leads_processed += counts.processed;
+  aggregate.enriched += counts.enriched;
+  aggregate.scored += counts.scored;
+  aggregate.failed += counts.failed;
+
+  await logRunEvent(run.id, run.campaign_id ?? null, "recovery_batch_completed", "completed", {
+    dry_run: dryRun,
+    ...counts
+  });
+
+  let finalized = false;
+  let awaitingWf04 = false;
+  if (!dryRun) {
+    const remaining = await selectProcessableLeads(run.id, processableStatuses, 1);
+    if (remaining.length === 0) {
+      const outcome = await finalizeRunAfterProcessing(run.id, run.campaign_id ?? null);
+      finalized = outcome.finalized;
+      awaitingWf04 = outcome.routeableScored > 0;
+      if (finalized) aggregate.finalized += 1;
+    }
+  }
+
+  return { run_id: run.id, result: "processed", processed: counts.processed, enriched: counts.enriched, scored: counts.scored, failed: counts.failed, finalized, awaiting_wf04: awaitingWf04 };
+}
+
+// Bounded, resumable worker. Finds `running` discovery runs and processes a small batch per run
+// under a runtime guard, finalizing any run whose WF-02/WF-03 work is complete. Safe to call
+// repeatedly (Vercel Cron or a lightweight n8n scheduler). n8n must NOT own WF-02/WF-03 logic;
+// it may only schedule this backend worker.
+export async function continueDiscoveryProcessing(input: ContinueDiscoveryInput = {}) {
+  const startTime = Date.now();
+  const perRunLimit = normalizeLimit(input.limit);
+  const maxRuns = clampInt(input.max_runs, defaultMaxRuns, 1, maxRunsCap);
+  const maxRuntimeMs = clampInt(input.max_runtime_ms, defaultMaxRuntimeMs, minRuntimeMs, maxRuntimeCap);
+  const dryRun = input.dry_run === true;
+  const processableStatuses = resolveProcessableStatuses(input.include_review_pending === true);
+
+  const supabase = createSupabaseServiceClient();
+  const { data: runs, error } = await supabase
+    .from("discovery_runs")
+    .select("id,campaign_id")
+    .eq("status", "running")
+    .order("started_at", { ascending: true })
+    .limit(maxRuns);
+
+  if (error) throw new Error(error.message);
+
+  const aggregate: WorkerAggregate = { runs_processed: 0, leads_processed: 0, enriched: 0, scored: 0, failed: 0, finalized: 0 };
+  const perRun: ContinueRunResult[] = [];
+
+  for (const run of runs ?? []) {
+    if (Date.now() - startTime > maxRuntimeMs) {
+      perRun.push({ run_id: run.id, result: "time_budget_reached" });
+      break;
+    }
+
+    const leaseToken = randomUUID();
+    let leased = false;
+    try {
+      leased = await tryAcquireRecoveryLease(run.id, leaseToken);
+      if (!leased) { perRun.push({ run_id: run.id, result: "lease_unavailable" }); continue; }
+      perRun.push(await processOneRun(run, perRunLimit, processableStatuses, dryRun, aggregate));
+    } catch (workerError) {
+      perRun.push({ run_id: run.id, result: "failed", error_message: errorMessage(workerError) });
+    } finally {
+      if (leased) await releaseRecoveryLease(run.id, leaseToken);
+    }
+  }
+
+  return {
+    dry_run: dryRun,
+    limit: perRunLimit,
+    max_runs: maxRuns,
+    max_runtime_ms: maxRuntimeMs,
+    runtime_ms: Date.now() - startTime,
+    runs_seen: runs?.length ?? 0,
+    ...aggregate,
+    per_run: perRun
+  };
 }

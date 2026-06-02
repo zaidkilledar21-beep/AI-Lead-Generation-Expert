@@ -53,9 +53,25 @@ function numberFrom(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function isStaleRunningRun(run: Record<string, any> | null | undefined) {
+const STALE_RUNNING_MS = 15 * 60 * 1000;
+
+type RunProgressContext = {
+  lastEventAt?: string | null;
+  hasActiveLease?: boolean;
+  routeableScoredCount?: number;
+  processingLeadCount?: number;
+};
+
+// A running run is only "stuck" when there has been no progress past the stale threshold AND
+// there is no active recovery lease or recent workflow event. Reaching WF-03 and staying
+// `running` while a worker keeps emitting events or holds a lease is healthy, not stuck.
+function isStaleRunningRun(run: Record<string, any> | null | undefined, context: RunProgressContext = {}) {
   if (!run || run.status !== "running" || !run.started_at || run.completed_at) return false;
-  return Date.now() - new Date(run.started_at).getTime() > 15 * 60 * 1000;
+  if (context.hasActiveLease) return false;
+  const lastProgressSource = context.lastEventAt ?? run.started_at;
+  const lastProgress = new Date(lastProgressSource).getTime();
+  if (!Number.isFinite(lastProgress)) return false;
+  return Date.now() - lastProgress > STALE_RUNNING_MS;
 }
 
 function payloadSummary(payload: unknown) {
@@ -124,16 +140,20 @@ function formatReason(value: string | null | undefined) {
   return value ? value.replaceAll("_", " ") : null;
 }
 
-function userRunStatus(run: Record<string, any>) {
+function runningUserStatus(run: Record<string, any>, context: RunProgressContext) {
+  if (run.completed_at) return Boolean(run.error_message) ? "Failed" : "Completed";
+  if (isStaleRunningRun(run, context)) return "Stuck";
+  if ((context.processingLeadCount ?? 0) > 0 || context.hasActiveLease) return "Processing enrichment & scoring";
+  return "Processing discovery";
+}
+
+function userRunStatus(run: Record<string, any>, context: RunProgressContext = {}) {
   const status = toStr(run.status, "completed");
   const promoted = numberFrom(run.candidates_promoted);
   const hasError = Boolean(run.error_message);
-  if (status === "running" && run.completed_at) return hasError ? "Failed" : "Completed";
-  if (isStaleRunningRun(run)) return "Stuck";
-  if (status === "quota_exhausted" && promoted > 0 && !hasError) return "Completed: quota reached";
-  if (status === "quota_exhausted") return "Quota reached: no new leads";
-  if (status === "completed") return "Completed";
-  if (status === "running") return "Running";
+  if (status === "running") return runningUserStatus(run, context);
+  if (status === "quota_exhausted") return promoted > 0 && !hasError ? "Completed: quota reached" : "Quota reached: no new leads";
+  if (status === "completed") return (context.routeableScoredCount ?? 0) > 0 ? "Backend complete: awaiting WF-04 routing" : "Completed";
   if (status === "failed") return "Failed";
   if (status === "paused") return "Paused";
   return status.replaceAll("_", " ");
@@ -843,7 +863,7 @@ export async function getCampaignRunDetailData(campaignId: string, runId: string
 
   if (campaignResult.error || runResult.error || !campaignResult.data || !runResult.data) return null;
 
-  const [eventsResult, leadsResult] = await Promise.all([
+  const [eventsResult, leadsResult, leaseResult] = await Promise.all([
     supabase
       .from("workflow_events")
       .select("id,discovery_run_id,event_type,status,error_message,payload,created_at")
@@ -856,7 +876,13 @@ export async function getCampaignRunDetailData(campaignId: string, runId: string
       .eq("campaign_id", campaignId)
       .eq("discovery_run_id", runId)
       .order("created_at", { ascending: false })
-      .limit(250)
+      .limit(250),
+    supabase
+      .from("discovery_recovery_leases")
+      .select("discovery_run_id,expires_at")
+      .eq("discovery_run_id", runId)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle()
   ]);
 
   const supportWarnings = [
@@ -886,6 +912,13 @@ export async function getCampaignRunDetailData(campaignId: string, runId: string
   });
   const missingEmailBlocks = leads.filter((lead) => lead.queueStatus === "blocked" && lead.queuePauseReason === "missing_email").length;
 
+  // Run-progress context so the UI distinguishes healthy in-flight processing from a truly stuck run.
+  const lastEventAt = events.length > 0 ? toStr(events.at(-1)?.created_at) || null : null;
+  const hasActiveLease = Boolean(leaseResult.data);
+  const routeableScoredCount = leadsList.filter((lead) => toStr(lead.status) === "scored").length;
+  const processingLeadCount = leadsList.filter((lead) => ["new", "enriched"].includes(toStr(lead.status))).length;
+  const runProgress: RunProgressContext = { lastEventAt, hasActiveLease, routeableScoredCount, processingLeadCount };
+
   return {
     campaign: {
       id: campaignResult.data.id,
@@ -896,8 +929,8 @@ export async function getCampaignRunDetailData(campaignId: string, runId: string
       id: run.id,
       campaignId: run.campaign_id,
       status: run.status ?? "completed",
-      userStatus: userRunStatus(run),
-      isStale: isStaleRunningRun(run),
+      userStatus: userRunStatus(run, runProgress),
+      isStale: isStaleRunningRun(run, runProgress),
       startedAt: run.started_at ?? null,
       completedAt: run.completed_at ?? null,
       durationSeconds: numberFrom(run.duration_seconds),
