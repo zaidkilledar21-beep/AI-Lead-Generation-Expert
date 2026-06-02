@@ -6,6 +6,42 @@
 ## Current task
 - Implement GitHub Issue #52 permanent pipeline hardening through backend WF-01/WF-02/WF-03, n8n WF-04 routing, and n8n WF-05 draft generation.
 
+## Issue #52 hotfix follow-up (post PR #53)
+- Root cause: PR #53 left four dedup/ordering gaps and one status-regression risk.
+  - `wf04_scored_leads` only filtered on `status = 'scored'`, so leads already holding a pending
+    manual review, an outreach_queue row, or a draft could be re-routed into duplicate work.
+  - `wf05_due_queue_items.wf05_action` evaluated `block_missing_email` before the existing
+    draft/manual-review checks, so a queued item missing an email could block instead of skipping.
+  - `queue_manual_review_item` overwrote an existing pending review's reason/priority on every call.
+  - `email_drafts (lead_id, sequence_id, step_number)` uniqueness (the `persist_draft_or_block`
+    ON CONFLICT target) had no idempotent committed backstop outside the 001 table constraint.
+  - `scoreLead`'s existing/concurrent-score paths set `status = 'scored'` unconditionally, which
+    could regress already-routed/drafted/replied/closed leads.
+- Implemented hotfix (migration `015_issue_52_hotfix_followup.sql`, additive `create or replace`):
+  - Rebuilt `wf04_scored_leads` to exclude leads with a pending manual review, an existing
+    outreach_queue row, or any existing draft.
+  - Rebuilt `wf05_due_queue_items` with priority `block_missing_lead` → `skip_existing_draft` →
+    `skip_existing_manual_review` → `block_missing_email` → `block_invalid_lead_status` →
+    `generate_draft`.
+  - Rebuilt `queue_manual_review_item` to preserve an existing pending review by default; added a
+    4-arg overload with explicit `p_force boolean default false` and kept the 3-arg signature as a
+    `force => false` delegate. Duplicate protection (`manual_review_one_pending_per_lead_idx`) is
+    preserved. Granted the new overload to `service_role` only.
+  - Added idempotent `create unique index if not exists email_drafts_lead_sequence_step_uidx`
+    plus a manual duplicate-inspection comment (no destructive cleanup).
+  - `lib/workflows/scoring.ts`: existing/concurrent-score paths now only set `scored` when the
+    lead is pre-routing (`new`, `enriched`, `review_pending`, `scored`).
+  - Extended `scripts/validate-workflow-contracts.mjs`, `pass_6_contract_checks.sql`, and added
+    `tests/unit/scoring.test.ts` to cover these exact cases.
+- n8n JSON unchanged: `wf05_action` values and view columns are identical, so the WF-04/WF-05
+  importable contracts did not change.
+- Validation: lint, typecheck, `npm test` (35 tests / 12 files), `validate:workflows`, and build
+  all passed; `git diff --check` clean (LF→CRLF warnings only).
+- Remaining gap: migration `015` and `pass_6_contract_checks.sql` are not yet applied/run against
+  production (Supabase CLI unavailable here). `outreach_queue` keeps its existing
+  `unique (lead_id, sequence_id)` from 001 as the active-queue uniqueness; no new active-queue
+  constraint was added to avoid a destructive change against possible historical duplicates.
+
 ## Last completed work
 - Implemented Issue #52 DB-backed discovery promotion reload so persisted `details_fetched` candidates cannot remain stranded after the search loop.
 - Extended stale-run recovery to promote persisted candidates and resume backend enrichment/scoring for already-promoted leads without scores.

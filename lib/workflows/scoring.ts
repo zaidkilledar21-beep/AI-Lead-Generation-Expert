@@ -7,6 +7,20 @@ import type { ScoringOutput } from "@/lib/types";
 
 const scoringPromptVersion = "icp_scoring_v2";
 
+// Only an existing/concurrent score may re-assert `scored` when the lead is still pre-routing.
+// Never regress leads already advanced past scoring (queued, drafted, pending_approval,
+// in_sequence, replied_*, closed_*, archived, unsubscribed, bounced, blocked, ...) back to scored.
+const PRE_ROUTING_LEAD_STATUSES = new Set(["new", "enriched", "review_pending", "scored"]);
+
+async function markScoredIfPreRouting(
+  supabase: ReturnType<typeof createSupabaseServiceClient>,
+  leadId: string,
+  currentStatus: string | null | undefined
+) {
+  if (!PRE_ROUTING_LEAD_STATUSES.has(currentStatus ?? "")) return;
+  await supabase.from("leads").update({ status: "scored" }).eq("id", leadId);
+}
+
 function deriveBand(totalScore: number): ScoringOutput["band_recommendation"] {
   if (totalScore >= 76) return "A";
   if (totalScore >= 51) return "B";
@@ -83,7 +97,7 @@ export async function scoreLead(leadId: string) {
   if (!lead) throw new Error("Lead not found");
   if (existingScoreError) throw new Error(existingScoreError.message);
   if (existingScore) {
-    await supabase.from("leads").update({ status: "scored" }).eq("id", leadId);
+    await markScoredIfPreRouting(supabase, leadId, lead.status);
     return {
       status: "skipped_existing_score",
       lead_id: leadId,
@@ -191,7 +205,7 @@ export async function scoreLead(leadId: string) {
         .limit(1)
         .maybeSingle();
       if (concurrentScore) {
-        await supabase.from("leads").update({ status: "scored" }).eq("id", leadId);
+        await markScoredIfPreRouting(supabase, leadId, lead.status);
         return {
           status: "skipped_concurrent_score",
           lead_id: leadId,

@@ -248,6 +248,63 @@ assert(
   "workflow docs must reference reserve_places_quota RPC"
 );
 
+// Issue #52 hotfix follow-up (migration 015) contract assertions. Read the file directly so
+// ordering checks are unambiguous against the concatenated migration history.
+const hotfixMigration = readText("supabase/migrations/015_issue_52_hotfix_followup.sql").toLowerCase();
+
+// WF-04 must exclude already-handled scored leads (pending review / existing queue / existing draft).
+const wf04ExclusionStart = hotfixMigration.indexOf("create or replace view public.wf04_scored_leads");
+const wf04ExclusionEnd = hotfixMigration.indexOf("create or replace view public.wf05_due_queue_items");
+const wf04Block = hotfixMigration.slice(wf04ExclusionStart, wf04ExclusionEnd);
+assert(wf04ExclusionStart !== -1, "migration 015 must rebuild wf04_scored_leads");
+assert(
+  wf04Block.includes("manual_review_queue") &&
+    wf04Block.includes("not exists") &&
+    wf04Block.includes("outreach_queue") &&
+    wf04Block.includes("email_drafts"),
+  "wf04_scored_leads must exclude leads with pending manual review, existing queue, or existing draft state"
+);
+
+// WF-05 wf05_action priority: existing state must precede missing-email blocking.
+const wf05CaseStart = hotfixMigration.indexOf("end as wf05_action");
+const wf05Case = hotfixMigration.slice(hotfixMigration.lastIndexOf("case", wf05CaseStart), wf05CaseStart);
+for (const [earlier, later] of [
+  ["skip_existing_draft", "block_missing_email"],
+  ["skip_existing_manual_review", "block_missing_email"],
+  ["block_missing_lead", "skip_existing_draft"],
+  ["block_missing_email", "block_invalid_lead_status"]
+]) {
+  assert(
+    wf05Case.indexOf(`'${earlier}'`) !== -1 &&
+      wf05Case.indexOf(`'${earlier}'`) < wf05Case.indexOf(`'${later}'`),
+    `wf05_action must classify ${earlier} before ${later}`
+  );
+}
+
+// queue_manual_review_item must preserve existing pending reviews unless explicitly forced.
+assert(
+  hotfixMigration.includes("p_force boolean default false"),
+  "queue_manual_review_item must expose an explicit force/replace parameter"
+);
+assert(
+  /reason = case when v_force then excluded\.reason else manual_review_queue\.reason end/.test(hotfixMigration),
+  "queue_manual_review_item must preserve an existing pending review reason/priority by default"
+);
+
+// Draft uniqueness backstop for the persist_draft_or_block ON CONFLICT target.
+assert(
+  /create unique index if not exists\s+email_drafts_lead_sequence_step_uidx\s+on public\.email_drafts \(lead_id, sequence_id, step_number\)/.test(
+    hotfixMigration
+  ),
+  "migration 015 must add an idempotent unique index for email_drafts (lead_id, sequence_id, step_number)"
+);
+
+const scoringSource = readText("lib/workflows/scoring.ts");
+assert(
+  scoringSource.includes("PRE_ROUTING_LEAD_STATUSES") && scoringSource.includes("markScoredIfPreRouting"),
+  "scoreLead must guard the existing-score status update against routed/drafted/replied/closed regressions"
+);
+
 if (failures.length > 0) {
   console.error("Workflow contract validation failed:");
   for (const failure of failures) console.error(`- ${failure}`);
