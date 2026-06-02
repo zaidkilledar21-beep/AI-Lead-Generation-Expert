@@ -10,6 +10,7 @@ with required_functions(function_name, identity_arguments) as (
     ('dashboard_update_lead_status', 'target_lead_id uuid, next_status text'),
     ('pause_queue_after_reply', 'p_lead_id uuid, p_intent_classification text, p_sentiment text, p_requires_human_review boolean, p_reply_event_id uuid, p_summary text, p_suggested_next_action text, p_ai_draft_reply text, p_raw_classifier_response jsonb'),
     ('queue_manual_review_item', 'p_lead_id uuid, p_reason text, p_priority text'),
+    ('queue_manual_review_item', 'p_lead_id uuid, p_reason text, p_priority text, p_force boolean'),
     ('queue_manual_review_item', 'target_lead_id uuid, review_reason text, review_priority text, assigned_founder text, review_metadata jsonb'),
     ('select_approved_due_email_draft', ''),
     ('update_email_send_state', 'p_draft_id uuid, p_queue_id uuid, p_lead_id uuid, p_inbox_id uuid, p_gmail_message_id text, p_gmail_thread_id text'),
