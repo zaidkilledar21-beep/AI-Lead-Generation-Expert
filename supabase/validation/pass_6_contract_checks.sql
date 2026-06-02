@@ -108,3 +108,16 @@ where pronamespace = 'public'::regnamespace
   and proname = 'queue_manual_review_item'
 group by proname
 having count(*) <> 1;
+
+-- Migration 017 regression guard: queue_manual_review_item_sync must NOT contain the ambiguous
+-- `on conflict (lead_id)` pattern that caused "column reference 'lead_id' is ambiguous" in WF-04.
+-- If this query returns any rows the function body was not updated by migration 017.
+select
+  'ambiguous_on_conflict_lead_id_in_sync_rpc' as check_name,
+  p.proname as function_name,
+  pg_get_function_identity_arguments(p.oid) as identity_arguments
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'queue_manual_review_item_sync'
+  and pg_get_functiondef(p.oid) ilike '%on conflict (lead_id)%';
