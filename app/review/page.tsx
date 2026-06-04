@@ -55,10 +55,10 @@ function matchesReviewFilters(item: Awaited<ReturnType<typeof getReviewItems>>[n
 export default async function ReviewPage({
   searchParams
 }: Readonly<{
-  searchParams?: ReviewSearchParams;
+  searchParams?: Promise<ReviewSearchParams>;
 }>) {
   const items = await getReviewItems();
-  const params = searchParams ?? {};
+  const params: ReviewSearchParams = (await searchParams) ?? {};
   const filtered = items.filter((item) => matchesReviewFilters(item, params));
   const campaignOptions = [...new Set(items.map((item) => item.campaignName).filter(Boolean))]
     .sort((a, b) => String(a).localeCompare(String(b)))
@@ -77,7 +77,7 @@ export default async function ReviewPage({
   return (
     <>
       <PageHeader title="Review Queue" description="Resolve approval gates, ambiguous scoring, and manual review exceptions before outreach progresses." />
-      <section className="crm-state-card overflow-hidden mb-6">
+      <section className="crm-state-card mb-6 overflow-visible">
         <TriageSummaryHeader
           eyebrow="Manual review cockpit"
           title="Triage approvals, replies, and exceptions from one control center."
@@ -115,7 +115,7 @@ export default async function ReviewPage({
                 })}
               </div>
 
-              <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <form method="get" className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                 <label className="field-group">
                   <span className="field-label">Search</span>
                   <input

@@ -7,6 +7,12 @@ import { getCampaignRows } from "@/lib/crm/queries";
 import { archiveCampaignAction, duplicateCampaignFormAction, updateCampaignStatus } from "./actions";
 import { RunNowButton } from "./run-now-button";
 
+type CampaignsSearchParams = {
+  status?: string;
+  q?: string;
+  source?: string;
+};
+
 function statusTone(status: string) {
   if (status === "active") return "success" as const;
   if (status === "paused") return "warning" as const;
@@ -61,12 +67,13 @@ function buildHref(
 export default async function CampaignsPage({
   searchParams
 }: Readonly<{
-  searchParams?: { status?: string; q?: string; source?: string };
+  searchParams?: Promise<CampaignsSearchParams>;
 }>) {
+  const params: CampaignsSearchParams = (await searchParams) ?? {};
   const campaigns = await getCampaignRows();
-  const status = searchParams?.status ?? "operating";
-  const source = searchParams?.source ?? "all";
-  const q = (searchParams?.q ?? "").trim().toLowerCase();
+  const status = params.status ?? "operating";
+  const source = params.source ?? "all";
+  const q = (params.q ?? "").trim().toLowerCase();
 
   const filtered = campaigns.filter((campaign) => {
     if (status === "operating" && campaign.status === "archived") return false;
@@ -138,7 +145,7 @@ export default async function CampaignsPage({
           </div>
           <div className="campaigns-hero-actions">
             <LinkButton href="/campaigns/new">New campaign</LinkButton>
-            <LinkButton href={buildHref("/campaigns", { status: "active", source, q: searchParams?.q })} variant="secondary">
+            <LinkButton href={buildHref("/campaigns", { status: "active", source, q: params.q })} variant="secondary">
               Active programs
             </LinkButton>
           </div>
@@ -168,7 +175,7 @@ export default async function CampaignsPage({
               href={buildHref("/campaigns", {
                 status: view.id,
                 source,
-                q: searchParams?.q
+                q: params.q
               })}
               aria-current={status === view.id ? "page" : undefined}
             >
@@ -179,7 +186,7 @@ export default async function CampaignsPage({
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel overflow-visible">
         <div className="panel-header">
           <div>
             <h2>Filter campaigns</h2>
@@ -220,7 +227,7 @@ export default async function CampaignsPage({
           </label>
           <label className="field-group">
             <span className="field-label">Search</span>
-            <input className="field" name="q" defaultValue={searchParams?.q ?? ""} placeholder="Name, niche, country, city" />
+            <input className="field" name="q" defaultValue={params.q ?? ""} placeholder="Name, niche, country, city" />
           </label>
           <div className="button-row self-end">
             <Button type="submit">Apply filters</Button>

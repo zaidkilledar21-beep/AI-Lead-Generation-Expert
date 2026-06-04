@@ -380,26 +380,43 @@ export async function completeReviewAction(formData: FormData) {
 }
 
 export async function completeReviewQueueItemAction(formData: FormData) {
-  const source = cleanText(formData.get("source"));
-  const decision = cleanText(formData.get("decision"));
+  try {
+    const source = cleanText(formData.get("source"));
+    const decision = cleanText(formData.get("decision"));
 
-  if (source === "manual_review") {
-    return completeReviewAction(formData);
+    if (source === "manual_review") {
+      await completeReviewAction(formData);
+      return { ok: true };
+    }
+
+    if (source === "email_draft") {
+      if (decision === "approved") {
+        await approveEmailDraftAction(formData);
+        return { ok: true };
+      }
+      if (decision === "rejected") {
+        await rejectEmailDraftAction(formData);
+        return { ok: true };
+      }
+      throw new Error("Unsupported draft review decision");
+    }
+
+    if (source === "reply_event") {
+      if (decision === "mark_reply_handled") {
+        await markReplyHandledAction(formData);
+        return { ok: true };
+      }
+      if (decision === "won" || decision === "lost") {
+        await closeLeadAction(formData);
+        return { ok: true };
+      }
+      throw new Error("Unsupported reply review decision");
+    }
+
+    throw new Error("Unsupported review item source");
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Review action failed." };
   }
-
-  if (source === "email_draft") {
-    if (decision === "approved") return approveEmailDraftAction(formData);
-    if (decision === "rejected") return rejectEmailDraftAction(formData);
-    throw new Error("Unsupported draft review decision");
-  }
-
-  if (source === "reply_event") {
-    if (decision === "mark_reply_handled") return markReplyHandledAction(formData);
-    if (decision === "won" || decision === "lost") return closeLeadAction(formData);
-    throw new Error("Unsupported reply review decision");
-  }
-
-  throw new Error("Unsupported review item source");
 }
 
 export async function approveEmailDraftAction(formData: FormData) {
