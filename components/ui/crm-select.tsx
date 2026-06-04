@@ -143,10 +143,10 @@ export function CrmSelect({
           role="listbox"
           tabIndex={-1}
           onKeyDown={onListboxKeyDown}
-          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-xl border border-white/10 bg-neutral-bg2/95 shadow-[0_18px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[80] overflow-hidden rounded-xl border border-white/14 bg-neutral-bg2 shadow-[0_18px_48px_rgba(0,0,0,0.55)]"
         >
           {options.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-white/45">{emptyState}</div>
+            <div className="px-4 py-3 text-sm text-white/65">{emptyState}</div>
           ) : (
             <div className="max-h-72 overflow-y-auto p-2">
               {options.map((option) => {
@@ -171,14 +171,14 @@ export function CrmSelect({
                       option.disabled
                         ? "cursor-not-allowed opacity-40"
                         : isActive
-                          ? "bg-white/10"
-                          : "hover:bg-white/5"
+                          ? "bg-white/14"
+                          : "hover:bg-white/8"
                     }`}
                   >
                     <span className="min-w-0">
-                      <span className="block text-sm text-white">{option.label}</span>
+                      <span className="block text-sm font-medium text-white/95">{option.label}</span>
                       {option.description ? (
-                        <span className="mt-0.5 block text-xs text-white/45">{option.description}</span>
+                        <span className="mt-0.5 block text-xs text-white/62">{option.description}</span>
                       ) : null}
                     </span>
                     <span className="pt-0.5">

@@ -14,7 +14,7 @@
 
 ## Review/filter + CRM contract follow-up
 - Fixed filter pages still using synchronous `searchParams` under Next 16: `/review`, `/inbox`, `/campaigns`, and `/analytics` now await typed search params before applying filters.
-- Added explicit `method="get"` to review/inbox filter forms and changed review/inbox/campaign filter containers to allow visible select dropdown overflow instead of clipping.
+- Added explicit `method="get"` to review/inbox filter forms and changed review/inbox/campaign filter containers to allow visible select dropdown overflow instead of clipping. Follow-up: made shared CRM select dropdowns opaque and higher contrast so menus no longer blur or wash out content behind them.
 - CRM status contract audit found legacy DB-supported `replied` missing from the canonical TypeScript lead status list; added it to `LEAD_STATUSES`, `LEAD_STATUS_LABELS`, and made `lib/types.ts` reuse `LeadLifecycleStatus` instead of duplicating the union.
 - Added status contract tests that compare canonical lead statuses against the dashboard status RPC migration and verify labels/status sets.
 - SonarCloud reliability follow-up: replaced the touched `startTransition(async () => ...)` pattern with a synchronous transition callback, changed status-contract set sorting to use `localeCompare`, and extracted analytics range parsing to keep `AnalyticsPage` under the cognitive-complexity threshold.
