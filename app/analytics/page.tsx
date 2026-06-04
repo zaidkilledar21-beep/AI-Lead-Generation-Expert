@@ -61,15 +61,21 @@ function getTopCampaign(campaigns: AnalyticsCampaign[]) {
   return campaigns.find((campaign) => campaign.replies > 0 || campaign.positive_replies > 0) ?? campaigns[0] ?? null;
 }
 
+function resolveAnalyticsRange(params: AnalyticsSearchParams) {
+  return {
+    days: params.days === "all" ? 3650 : Math.max(7, Math.min(90, Number(params.days ?? "30") || 30)),
+    from: params.from,
+    to: params.to
+  };
+}
+
 export default async function AnalyticsPage({
   searchParams
 }: Readonly<{
   searchParams?: Promise<AnalyticsSearchParams>;
 }>) {
   const params: AnalyticsSearchParams = (await searchParams) ?? {};
-  const days = params.days === "all" ? 3650 : Math.max(7, Math.min(90, Number(params.days ?? "30") || 30));
-  const from = params.from;
-  const to = params.to;
+  const { days, from, to } = resolveAnalyticsRange(params);
 
   const [analytics, diagnostics] = await Promise.all([
     getAnalyticsData(days, from, to),

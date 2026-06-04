@@ -16,7 +16,9 @@ function quotedValues(value: string) {
 }
 
 function expectSameSet(actual: readonly string[], expected: readonly string[]) {
-  expect([...actual].sort()).toEqual([...expected].sort());
+  expect([...actual].sort((left, right) => left.localeCompare(right))).toEqual(
+    [...expected].sort((left, right) => left.localeCompare(right))
+  );
 }
 
 describe("reply intent contract", () => {
