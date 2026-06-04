@@ -17,6 +17,7 @@
 - Added explicit `method="get"` to review/inbox filter forms and changed review/inbox/campaign filter containers to allow visible select dropdown overflow instead of clipping.
 - CRM status contract audit found legacy DB-supported `replied` missing from the canonical TypeScript lead status list; added it to `LEAD_STATUSES`, `LEAD_STATUS_LABELS`, and made `lib/types.ts` reuse `LeadLifecycleStatus` instead of duplicating the union.
 - Added status contract tests that compare canonical lead statuses against the dashboard status RPC migration and verify labels/status sets.
+- SonarCloud reliability follow-up: replaced the touched `startTransition(async () => ...)` pattern with a synchronous transition callback that launches an internal async task, avoiding Promise-returning React transition callbacks.
 - Validation: lint, typecheck, full unit tests, production build, workflow contract validation, `git diff --check`, search-param grep, status duplication grep, and Graphify clean-mirror refresh/export all pass. Browser click-through was not run because no authenticated test user credentials are present in local env.
 
 ## WF-04 RPC ambiguity root cause fixed permanently (migration 017)

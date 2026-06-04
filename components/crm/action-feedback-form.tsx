@@ -37,17 +37,19 @@ export function ActionFeedbackForm({
         event.preventDefault();
         const formData = new FormData(event.currentTarget);
         setFeedback(null);
-        startTransition(async () => {
-          try {
-            const result = await action(formData);
-            if (isActionResult(result) && result.ok === false) {
-              setFeedback({ tone: "danger", message: result.error ?? "Action failed." });
-              return;
+        startTransition(() => {
+          void (async () => {
+            try {
+              const result = await action(formData);
+              if (isActionResult(result) && result.ok === false) {
+                setFeedback({ tone: "danger", message: result.error ?? "Action failed." });
+                return;
+              }
+              setFeedback({ tone: "success", message: isActionResult(result) && result.message ? result.message : successMessage });
+            } catch (error) {
+              setFeedback({ tone: "danger", message: error instanceof Error ? error.message : "Action failed." });
             }
-            setFeedback({ tone: "success", message: isActionResult(result) && result.message ? result.message : successMessage });
-          } catch (error) {
-            setFeedback({ tone: "danger", message: error instanceof Error ? error.message : "Action failed." });
-          }
+          })();
         });
       }}
     >
