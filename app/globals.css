@@ -815,6 +815,32 @@ body {
     opacity: 0.6;
   }
 
+  .field + [role="listbox"] {
+    z-index: 80;
+    border-color: rgba(255, 255, 255, 0.14);
+    background: var(--bg-raised);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+    backdrop-filter: none;
+  }
+
+  .field + [role="listbox"] [role="option"]:not(:disabled):hover,
+  .field + [role="listbox"] [role="option"][aria-selected="true"] {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .field + [role="listbox"] [role="option"] span span:first-child {
+    color: rgba(255, 255, 255, 0.96);
+    font-weight: 600;
+  }
+
+  .field + [role="listbox"] [role="option"] span span:last-child:not(:first-child) {
+    color: rgba(255, 255, 255, 0.62);
+  }
+
+  .field + [role="listbox"] > div:first-child {
+    color: rgba(255, 255, 255, 0.68);
+  }
+
   .form select option,
   select.field option,
   select option {
