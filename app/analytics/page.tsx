@@ -13,6 +13,12 @@ import { LinkButton } from "@/components/ui/button";
 import { getAnalyticsData, getAnalyticsDiagnostics, type AnalyticsExportKind } from "@/lib/crm/queries";
 import type { AnalyticsCampaign } from "@/lib/crm/types";
 
+type AnalyticsSearchParams = {
+  days?: string;
+  from?: string;
+  to?: string;
+};
+
 const EXPORTS: Array<{ kind: AnalyticsExportKind; label: string }> = [
   { kind: "campaign-performance", label: "Campaign CSV" },
   { kind: "daily-rollup", label: "Daily CSV" },
@@ -58,11 +64,12 @@ function getTopCampaign(campaigns: AnalyticsCampaign[]) {
 export default async function AnalyticsPage({
   searchParams
 }: Readonly<{
-  searchParams?: { days?: string; from?: string; to?: string };
+  searchParams?: Promise<AnalyticsSearchParams>;
 }>) {
-  const days = searchParams?.days === "all" ? 3650 : Math.max(7, Math.min(90, Number(searchParams?.days ?? "30") || 30));
-  const from = searchParams?.from;
-  const to = searchParams?.to;
+  const params: AnalyticsSearchParams = (await searchParams) ?? {};
+  const days = params.days === "all" ? 3650 : Math.max(7, Math.min(90, Number(params.days ?? "30") || 30));
+  const from = params.from;
+  const to = params.to;
 
   const [analytics, diagnostics] = await Promise.all([
     getAnalyticsData(days, from, to),

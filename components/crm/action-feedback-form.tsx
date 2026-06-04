@@ -3,6 +3,16 @@
 import type { ReactNode, Ref } from "react";
 import { useState, useTransition } from "react";
 
+type ActionResult = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+};
+
+function isActionResult(value: unknown): value is ActionResult {
+  return typeof value === "object" && value !== null && ("ok" in value || "error" in value || "message" in value);
+}
+
 export function ActionFeedbackForm({
   action,
   successMessage,
@@ -29,8 +39,12 @@ export function ActionFeedbackForm({
         setFeedback(null);
         startTransition(async () => {
           try {
-            await action(formData);
-            setFeedback({ tone: "success", message: successMessage });
+            const result = await action(formData);
+            if (isActionResult(result) && result.ok === false) {
+              setFeedback({ tone: "danger", message: result.error ?? "Action failed." });
+              return;
+            }
+            setFeedback({ tone: "success", message: isActionResult(result) && result.message ? result.message : successMessage });
           } catch (error) {
             setFeedback({ tone: "danger", message: error instanceof Error ? error.message : "Action failed." });
           }
