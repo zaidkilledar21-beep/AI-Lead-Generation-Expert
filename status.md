@@ -4,7 +4,21 @@
 - `codex/pass-6-production-readiness`
 
 ## Current task
-- Implement GitHub Issue #52 permanent pipeline hardening through backend WF-01/WF-02/WF-03, n8n WF-04 routing, and n8n WF-05 draft generation.
+- Fix review/campaigns/inbox/analytics filters for Next 16 search params, prevent filter dropdown clipping, harden review action errors, and enforce CRM status naming contract.
+
+## Review reject/archive digest fix
+- Root cause: review workspace actions were throwing server-action errors back to a client form. In production, Next.js replaces thrown server-action details with a generic Server Components digest, so the UI displayed the digest instead of the real validation/database message.
+- Fix: `completeReviewQueueItemAction` now catches review-workspace failures and returns a structured `{ ok: false, error }` result; `ActionFeedbackForm` displays structured action errors without relying on thrown server-action details.
+- Live cleanup: `Synqro WF05 Test Lead` (`2a4a9b2f-3d15-4035-9ac5-1855dd208fe9`) was archived and its manual review row (`29851981-272e-4745-8b63-9db1c6d779b6`) was marked `rejected` with note `Archived as old WF05 test lead cleanup.`
+- Validation: lint, typecheck, unit tests, and production build pass.
+
+## Review/filter + CRM contract follow-up
+- Fixed filter pages still using synchronous `searchParams` under Next 16: `/review`, `/inbox`, `/campaigns`, and `/analytics` now await typed search params before applying filters.
+- Added explicit `method="get"` to review/inbox filter forms and changed review/inbox/campaign filter containers to allow visible select dropdown overflow instead of clipping.
+- CRM status contract audit found legacy DB-supported `replied` missing from the canonical TypeScript lead status list; added it to `LEAD_STATUSES`, `LEAD_STATUS_LABELS`, and made `lib/types.ts` reuse `LeadLifecycleStatus` instead of duplicating the union.
+- Added status contract tests that compare canonical lead statuses against the dashboard status RPC migration and verify labels/status sets.
+- SonarCloud reliability follow-up: replaced the touched `startTransition(async () => ...)` pattern with a synchronous transition callback, changed status-contract set sorting to use `localeCompare`, and extracted analytics range parsing to keep `AnalyticsPage` under the cognitive-complexity threshold.
+- Validation: lint, typecheck, full unit tests, production build, workflow contract validation, `git diff --check`, search-param grep, status duplication grep, and Graphify clean-mirror refresh/export all pass. Browser click-through was not run because no authenticated test user credentials are present in local env.
 
 ## WF-04 RPC ambiguity root cause fixed permanently (migration 017)
 - Root cause: `queue_manual_review_item_sync` in migration 016 contained

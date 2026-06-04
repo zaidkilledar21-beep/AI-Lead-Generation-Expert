@@ -5,6 +5,13 @@ import { getInboxThreads, getLeadDetail, getSettingsData } from "@/lib/crm/queri
 import { InboxView } from "@/components/crm/inbox-view";
 import { NEUTRAL_REPLY_INTENTS, OBJECTION_REPLY_INTENTS, POSITIVE_REPLY_INTENTS } from "@/lib/crm/status-contract";
 
+type InboxSearchParams = {
+  thread?: string;
+  tab?: string;
+  q?: string;
+  sort?: string;
+};
+
 function tabHref(tab: string, q: string, sort: string) {
   const params = new URLSearchParams({ tab });
   if (q) params.set("q", q);
@@ -15,16 +22,17 @@ function tabHref(tab: string, q: string, sort: string) {
 export default async function InboxPage({
   searchParams
 }: Readonly<{
-  searchParams?: { thread?: string; tab?: string; q?: string; sort?: string };
+  searchParams?: Promise<InboxSearchParams>;
 }>) {
+  const params: InboxSearchParams = (await searchParams) ?? {};
   const [threads, settings] = await Promise.all([
     getInboxThreads(),
     getSettingsData()
   ]);
 
-  const tab = searchParams?.tab ?? "all";
-  const query = (searchParams?.q ?? "").trim().toLowerCase();
-  const sort = searchParams?.sort ?? "newest";
+  const tab = params.tab ?? "all";
+  const query = (params.q ?? "").trim().toLowerCase();
+  const sort = params.sort ?? "newest";
   const filtered = threads.filter((thread) => {
     if (tab === "all") return true;
     if (tab === "unhandled") return thread.isUnhandled;
@@ -71,13 +79,13 @@ export default async function InboxPage({
     { id: "review", label: "Needs review", count: inboxStats.review, tone: "danger" }
   ] as const;
 
-  const selected = filtered.find((thread) => thread.id === searchParams?.thread) ?? filtered[0] ?? null;
+  const selected = filtered.find((thread) => thread.id === params.thread) ?? filtered[0] ?? null;
   const leadDetails = selected ? await getLeadDetail(selected.leadId) : null;
 
   return (
     <>
       <PageHeader title="Inbox" description="Shared founder inbox with full reply context, suggested next action, and one-click handling." />
-      <section className="crm-state-card overflow-hidden">
+      <section className="crm-state-card overflow-visible">
         <TriageSummaryHeader
           eyebrow="Shared founder operations inbox"
           title="Resolve replies with context, urgency, and a clear next action."
@@ -118,11 +126,11 @@ export default async function InboxPage({
                 })}
               </div>
 
-              <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
+              <form method="get" className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
                 <input type="hidden" name="tab" value={tab} />
                 <input
                   name="q"
-                  defaultValue={searchParams?.q ?? ""}
+                  defaultValue={params.q ?? ""}
                   placeholder="Search sender, business, campaign, summary..."
                   className="field"
                 />

@@ -1,26 +1,8 @@
+import type { LeadLifecycleStatus } from "@/lib/crm/status-contract";
+
 export type Band = "A" | "B" | "C" | "D";
 export type Confidence = "low" | "medium" | "high";
-export type LeadStatus =
-  | "new"
-  | "enriched"
-  | "scored"
-  | "review_pending"
-  | "pending_approval"
-  | "queued"
-  | "drafted"
-  | "in_sequence"
-  | "paused"
-  | "blocked"
-  | "completed"
-  | "replied_interested"
-  | "replied_not_interested"
-  | "replied_needs_review"
-  | "closed_won"
-  | "closed_lost"
-  | "unsubscribed"
-  | "bounced"
-  | "not_interested"
-  | "archived";
+export type LeadStatus = LeadLifecycleStatus;
 
 export type CampaignStatus = "draft" | "active" | "paused" | "completed" | "archived";
 export type RunFrequency = "manual" | "daily" | "every_3_days" | "weekly";
