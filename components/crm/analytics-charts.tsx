@@ -237,20 +237,20 @@ const NICHE_PERFORMANCE_BARS: VerticalBar[] = [
 ];
 
 export const CountryPerformanceBar = memo(function CountryPerformanceBar({ data }: Readonly<{ data: GeoSignalData[] }>) {
-  const rows = useMemo(() => data.slice(0, 7), [data]);
+  const rows = useMemo(() => data, [data]);
 
   if (rows.length === 0) return <EmptyChart label="No geography signal is available in this range." />;
 
   return (
-    <div className="flex h-[320px] flex-col justify-between gap-3 p-2">
-      <div className="grid grid-cols-[minmax(0,1fr)_56px_72px_76px_82px] gap-3 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">
+    <div className="flex h-[320px] min-h-0 flex-col gap-3 p-2">
+      <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_56px_72px_76px_82px] gap-3 px-1 pr-4 text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">
         <span>Market</span>
         <span className="text-right">Leads</span>
         <span className="text-right">Reply</span>
         <span className="text-right">Positive</span>
         <span className="text-right">Signal</span>
       </div>
-      <div className="space-y-2">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-2 [scrollbar-color:rgba(139,92,246,0.55)_rgba(255,255,255,0.06)] [scrollbar-gutter:stable] [scrollbar-width:thin]">
         {rows.map((row) => (
           <GeoSignalRow key={row.geography} row={row} />
         ))}

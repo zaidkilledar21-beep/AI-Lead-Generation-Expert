@@ -9,8 +9,9 @@
 ## Geo signal quality analytics panel
 - Replaced the old country lead-count bar chart with a ranked geography signal panel showing leads, reply rate, positive replies/rate, and a signal label.
 - Added server-side geo signal aggregation with address-like geography cleanup, city fallback, low-sample labeling, no-signal handling, and sample-confidence weighted scoring.
+- Fixed the geo signal panel body to render all geography rows inside an internal scroll area instead of clipping rows at the panel boundary.
 - Added focused unit coverage for aggregation, replied-vs-unreplied leads, positive intent counting, dirty geography fallback, zero replies, and low sample handling.
-- Validation: lint, typecheck, focused geo signal tests, full unit tests, production build, `git diff --check`, and static risky-pattern grep pass. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
+- Validation: lint, typecheck, focused geo signal tests, full unit tests, production build with larger Node heap, `git diff --check`, and static risky-pattern grep pass. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
 
 ## Review reject/archive digest fix
 - Root cause: review workspace actions were throwing server-action errors back to a client form. In production, Next.js replaces thrown server-action details with a generic Server Components digest, so the UI displayed the digest instead of the real validation/database message.
