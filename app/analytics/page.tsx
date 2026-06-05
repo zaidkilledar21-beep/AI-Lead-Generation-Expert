@@ -221,7 +221,7 @@ export default async function AnalyticsPage({
         <ChartPanel title="Performance by niche" description="Reply and positive-intent distribution by campaign niche.">
           <NichePerformanceBar data={analytics.performanceByNiche} />
         </ChartPanel>
-        <ChartPanel title="Performance by country" description="Lead coverage and reply signal by geography.">
+        <ChartPanel title="Geo signal quality" description="Markets ranked by reply quality, positive intent, and sample confidence.">
           <CountryPerformanceBar data={analytics.performanceByCountry} />
         </ChartPanel>
       </div>
