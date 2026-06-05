@@ -11,7 +11,7 @@ import {
   normalizeReplyReviewReason
 } from "@/lib/crm/status-contract";
 import { previewText } from "@/lib/crm/inbox-utils";
-import type { AnalyticsCampaign, AnalyticsDaily, AnalyticsSequenceStep, CountryData, IntentData, NicheData, LeadProfile, WeeklySnapshot } from "@/lib/crm/types";
+import type { AnalyticsCampaign, AnalyticsDaily, AnalyticsSequenceStep, GeoSignalData, IntentData, NicheData, LeadProfile, WeeklySnapshot } from "@/lib/crm/types";
 
 export type AnalyticsExportKind = "campaign-performance" | "daily-rollup" | "sequence-funnel" | "reply-intent-breakdown";
 type OptionalSupabaseClient = ReturnType<typeof createOptionalSupabaseServiceClient>;
@@ -24,6 +24,12 @@ type AnalyticsCampaignExportRow = {
   emailsSent: number;
   replies: number;
   positiveReplies: number;
+};
+type GeoSignalRow = {
+  country?: unknown;
+  city?: unknown;
+  replyCount?: unknown;
+  latestReplyIntent?: unknown;
 };
 
 /** Safely coerce an `unknown` DB value to string. Objects would produce `[object Object]` via String(), so we guard against that. */
@@ -42,6 +48,70 @@ function toStrOrNull(value: unknown): string | null {
 
 function asArray<T>(value: T[] | null | undefined): T[] {
   return value ?? [];
+}
+
+function compactLocationValue(value: unknown) {
+  return toStr(value).replace(/\s+/g, " ").trim();
+}
+
+function looksLikeAddress(value: string) {
+  return value.length > 42 || /\d/.test(value) || value.includes(" - ") || value.includes("/") || value.split(",").length > 2;
+}
+
+function resolveGeoLabel(row: GeoSignalRow) {
+  const country = compactLocationValue(row.country);
+  const city = compactLocationValue(row.city);
+
+  if (country && !looksLikeAddress(country)) {
+    return { geography: country, rawGeography: country };
+  }
+
+  if (city && !looksLikeAddress(city)) {
+    return { geography: city, rawGeography: country || city };
+  }
+
+  return { geography: "Unverified geography", rawGeography: country || city || "Unknown" };
+}
+
+function signalLabel(leads: number, repliedLeads: number, positive: number): GeoSignalData["signalLabel"] {
+  if (repliedLeads === 0) return "No signal";
+  if (leads < 3) return "Low sample";
+  if (positive > 0 || repliedLeads / leads >= 0.25) return "Strong";
+  return "Watch";
+}
+
+export function buildGeoSignalData(rows: GeoSignalRow[]): GeoSignalData[] {
+  const geoMap = rows.reduce((acc, row) => {
+    const { geography, rawGeography } = resolveGeoLabel(row);
+    if (!acc[geography]) {
+      acc[geography] = { geography, rawGeography, leads: 0, repliedLeads: 0, positive: 0 };
+    }
+
+    acc[geography].leads += 1;
+    const replyCount = Number(row.replyCount || 0);
+    if (replyCount > 0) acc[geography].repliedLeads += 1;
+    const normalizedIntent = normalizeReplyIntent(toStrOrNull(row.latestReplyIntent));
+    if ((POSITIVE_REPLY_INTENTS as readonly string[]).includes(normalizedIntent)) acc[geography].positive += 1;
+
+    return acc;
+  }, {} as Record<string, Pick<GeoSignalData, "geography" | "rawGeography" | "leads" | "repliedLeads" | "positive">>);
+
+  return Object.values(geoMap)
+    .map((item) => {
+      const replyRate = item.leads > 0 ? item.repliedLeads / item.leads : 0;
+      const positiveRate = item.repliedLeads > 0 ? item.positive / item.repliedLeads : 0;
+      const confidence = Math.min(1, item.leads / 10);
+      const signalScore = (positiveRate * 0.55 + replyRate * 0.35 + Math.min(1, item.positive / 3) * 0.1) * confidence;
+
+      return {
+        ...item,
+        replyRate,
+        positiveRate,
+        signalScore,
+        signalLabel: signalLabel(item.leads, item.repliedLeads, item.positive)
+      };
+    })
+    .sort((a, b) => b.signalScore - a.signalScore || b.positive - a.positive || b.replyRate - a.replyRate || b.leads - a.leads);
 }
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
@@ -1536,7 +1606,7 @@ export async function getAnalyticsData(rangeDays = 30, from?: string, to?: strin
   const dateRange = resolveAnalyticsDateRange(rangeDays, from, to);
   const supabase = createOptionalSupabaseServiceClient();
   if (!supabase) {
-    return { metrics: [], campaigns: [] as AnalyticsCampaign[], daily: [] as AnalyticsDaily[], sequenceFunnel: [] as AnalyticsSequenceStep[], comparison: null, replyIntentBreakdown: [] as IntentData[], performanceByNiche: [] as NicheData[], performanceByCountry: [] as CountryData[], weeklySnapshot: [] as WeeklySnapshot[], dateRange };
+    return { metrics: [], campaigns: [] as AnalyticsCampaign[], daily: [] as AnalyticsDaily[], sequenceFunnel: [] as AnalyticsSequenceStep[], comparison: null, replyIntentBreakdown: [] as IntentData[], performanceByNiche: [] as NicheData[], performanceByCountry: [] as GeoSignalData[], weeklySnapshot: [] as WeeklySnapshot[], dateRange };
   }
 
   const { since, until, previousSince, previousUntil } = dateRange;
@@ -1586,15 +1656,7 @@ export async function getAnalyticsData(rangeDays = 30, from?: string, to?: strin
   }, {} as Record<string, any>);
 
   const performanceByNiche = Object.values(nicheMap).sort((a: any, b: any) => b.leads - a.leads);
-  const countryMap = (pipelineRows as Array<Record<string, any>>).reduce((acc, curr) => {
-    const key = curr.country || "Unknown";
-    if (!acc[key]) acc[key] = { country: key, leads: 0, replies: 0, positive: 0 };
-    acc[key].leads += 1;
-    acc[key].replies += Number(curr.replyCount || 0);
-    if ((POSITIVE_REPLY_INTENTS as readonly string[]).includes(normalizeReplyIntent(curr.latestReplyIntent))) acc[key].positive += 1;
-    return acc;
-  }, {} as Record<string, CountryData>);
-  const performanceByCountry = Object.values(countryMap).sort((a, b) => b.leads - a.leads);
+  const performanceByCountry = buildGeoSignalData(pipelineRows as GeoSignalRow[]);
 
   const weeklyMap = asArray(daily.data as Array<Record<string, any>>).reduce((acc, curr) => {
     const date = new Date(curr.metric_date);

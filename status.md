@@ -1,10 +1,16 @@
 # Project Status
 
 ## Current branch
-- `codex/pass-6-production-readiness`
+- `codex/fix-review-filters-contract`
 
 ## Current task
-- Fix review/campaigns/inbox/analytics filters for Next 16 search params, prevent filter dropdown clipping, harden review action errors, and enforce CRM status naming contract.
+- Replace the broken analytics country chart with a `Geo signal quality` decision panel.
+
+## Geo signal quality analytics panel
+- Replaced the old country lead-count bar chart with a ranked geography signal panel showing leads, reply rate, positive replies/rate, and a signal label.
+- Added server-side geo signal aggregation with address-like geography cleanup, city fallback, low-sample labeling, no-signal handling, and sample-confidence weighted scoring.
+- Added focused unit coverage for aggregation, replied-vs-unreplied leads, positive intent counting, dirty geography fallback, zero replies, and low sample handling.
+- Validation: lint, typecheck, focused geo signal tests, full unit tests, production build, `git diff --check`, and static risky-pattern grep pass. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
 
 ## Review reject/archive digest fix
 - Root cause: review workspace actions were throwing server-action errors back to a client form. In production, Next.js replaces thrown server-action details with a generic Server Components digest, so the UI displayed the digest instead of the real validation/database message.
@@ -14,7 +20,7 @@
 
 ## Review/filter + CRM contract follow-up
 - Fixed filter pages still using synchronous `searchParams` under Next 16: `/review`, `/inbox`, `/campaigns`, and `/analytics` now await typed search params before applying filters.
-- Added explicit `method="get"` to review/inbox filter forms and changed review/inbox/campaign filter containers to allow visible select dropdown overflow instead of clipping.
+- Added explicit `method="get"` to review/inbox filter forms and changed review/inbox/campaign filter containers to allow visible select dropdown overflow instead of clipping. Follow-up: made shared CRM select dropdowns opaque and higher contrast so menus no longer blur or wash out content behind them.
 - CRM status contract audit found legacy DB-supported `replied` missing from the canonical TypeScript lead status list; added it to `LEAD_STATUSES`, `LEAD_STATUS_LABELS`, and made `lib/types.ts` reuse `LeadLifecycleStatus` instead of duplicating the union.
 - Added status contract tests that compare canonical lead statuses against the dashboard status RPC migration and verify labels/status sets.
 - SonarCloud reliability follow-up: replaced the touched `startTransition(async () => ...)` pattern with a synchronous transition callback, changed status-contract set sorting to use `localeCompare`, and extracted analytics range parsing to keep `AnalyticsPage` under the cognitive-complexity threshold.
@@ -130,6 +136,11 @@
 - WF-04 remains n8n-owned; the recovery endpoint does not route leads or create n8n triggers for enrichment/scoring.
 
 ## Files changed recently
+- `app/analytics/page.tsx`
+- `components/crm/analytics-charts.tsx`
+- `lib/crm/queries.ts`
+- `lib/crm/types.ts`
+- `tests/unit/geo-signal.test.ts`
 - `plans/issue-52-pipeline-hardening.md`
 - `supabase/migrations/014_issue_52_pipeline_hardening.sql`
 - `supabase/validation/pass_6_contract_checks.sql`
@@ -156,11 +167,11 @@
 - Production migration application, n8n import, and authenticated fresh-campaign verification remain manual. WF-06 must remain disabled.
 
 ## Validation status
-- lint: passed (`npm run lint`) after recovered discovery behavior alignment
+- lint: passed (`npm run lint`) after geo signal quality analytics change
 - typecheck: passed (`npm run typecheck`)
 - git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
-- build: passed (`npm run build`); Next.js still warns that the `middleware` file convention is deprecated in favor of `proxy`
-- tests: passed (`npm test`, 10 files / 33 tests)
+- build: passed (`npm run build`); Next.js still warns about workspace-root inference and the `middleware` file convention being deprecated in favor of `proxy`
+- tests: passed (`npm test`, 25 files / 86 tests); focused geo signal test passed (`npm test -- tests/unit/geo-signal.test.ts`)
 - workflow contracts: passed (`npm run validate:workflows`, 12 importable JSON files)
 - Graphify: refreshed through the required clean temp mirror and exported to Obsidian (`1,122` nodes, `2,707` edges)
 - Supabase SQL execution lint: not run; Supabase CLI is not installed on this workspace PATH

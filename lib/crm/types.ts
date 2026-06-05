@@ -138,6 +138,18 @@ export interface CountryData {
   positive: number;
 }
 
+export interface GeoSignalData {
+  geography: string;
+  rawGeography: string;
+  leads: number;
+  repliedLeads: number;
+  positive: number;
+  replyRate: number;
+  positiveRate: number;
+  signalScore: number;
+  signalLabel: "Strong" | "Watch" | "Low sample" | "No signal";
+}
+
 export interface WeeklySnapshot {
   week: string;
   leads: number;

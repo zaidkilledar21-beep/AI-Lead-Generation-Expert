@@ -17,7 +17,7 @@ import {
   YAxis
 } from "recharts";
 import { GlassTooltip } from "@/components/ui/glass-tooltip";
-import type { AnalyticsDaily, AnalyticsSequenceStep, CountryData, IntentData, NicheData } from "@/lib/crm/types";
+import type { AnalyticsDaily, AnalyticsSequenceStep, GeoSignalData, IntentData, NicheData } from "@/lib/crm/types";
 
 const COLORS = ["#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#3B82F6", "#EC4899"];
 const CHART_FRAME_CLASS_NAME = "h-[320px] w-full";
@@ -236,27 +236,66 @@ const NICHE_PERFORMANCE_BARS: VerticalBar[] = [
   { dataKey: "positive", name: "Positive", fill: "#10B981" }
 ];
 
-export const CountryPerformanceBar = memo(function CountryPerformanceBar({ data }: Readonly<{ data: CountryData[] }>) {
-  const chartData = useMemo(
-    () =>
-      data.slice(0, 8).map((item) => ({
-        name: item.country,
-        leads: item.leads,
-        replies: item.replies,
-        positive: item.positive
-      })),
-    [data]
+export const CountryPerformanceBar = memo(function CountryPerformanceBar({ data }: Readonly<{ data: GeoSignalData[] }>) {
+  const rows = useMemo(() => data.slice(0, 7), [data]);
+
+  if (rows.length === 0) return <EmptyChart label="No geography signal is available in this range." />;
+
+  return (
+    <div className="flex h-[320px] flex-col justify-between gap-3 p-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_56px_72px_76px_82px] gap-3 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">
+        <span>Market</span>
+        <span className="text-right">Leads</span>
+        <span className="text-right">Reply</span>
+        <span className="text-right">Positive</span>
+        <span className="text-right">Signal</span>
+      </div>
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <GeoSignalRow key={row.geography} row={row} />
+        ))}
+      </div>
+    </div>
   );
-
-  if (chartData.length === 0) return <EmptyChart label="No active campaigns have lead activity in this range." />;
-
-  return <VerticalPerformanceChart data={chartData} bars={COUNTRY_PERFORMANCE_BARS} />;
 });
 
-const COUNTRY_PERFORMANCE_BARS: VerticalBar[] = [
-  { dataKey: "leads", name: "Leads", fill: "#3B82F6" },
-  { dataKey: "replies", name: "Replies", fill: "#10B981" }
-];
+function GeoSignalRow({ row }: Readonly<{ row: GeoSignalData }>) {
+  const replyPercent = formatPercent(row.replyRate);
+  const positivePercent = row.repliedLeads > 0 ? formatPercent(row.positiveRate) : "--";
+
+  return (
+    <div className="grid min-h-9 grid-cols-[minmax(0,1fr)_56px_72px_76px_82px] items-center gap-3 rounded-md border border-white/8 bg-white/[0.025] px-3 py-2">
+      <div className="min-w-0" title={row.rawGeography}>
+        <div className="truncate text-sm font-semibold text-white">{row.geography}</div>
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/8">
+          <div className="h-full rounded-full bg-emerald-400" style={{ width: `${Math.round(row.signalScore * 100)}%` }} />
+        </div>
+      </div>
+      <div className="text-right text-sm font-semibold tabular-nums text-white/80">{row.leads}</div>
+      <div className="text-right text-sm font-semibold tabular-nums text-white/80">{replyPercent}</div>
+      <div className="text-right text-sm font-semibold tabular-nums text-white/80">
+        {row.positive}
+        <span className="ml-1 text-xs text-white/40">{positivePercent}</span>
+      </div>
+      <div className="text-right">
+        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${geoSignalTone(row.signalLabel)}`}>
+          {row.signalLabel}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function geoSignalTone(label: GeoSignalData["signalLabel"]) {
+  if (label === "Strong") return "border-emerald-400/25 bg-emerald-400/10 text-emerald-200";
+  if (label === "Watch") return "border-amber-400/25 bg-amber-400/10 text-amber-200";
+  if (label === "Low sample") return "border-sky-400/25 bg-sky-400/10 text-sky-200";
+  return "border-white/10 bg-white/[0.04] text-white/45";
+}
 
 function EmptyChart({ label }: Readonly<{ label: string }>) {
   return (
