@@ -4,7 +4,15 @@
 - `codex/fix-review-filters-contract`
 
 ## Current task
-- Replace the broken analytics country chart with a `Geo signal quality` decision panel.
+- Fix pipeline approval runtime digest errors by surfacing approval blockers inline.
+
+## Pipeline approval digest fix
+- Root cause: pipeline list approval used raw server-action forms, so expected `dashboard_approve_lead_for_outreach` blockers surfaced as production Server Components digests instead of readable CRM feedback.
+- Added `approveLeadWithFeedbackAction` as a structured `{ ok, error }` wrapper while keeping the legacy void `approveLeadAction` compatible with raw form action typings.
+- Switched pipeline list and lead detail approve controls to the structured action through `ActionFeedbackForm`.
+- Added pipeline list approval eligibility labels for obvious blockers: terminal/replied leads, missing email, missing score/band, and global outreach pause.
+- Added focused coverage for structured approval results and pipeline list eligibility rendering.
+- Validation: lint, typecheck, focused approval/list tests, full unit tests, production build, and `git diff --check` pass. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
 
 ## Geo signal quality analytics panel
 - Replaced the old country lead-count bar chart with a ranked geography signal panel showing leads, reply rate, positive replies/rate, and a signal label.
@@ -137,6 +145,12 @@
 - WF-04 remains n8n-owned; the recovery endpoint does not route leads or create n8n triggers for enrichment/scoring.
 
 ## Files changed recently
+- `app/pipeline/page.tsx`
+- `app/pipeline/[lead_id]/page.tsx`
+- `components/crm/pipeline-list-view.tsx`
+- `lib/crm/actions.ts`
+- `tests/unit/approval-actions.test.ts`
+- `tests/unit/pipeline-list-view.test.tsx`
 - `app/analytics/page.tsx`
 - `components/crm/analytics-charts.tsx`
 - `lib/crm/queries.ts`
@@ -168,11 +182,11 @@
 - Production migration application, n8n import, and authenticated fresh-campaign verification remain manual. WF-06 must remain disabled.
 
 ## Validation status
-- lint: passed (`npm run lint`) after geo signal quality analytics change
+- lint: passed (`npm run lint`) after pipeline approval digest fix
 - typecheck: passed (`npm run typecheck`)
 - git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
 - build: passed (`npm run build`); Next.js still warns about workspace-root inference and the `middleware` file convention being deprecated in favor of `proxy`
-- tests: passed (`npm test`, 25 files / 86 tests); focused geo signal test passed (`npm test -- tests/unit/geo-signal.test.ts`)
+- tests: passed (`npm test`, 27 files / 91 tests); focused approval/list tests passed (`npm test -- tests/unit/approval-actions.test.ts tests/unit/pipeline-list-view.test.tsx`)
 - workflow contracts: passed (`npm run validate:workflows`, 12 importable JSON files)
 - Graphify: refreshed through the required clean temp mirror and exported to Obsidian (`1,122` nodes, `2,707` edges)
 - Supabase SQL execution lint: not run; Supabase CLI is not installed on this workspace PATH

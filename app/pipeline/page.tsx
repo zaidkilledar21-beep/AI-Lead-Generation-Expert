@@ -156,6 +156,8 @@ export default async function PipelinePage({
     value: status,
     label: formatStatusLabel(status)
   }));
+  const globalOutreachSetting = settings.settings.find((setting) => setting.key === "global_outreach");
+  const globalOutreachPaused = ((globalOutreachSetting?.value as Record<string, unknown> | undefined)?.paused) === true;
 
   return (
     <>
@@ -569,7 +571,7 @@ export default async function PipelinePage({
       ) : view === "board" ? (
         <KanbanBoard columns={boardColumns} leads={filtered} />
       ) : (
-        <PipelineListView filtered={filtered} profiles={settings.profiles} />
+        <PipelineListView filtered={filtered} profiles={settings.profiles} globalOutreachPaused={globalOutreachPaused} />
       )}
     </>
   );

@@ -16,6 +16,8 @@ function cleanText(value: FormDataEntryValue | null) {
 
 const rejectionNoteRequiredMessage = "Please explain why this item is being rejected.";
 
+export type CrmActionResult = { ok: true; message?: string } | { ok: false; error: string };
+
 const editableLeadFields = [
   "business_name",
   "email",
@@ -151,12 +153,28 @@ export async function assignReplyAction(formData: FormData) {
   if (leadId) revalidatePath(`/pipeline/${leadId}`);
 }
 
-export async function approveLeadAction(formData: FormData) {
+async function approveLeadFromFormData(formData: FormData) {
   const leadId = cleanText(formData.get("leadId"));
   if (!leadId) throw new Error("leadId is required");
   await approveCrmLeadForOutreach(leadId);
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
+}
+
+export async function approveLeadAction(formData: FormData) {
+  await approveLeadFromFormData(formData);
+}
+
+export async function approveLeadWithFeedbackAction(formData: FormData) {
+  try {
+    await approveLeadFromFormData(formData);
+    return { ok: true } satisfies CrmActionResult;
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Lead approval failed."
+    } satisfies CrmActionResult;
+  }
 }
 
 export async function changeLeadStatusAction(formData: FormData) {
