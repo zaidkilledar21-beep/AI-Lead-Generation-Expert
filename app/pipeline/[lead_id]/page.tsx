@@ -9,7 +9,7 @@ import { InlineEditableField } from "@/components/crm/inline-editable-field";
 import { DraftReviewEditor } from "@/components/crm/draft-review-editor";
 import { LeadActionForm } from "./lead-action-form";
 import {
-  approveLeadAction,
+  approveLeadWithFeedbackAction,
   assignLeadAction,
   changeLeadStatusAction,
   closeLeadAction,
@@ -522,7 +522,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
             {lead.approvedForOutreach ? (
               <Badge tone="success">Approved</Badge>
             ) : (
-              <LeadActionForm action={approveLeadAction} successMessage="Lead approved for outreach.">
+              <LeadActionForm action={approveLeadWithFeedbackAction} successMessage="Lead approved for outreach.">
                 <input type="hidden" name="leadId" value={lead.id} />
                 <Button type="submit">Approve for outreach</Button>
               </LeadActionForm>
@@ -567,7 +567,7 @@ export default async function LeadDetailPage({ params }: Readonly<{ params: Prom
                 Approved
               </div>
             ) : (
-              <LeadActionForm action={approveLeadAction} successMessage="Lead approved for outreach.">
+              <LeadActionForm action={approveLeadWithFeedbackAction} successMessage="Lead approved for outreach.">
                 <input type="hidden" name="leadId" value={lead.id} />
                 <button type="submit" className="h-10 px-6 rounded-xl bg-brand text-white text-sm font-bold shadow-xl shadow-brand/20 hover:bg-brand-hover transition-all active:scale-95">
                   Approve Outreach

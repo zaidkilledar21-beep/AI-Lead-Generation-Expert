@@ -1,10 +1,11 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
+import { ActionFeedbackForm } from "@/components/crm/action-feedback-form";
 import { Badge, bandTone } from "@/components/ui/badge";
 import { CrmSelect } from "@/components/ui/crm-select";
 import { ScoreBar } from "@/components/ui/score-bar";
-import { approveLeadAction, changeLeadStatusAction, bulkApproveLeadsAction, bulkAssignLeadsAction, bulkChangeLeadStatusAction } from "@/lib/crm/actions";
+import { approveLeadWithFeedbackAction, changeLeadStatusAction, bulkApproveLeadsAction, bulkAssignLeadsAction, bulkChangeLeadStatusAction } from "@/lib/crm/actions";
 import { useLeadSelection } from "@/lib/hooks/use-lead-selection";
 import { isTerminalLeadStatus } from "@/lib/crm/status-contract";
 import { useState, useTransition } from "react";
@@ -13,6 +14,19 @@ type FounderProfile = {
   user_id: string;
   display_name: string;
 };
+
+type PipelineRow = Record<string, any>;
+
+export function getPipelineApprovalBlockReason(row: PipelineRow, globalOutreachPaused = false) {
+  if (row.approvedForOutreach) return null;
+  const status = String(row.status ?? "");
+  if (isTerminalLeadStatus(status)) return "Terminal";
+  if (status.startsWith("replied") || Number(row.replyCount ?? 0) > 0 || row.latestReplyIntent || row.hasUnhandledReply) return "Reply received";
+  if (!row.email) return "Missing email";
+  if (row.score == null || !row.effectiveBand) return "Missing score";
+  if (globalOutreachPaused) return "Global pause";
+  return null;
+}
 
 function exportRows(rows: any[]) {
   const headers = ["Business", "Email", "Phone", "Status", "Band", "Score", "Campaign", "Owner", "Country", "City"];
@@ -39,7 +53,11 @@ function exportRows(rows: any[]) {
   URL.revokeObjectURL(url);
 }
 
-export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: any[]; profiles: FounderProfile[] }>) {
+export function PipelineListView({
+  filtered,
+  profiles,
+  globalOutreachPaused = false
+}: Readonly<{ filtered: PipelineRow[]; profiles: FounderProfile[]; globalOutreachPaused?: boolean }>) {
   const { selectedArray, toggleSelection, toggleAll, clearSelection, isSelected, isAllSelected, count } = useLeadSelection(filtered);
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
@@ -224,9 +242,23 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
             ) : null}
             {filtered.map((row, i) => {
               const isTerminal = isTerminalLeadStatus(row.status);
-              const canApprove = !isTerminal && !row.approvedForOutreach && row.status !== "replied_interested";
+              const approvalBlockReason = getPipelineApprovalBlockReason(row, globalOutreachPaused);
+              const canApprove = !row.approvedForOutreach && !approvalBlockReason;
               const canPause = !isTerminal && row.status !== "replied_interested";
               const canArchive = !isTerminal;
+              let approvalAction = <Badge tone="muted">{approvalBlockReason ?? "No approval action"}</Badge>;
+              if (row.approvedForOutreach) {
+                approvalAction = <Badge tone="success">Approved</Badge>;
+              } else if (canApprove) {
+                approvalAction = (
+                  <ActionFeedbackForm action={approveLeadWithFeedbackAction} successMessage="Lead approved for outreach.">
+                    <input type="hidden" name="leadId" value={row.id} />
+                    <button className="ui-button ui-button-primary h-8 px-3 text-xs" type="submit">
+                      Approve
+                    </button>
+                  </ActionFeedbackForm>
+                );
+              }
 
               return (
               <motion.tr
@@ -276,37 +308,26 @@ export function PipelineListView({ filtered, profiles }: Readonly<{ filtered: an
                 </td>
                 <td className="p-4">
                   <div className="pipeline-row-actions">
-                    {row.approvedForOutreach ? (
-                      <Badge tone="success">Approved</Badge>
-                    ) : canApprove ? (
-                      <form action={approveLeadAction}>
-                        <input type="hidden" name="leadId" value={row.id} />
-                        <button className="ui-button ui-button-primary h-8 px-3 text-xs" type="submit">
-                          Approve
-                        </button>
-                      </form>
-                    ) : (
-                      <Badge tone="muted">No approval action</Badge>
-                    )}
+                    {approvalAction}
                     <div className="flex gap-2">
                       {canPause ? (
-                        <form action={changeLeadStatusAction}>
+                        <ActionFeedbackForm action={changeLeadStatusAction} successMessage="Lead paused.">
                           <input type="hidden" name="leadId" value={row.id} />
                           <input type="hidden" name="status" value="paused" />
                           <button className="ui-button ui-button-secondary h-8 px-3 text-xs" type="submit">
                             Pause
                           </button>
-                        </form>
+                        </ActionFeedbackForm>
                       ) : null}
                       {canArchive ? (
-                        <form action={changeLeadStatusAction}>
+                        <ActionFeedbackForm action={changeLeadStatusAction} successMessage="Lead archived.">
                           <input type="hidden" name="leadId" value={row.id} />
                           <input type="hidden" name="status" value="archived" />
-                        <button className="ui-button ui-button-danger h-8 px-3 text-xs" type="submit">
-                          Archive
-                        </button>
-                      </form>
-                    ) : null}
+                          <button className="ui-button ui-button-danger h-8 px-3 text-xs" type="submit">
+                            Archive
+                          </button>
+                        </ActionFeedbackForm>
+                      ) : null}
                     </div>
                   </div>
                 </td>

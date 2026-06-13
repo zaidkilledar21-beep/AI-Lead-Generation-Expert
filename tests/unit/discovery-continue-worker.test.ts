@@ -4,7 +4,10 @@ const mockState = vi.hoisted(() => ({
   client: null as any,
   enrichLead: null as any,
   scoreLead: null as any,
-  safeFinalizeDiscoveryRun: null as any
+  safeFinalizeDiscoveryRun: null as any,
+  countPromotableCandidatesFromDb: null as any,
+  getCampaignById: null as any,
+  promoteStrandedDiscoveryCandidates: null as any
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -17,15 +20,15 @@ vi.mock("@/lib/workflows/scoring", () => ({
   scoreLead: (leadId: string) => mockState.scoreLead(leadId)
 }));
 vi.mock("@/lib/workflows/lead-discovery", () => ({
+  countPromotableCandidatesFromDb: (...args: any[]) => mockState.countPromotableCandidatesFromDb(...args),
+  getCampaignById: (...args: any[]) => mockState.getCampaignById(...args),
+  promoteStrandedDiscoveryCandidates: (...args: any[]) => mockState.promoteStrandedDiscoveryCandidates(...args),
   safeFinalizeDiscoveryRun: (...args: any[]) => mockState.safeFinalizeDiscoveryRun(...args)
 }));
 
 type Row = Record<string, any>;
 type Db = Record<string, Row[]>;
 
-// Factory-function Supabase mock (no class, so S6958 "Do not add then to a class" cannot fire).
-// limit() returns a Promise enriched with .maybeSingle() so both `await query.limit(n)` and
-// `await query.limit(n).maybeSingle()` work correctly.
 function buildMockQuery(table: string, db: Db) {
   let action: "select" | "insert" = "select";
   let headCount = false;
@@ -73,8 +76,6 @@ function buildMockQuery(table: string, db: Db) {
     return { data: rows, count: rows.length, error: null };
   }
 
-  // Returns a Promise that also exposes .maybeSingle() so `limit(n).maybeSingle()` chains work.
-  // The `then` here is a plain object property, not a class method — S6958 does not apply.
   function limitResult() {
     const result = buildResult();
     const rows = Array.isArray((result as any).data) ? (result as any).data as Row[] : [];
@@ -96,8 +97,7 @@ function buildMockQuery(table: string, db: Db) {
     },
     eq(column: string, value: any) {
       eqs.push({ column, value });
-      // head-count queries are terminal after eq (PostgREST behaviour).
-      return headCount ? Promise.resolve(buildResult()) : query;
+      return query;
     },
     in(column: string, values: any[]) { inFilter = { column, values }; return query; },
     is(column: string, value: null) { if (value === null) isNullColumns.add(column); return query; },
@@ -107,7 +107,7 @@ function buildMockQuery(table: string, db: Db) {
       return query;
     },
     limit(count: number) { limitN = count; return limitResult(); },
-    maybeSingle() { return Promise.resolve({ data: computeRows()[0] ?? null, error: null }); }
+    maybeSingle() { return Promise.resolve({ data: computeRows()[0] ?? null, error: null }); },
   };
 
   return query;
@@ -140,6 +140,9 @@ describe("continueDiscoveryProcessing", () => {
     vi.resetModules();
     mockState.enrichLead = vi.fn(async (_leadId: string) => ({ status: "completed" }));
     mockState.safeFinalizeDiscoveryRun = vi.fn(async () => ({ status: "completed", stats: {}, finalized: true }));
+    mockState.countPromotableCandidatesFromDb = vi.fn(async () => 0);
+    mockState.getCampaignById = vi.fn(async (campaignId: string) => ({ id: campaignId, name: "Campaign" }));
+    mockState.promoteStrandedDiscoveryCandidates = vi.fn(async () => ({ created: 0, duplicates: 0, enriched: 0, scored: 0, errors: [] }));
   });
 
   it("skips already-scored leads, processes unscored, and finalizes when no work remains", async () => {
@@ -221,5 +224,63 @@ describe("continueDiscoveryProcessing", () => {
     expect(result.runs_processed).toBe(0);
     expect(mockState.scoreLead).not.toHaveBeenCalled();
     expect(result.per_run[0]).toMatchObject({ run_id: "run-1", result: "lease_unavailable" });
+  });
+
+  it("promotes stranded fetched candidates before finalizing a stale run", async () => {
+    const db: Db = {
+      discovery_runs: [{ id: "run-1", campaign_id: "camp-1", status: "running", started_at: "2026-01-01" }],
+      leads: [],
+      lead_scores: [],
+      lead_enrichment: [],
+      wf04_scored_leads: [],
+      workflow_events: [
+        { id: "event-1", discovery_run_id: "run-1", event_type: "place_processing_started", created_at: "2026-01-01T00:00:00.000Z" }
+      ]
+    };
+    mockState.scoreLead = vi.fn();
+    mockState.countPromotableCandidatesFromDb = vi.fn()
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
+    mockState.promoteStrandedDiscoveryCandidates = vi.fn(async () => ({
+      created: 2,
+      duplicates: 0,
+      enriched: 2,
+      scored: 2,
+      errors: []
+    }));
+    mockState.client = createMockClient(db, baseRpcResponses());
+
+    const { continueDiscoveryProcessing } = await import("@/lib/workflows/recovered-discovery");
+    const result = await continueDiscoveryProcessing({});
+
+    expect(mockState.getCampaignById).toHaveBeenCalledWith("camp-1");
+    expect(mockState.promoteStrandedDiscoveryCandidates).toHaveBeenCalledTimes(1);
+    expect(mockState.safeFinalizeDiscoveryRun).toHaveBeenCalledTimes(1);
+    expect(result.finalized).toBe(1);
+  });
+
+  it("defers finalization while search activity is fresh and not complete", async () => {
+    const db: Db = {
+      discovery_runs: [{ id: "run-1", campaign_id: "camp-1", status: "running", started_at: "2026-01-01" }],
+      leads: [],
+      lead_scores: [],
+      lead_enrichment: [],
+      wf04_scored_leads: [],
+      workflow_events: [
+        { id: "event-1", discovery_run_id: "run-1", event_type: "text_search_completed", created_at: new Date().toISOString() }
+      ]
+    };
+    mockState.scoreLead = vi.fn();
+    mockState.countPromotableCandidatesFromDb = vi.fn(async () => 0);
+    mockState.client = createMockClient(db, baseRpcResponses());
+
+    const { continueDiscoveryProcessing } = await import("@/lib/workflows/recovered-discovery");
+    const result = await continueDiscoveryProcessing({});
+
+    expect(result.finalized).toBe(0);
+    expect(mockState.promoteStrandedDiscoveryCandidates).not.toHaveBeenCalled();
+    expect(mockState.safeFinalizeDiscoveryRun).not.toHaveBeenCalled();
+    expect(db.workflow_events.some((event) => event.event_type === "recovery_finalization_deferred")).toBe(true);
   });
 });

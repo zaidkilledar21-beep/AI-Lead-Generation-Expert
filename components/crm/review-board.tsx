@@ -23,6 +23,8 @@ interface ReviewItem {
   createdAt: string;
   city?: string;
   country?: string;
+  email?: string | null;
+  hasUsableEmail?: boolean;
   leadStatus?: string;
   band?: string | null;
   score?: number | null;
@@ -33,7 +35,7 @@ interface ReviewItem {
   intent?: string | null;
 }
 
-const rejectionPrompt = "Please explain why this item is being rejected.";
+const rejectionPrompt = "Optional notes for this decision.";
 
 function sourceLabel(source: ReviewItem["source"]) {
   if (source === "email_draft") return "Draft approval";
@@ -50,6 +52,22 @@ function sourceIdField(source: ReviewItem["source"]) {
   if (source === "manual_review") return "reviewId";
   if (source === "email_draft") return "draftId";
   return "replyEventId";
+}
+
+function manualReviewApprovalBlock(item: ReviewItem) {
+  if (item.source !== "manual_review") return null;
+  const status = item.leadStatus ?? "";
+  const reason = item.reason ?? "";
+  const band = item.band ?? "";
+
+  if (!item.hasUsableEmail) return "Missing prospect email";
+  if (status === "enrichment_failed" || reason.includes("enrichment_failed")) return "Enrichment failed";
+  if (["unsubscribed", "bounced", "paused", "not_interested", "archived"].includes(status)) {
+    return `Lead is ${status.replaceAll("_", " ")}`;
+  }
+  if (band === "C" || band === "D") return `Band ${band} is not primary outreach-ready`;
+  if (reason.includes("missing_contact") || reason.includes("blocked_missing_email")) return "Missing prospect email";
+  return null;
 }
 
 function ReviewQueueActionForm({
@@ -71,6 +89,8 @@ function ReviewQueueActionForm({
   noteName?: "notes" | "reason";
   className?: string;
 }>) {
+  const approvalBlock = decision === "approved" ? manualReviewApprovalBlock(item) : null;
+
   return (
     <ActionFeedbackForm action={completeReviewQueueItemAction} successMessage={successMessage} className={className}>
       <input type="hidden" name="source" value={item.source} />
@@ -79,9 +99,10 @@ function ReviewQueueActionForm({
       <input type="hidden" name="decision" value={decision} />
       {outcome ? <input type="hidden" name="outcome" value={outcome} /> : null}
       {noteName ? <textarea name={noteName} className="field mb-2" rows={3} placeholder={rejectionPrompt} /> : null}
-      <Button type="submit" variant={variant} className="w-full shadow-lg">
+      <Button type="submit" variant={variant} className="w-full shadow-lg" disabled={Boolean(approvalBlock)}>
         {label}
       </Button>
+      {approvalBlock ? <p className="mt-2 text-xs leading-5 text-amber-200/85">{approvalBlock}</p> : null}
     </ActionFeedbackForm>
   );
 }
@@ -148,8 +169,8 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
   }
 
   return (
-    <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,0.98fr)_minmax(360px,1.02fr)] xl:items-stretch">
-      <section className="flex h-full flex-col gap-6">
+    <div className="mt-6 grid gap-6 xl:h-[calc(100vh-24rem)] xl:min-h-[560px] xl:grid-cols-[minmax(0,0.98fr)_minmax(360px,1.02fr)] xl:items-stretch xl:overflow-hidden">
+      <section className="flex h-full min-h-0 flex-col gap-6 xl:overflow-y-auto xl:overscroll-contain xl:pr-2 xl:[scrollbar-color:rgba(139,92,246,0.55)_rgba(255,255,255,0.06)] xl:[scrollbar-gutter:stable] xl:[scrollbar-width:thin]">
         <section className="grid gap-3 md:grid-cols-3">
           <div className="crm-state-card p-4">
             <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">Urgent</span>
@@ -196,6 +217,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                 <AnimatePresence mode="popLayout">
                   {groupItems.map((item) => {
                     const isSelected = selectedId === item.id;
+                    const approvalBlock = manualReviewApprovalBlock(item);
                     const createdLabel = item.createdAt ? new Date(item.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "--";
 
                     return (
@@ -218,7 +240,9 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <strong className="truncate text-sm font-semibold leading-tight text-white">{item.businessName}</strong>
+                              <strong className="truncate text-sm font-semibold leading-tight text-white" dir="auto" title={item.businessName}>
+                                {item.businessName}
+                              </strong>
                               <Badge tone={priorityTone(item.priority)} className="px-2.5 py-0.5 text-[10px] uppercase tracking-wide">
                                 {item.priority}
                               </Badge>
@@ -239,6 +263,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                           {item.leadStatus ? <Badge tone="info" className="px-2.5 py-0.5 text-[10px]">{item.leadStatus}</Badge> : null}
                           {item.replyExcerpt ? <Badge tone="default" className="px-2.5 py-0.5 text-[10px]">Reply context</Badge> : null}
                           {item.draftSubject ? <Badge tone="success" className="px-2.5 py-0.5 text-[10px]">Draft content</Badge> : null}
+                          {approvalBlock ? <Badge tone="warning" className="px-2.5 py-0.5 text-[10px]">Not outreach-ready</Badge> : null}
                         </div>
 
                         <div className="flex items-center justify-between gap-3 border-t border-white/8 pt-3">
@@ -260,14 +285,14 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
         })}
       </section>
 
-      <aside className="sticky top-6 self-start">
-        <div className="crm-state-card flex h-full min-h-[420px] flex-col overflow-hidden">
+      <aside className="min-h-0">
+        <div className="crm-state-card flex h-full min-h-[420px] flex-col overflow-hidden xl:min-h-0">
           <div className="border-b border-white/8 bg-white/[0.03] p-5">
             <h2 className="text-lg font-semibold tracking-[-0.02em] text-white">Review workspace</h2>
             <p className="mt-1 text-xs leading-5 text-white/45">Approve, reject, regenerate, or close the selected item.</p>
           </div>
 
-          <div className="p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 [scrollbar-color:rgba(139,92,246,0.55)_rgba(255,255,255,0.06)] [scrollbar-gutter:stable] [scrollbar-width:thin]">
             <AnimatePresence mode="wait">
               {selected ? (
                 <motion.div
@@ -280,7 +305,9 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
                   <div className="rounded-[24px] border border-white/8 bg-black/20 p-5">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <h3 className="truncate text-2xl font-semibold tracking-[-0.03em] text-white">{selected.businessName}</h3>
+                        <h3 className="truncate text-2xl font-semibold tracking-[-0.03em] text-white" dir="auto" title={selected.businessName}>
+                          {selected.businessName}
+                        </h3>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Badge tone={priorityTone(selected.priority)}>{selected.priority}</Badge>
                           <Badge tone="info">{sourceLabel(selected.source)}</Badge>

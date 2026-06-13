@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { enrichLead } from "@/lib/workflows/enrichment";
-import { safeFinalizeDiscoveryRun } from "@/lib/workflows/lead-discovery";
+import {
+  countPromotableCandidatesFromDb,
+  getCampaignById,
+  promoteStrandedDiscoveryCandidates,
+  safeFinalizeDiscoveryRun
+} from "@/lib/workflows/lead-discovery";
 import { scoreLead } from "@/lib/workflows/scoring";
 
 const defaultLimit = 5;
@@ -15,6 +20,25 @@ const maxRunsCap = 20;
 const defaultMaxRuntimeMs = 240_000;
 const maxRuntimeCap = 280_000;
 const minRuntimeMs = 10_000;
+const staleSearchActivityMs = 120_000;
+const searchActivityEvents = [
+  "query_loop_started",
+  "query_quota_reserved",
+  "search_query_upserted",
+  "text_search_started",
+  "text_search_completed",
+  "place_processing_started",
+  "run_progress_persisted"
+];
+const searchCompletionEvents = [
+  "execute_search_completed",
+  "promotion_started",
+  "import_started",
+  "import_completed",
+  "promotion_completed",
+  "stranded_promotion_started",
+  "stranded_promotion_completed"
+];
 
 type ProcessRecoveredDiscoveryInput = {
   discovery_run_id?: string;
@@ -143,7 +167,8 @@ async function hasLeadScore(leadId: string) {
   const { count, error } = await supabase
     .from("lead_scores")
     .select("id", { count: "exact", head: true })
-    .eq("lead_id", leadId);
+    .eq("lead_id", leadId)
+    .limit(1);
 
   if (error) throw new Error(error.message);
   return (count ?? 0) > 0;
@@ -299,7 +324,8 @@ async function countRouteableScored(discoveryRunId: string) {
   const { count, error } = await supabase
     .from("wf04_scored_leads")
     .select("id", { count: "exact", head: true })
-    .eq("discovery_run_id", discoveryRunId);
+    .eq("discovery_run_id", discoveryRunId)
+    .limit(1);
 
   if (error) return 0;
   return count ?? 0;
@@ -310,6 +336,61 @@ async function syncRunReviewPending(discoveryRunId: string) {
   const { data, error } = await supabase.rpc("sync_run_review_pending", { p_discovery_run_id: discoveryRunId });
   if (error) throw new Error(error.message);
   return typeof data === "number" ? data : 0;
+}
+
+async function getDiscoverySearchState(discoveryRunId: string) {
+  const supabase = createSupabaseServiceClient();
+  const [{ count: completionCount, error: completionError }, { data: latestActivity, error: activityError }] = await Promise.all([
+    supabase
+      .from("workflow_events")
+      .select("id", { count: "exact", head: true })
+      .eq("discovery_run_id", discoveryRunId)
+      .in("event_type", searchCompletionEvents)
+      .limit(1),
+    supabase
+      .from("workflow_events")
+      .select("created_at,event_type")
+      .eq("discovery_run_id", discoveryRunId)
+      .in("event_type", searchActivityEvents)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  ]);
+
+  if (completionError) throw new Error(completionError.message);
+  if (activityError) throw new Error(activityError.message);
+
+  const completed = (completionCount ?? 0) > 0;
+  const latestActivityAt = latestActivity?.created_at ? Date.parse(latestActivity.created_at) : null;
+  const stale = latestActivityAt === null || Date.now() - latestActivityAt > staleSearchActivityMs;
+
+  return {
+    completed,
+    stale,
+    readyForRecoveryPromotion: completed || stale,
+    latestActivityEvent: latestActivity?.event_type ?? null,
+    latestActivityAt: latestActivity?.created_at ?? null
+  };
+}
+
+async function promoteStrandedCandidatesIfReady(
+  discoveryRunId: string,
+  campaignId: string | null,
+  dryRun: boolean,
+  searchState: Awaited<ReturnType<typeof getDiscoverySearchState>>
+) {
+  const remainingBefore = await countPromotableCandidatesFromDb(discoveryRunId);
+  if (remainingBefore === 0) return { promoted: 0, remaining: 0, deferred: false };
+  if (!campaignId || !searchState.readyForRecoveryPromotion) {
+    return { promoted: 0, remaining: remainingBefore, deferred: true };
+  }
+
+  const campaign = await getCampaignById(campaignId);
+  if (!campaign) return { promoted: 0, remaining: remainingBefore, deferred: true };
+
+  const result = await promoteStrandedDiscoveryCandidates(campaign, discoveryRunId, dryRun);
+  const remaining = dryRun ? remainingBefore : await countPromotableCandidatesFromDb(discoveryRunId);
+  return { promoted: result.created, remaining, deferred: false };
 }
 
 // Reconcile + finalize the parent run when no WF-02/WF-03 work remains. Reuses the canonical
@@ -404,9 +485,13 @@ async function processOneRun(
 ): Promise<ContinueRunResult> {
   const counts = emptyCounts();
   const perLeadResults: PerLeadResult[] = [];
+  const searchState = await getDiscoverySearchState(run.id);
+  const strandedPromotion = await promoteStrandedCandidatesIfReady(run.id, run.campaign_id ?? null, dryRun, searchState);
   await logRunEvent(run.id, run.campaign_id ?? null, "recovery_batch_started", "started", {
     dry_run: dryRun,
-    limit: perRunLimit
+    limit: perRunLimit,
+    search_state: searchState,
+    stranded_promotion: strandedPromotion
   });
 
   const leads = await selectProcessableLeads(run.id, processableStatuses, perRunLimit);
@@ -427,11 +512,19 @@ async function processOneRun(
   let awaitingWf04 = false;
   if (!dryRun) {
     const remaining = await selectProcessableLeads(run.id, processableStatuses, 1);
-    if (remaining.length === 0) {
+    const remainingPromotableCandidates = await countPromotableCandidatesFromDb(run.id);
+    if (remaining.length === 0 && remainingPromotableCandidates === 0 && searchState.readyForRecoveryPromotion) {
       const outcome = await finalizeRunAfterProcessing(run.id, run.campaign_id ?? null);
       finalized = outcome.finalized;
       awaitingWf04 = outcome.routeableScored > 0;
       if (finalized) aggregate.finalized += 1;
+    } else if (remainingPromotableCandidates > 0 || !searchState.readyForRecoveryPromotion) {
+      await logRunEvent(run.id, run.campaign_id ?? null, "recovery_finalization_deferred", "completed", {
+        dry_run: dryRun,
+        remaining_processable_leads: remaining.length,
+        remaining_promotable_candidates: remainingPromotableCandidates,
+        search_state: searchState
+      });
     }
   }
 

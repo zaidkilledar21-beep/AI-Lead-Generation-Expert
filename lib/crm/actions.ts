@@ -8,13 +8,24 @@ import { updateGlobalOutreachSettings } from "@/lib/app/settings";
 import { MANUAL_BOARD_MOVE_STATUSES, type ManualBoardMoveStatus } from "@/lib/crm/status-contract";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { isAsciiWhitespace, isValidEmailAddress } from "@/lib/text-validation";
+import { isValidBusinessEmail } from "@/lib/workflows/contact-extraction";
 
 function cleanText(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
   return text.length > 0 ? text : null;
 }
 
-const rejectionNoteRequiredMessage = "Please explain why this item is being rejected.";
+export type CrmActionResult = { ok: true; message?: string } | { ok: false; error: string };
+
+const regenerationReasonRequiredMessage = "Please describe what should be improved before regenerating.";
+const manualReviewApprovalBlockedStatuses = new Set([
+  "enrichment_failed",
+  "paused",
+  "unsubscribed",
+  "bounced",
+  "not_interested",
+  "archived"
+]);
 
 const editableLeadFields = [
   "business_name",
@@ -113,6 +124,53 @@ async function closePendingReplyReviewItems({
   if (error) throw new Error(error.message);
 }
 
+async function assertManualReviewApprovalReady({
+  supabase,
+  reviewId,
+  leadId
+}: Readonly<{
+  supabase: ReturnType<typeof createSupabaseServiceClient>;
+  reviewId: string;
+  leadId: string;
+}>) {
+  const [{ data: lead, error: leadError }, { data: review, error: reviewError }, { data: score, error: scoreError }] = await Promise.all([
+    supabase.from("leads").select("email,status").eq("id", leadId).maybeSingle(),
+    supabase.from("manual_review_queue").select("reason").eq("id", reviewId).maybeSingle(),
+    supabase
+      .from("lead_scores")
+      .select("band")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  ]);
+
+  if (leadError) throw new Error(leadError.message);
+  if (reviewError) throw new Error(reviewError.message);
+  if (scoreError) throw new Error(scoreError.message);
+  if (!lead) throw new Error("Lead not found");
+
+  const leadStatus = typeof lead.status === "string" ? lead.status : "";
+  const reviewReason = typeof review?.reason === "string" ? review.reason : "";
+  const band = typeof score?.band === "string" ? score.band : null;
+
+  if (!isValidBusinessEmail(typeof lead.email === "string" ? lead.email : null)) {
+    throw new Error("Lead needs a prospect email before outreach approval");
+  }
+  if (manualReviewApprovalBlockedStatuses.has(leadStatus)) {
+    throw new Error(`Lead is ${leadStatus.replaceAll("_", " ")} and is not outreach-ready`);
+  }
+  if (reviewReason.includes("enrichment_failed")) {
+    throw new Error("Lead enrichment failed and must be resolved before outreach approval");
+  }
+  if (reviewReason.includes("missing_contact") || reviewReason.includes("blocked_missing_email")) {
+    throw new Error("Lead needs a prospect email before outreach approval");
+  }
+  if (band === "C" || band === "D") {
+    throw new Error(`Band ${band} leads are not primary outreach-ready from manual review`);
+  }
+}
+
 export async function assignLeadAction(formData: FormData) {
   const leadId = cleanText(formData.get("leadId"));
   const assignedTo = cleanText(formData.get("assignedTo"));
@@ -151,12 +209,28 @@ export async function assignReplyAction(formData: FormData) {
   if (leadId) revalidatePath(`/pipeline/${leadId}`);
 }
 
-export async function approveLeadAction(formData: FormData) {
+async function approveLeadFromFormData(formData: FormData) {
   const leadId = cleanText(formData.get("leadId"));
   if (!leadId) throw new Error("leadId is required");
   await approveCrmLeadForOutreach(leadId);
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
+}
+
+export async function approveLeadAction(formData: FormData) {
+  await approveLeadFromFormData(formData);
+}
+
+export async function approveLeadWithFeedbackAction(formData: FormData) {
+  try {
+    await approveLeadFromFormData(formData);
+    return { ok: true } satisfies CrmActionResult;
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Lead approval failed."
+    } satisfies CrmActionResult;
+  }
 }
 
 export async function changeLeadStatusAction(formData: FormData) {
@@ -207,7 +281,6 @@ export async function closeLeadAction(formData: FormData) {
   const notes = cleanText(formData.get("notes"));
   if (!leadId) throw new Error("leadId is required");
   if (outcome !== "won" && outcome !== "lost") throw new Error("Unsupported close outcome");
-  if (outcome === "lost" && replyEventId && !notes) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const status = outcome === "won" ? "closed_won" : "closed_lost";
@@ -345,10 +418,12 @@ export async function completeReviewAction(formData: FormData) {
   if (decision !== "approved" && decision !== "rejected") {
     throw new Error("Unsupported review decision");
   }
-  if (decision === "rejected" && !notes) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
+  if (decision === "approved") {
+    await assertManualReviewApprovalReady({ supabase, reviewId, leadId });
+  }
   const { error } = await supabase
     .from("manual_review_queue")
     .update({
@@ -502,7 +577,7 @@ export async function regenerateEmailDraftAction(formData: FormData) {
   const reason = cleanText(formData.get("reason"));
   if (!draftId) throw new Error("draftId is required");
   if (!leadId) throw new Error("leadId is required");
-  if (!reason) throw new Error(rejectionNoteRequiredMessage);
+  if (!reason) throw new Error(regenerationReasonRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();
@@ -553,7 +628,6 @@ export async function rejectEmailDraftAction(formData: FormData) {
   const reason = cleanText(formData.get("reason"));
   if (!draftId) throw new Error("draftId is required");
   if (!leadId) throw new Error("leadId is required");
-  if (!reason) throw new Error(rejectionNoteRequiredMessage);
 
   const actor = await requireAppActor();
   const supabase = createSupabaseServiceClient();

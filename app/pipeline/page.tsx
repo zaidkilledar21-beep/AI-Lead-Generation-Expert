@@ -156,6 +156,36 @@ export default async function PipelinePage({
     value: status,
     label: formatStatusLabel(status)
   }));
+  const globalOutreachSetting = settings.settings.find((setting) => setting.key === "global_outreach");
+  const globalOutreachPaused = ((globalOutreachSetting?.value as Record<string, unknown> | undefined)?.paused) === true;
+  const emptyTitle = rows.length === 0 ? "No pipeline leads yet" : "No leads match these filters";
+  let emptyDescription = "The current pipeline view has no records to show.";
+  if (rows.length === 0) {
+    emptyDescription = "Add a campaign or import leads to populate the pipeline workspace.";
+  } else if (hasActiveFilters) {
+    emptyDescription = "Clear or relax the current filters to bring matching leads back into view.";
+  }
+  const emptyAction = rows.length === 0 ? (
+    <LinkButton href="/campaigns/new" variant="secondary" className="h-10 px-4">
+      Create campaign
+    </LinkButton>
+  ) : (
+    <LinkButton href="/pipeline" variant="secondary" className="h-10 px-4">
+      Clear filters
+    </LinkButton>
+  );
+  let pipelineSurface = <PipelineListView filtered={filtered} profiles={settings.profiles} globalOutreachPaused={globalOutreachPaused} />;
+  if (filtered.length === 0) {
+    pipelineSurface = (
+      <section className="panel">
+        <div className="p-6 md:p-8">
+          <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
+        </div>
+      </section>
+    );
+  } else if (view === "board") {
+    pipelineSurface = <KanbanBoard columns={boardColumns} leads={filtered} />;
+  }
 
   return (
     <>
@@ -540,37 +570,7 @@ export default async function PipelinePage({
         </div>
       </section>
 
-      {filtered.length === 0 ? (
-        <section className="panel">
-          <div className="p-6 md:p-8">
-            <EmptyState
-              title={rows.length === 0 ? "No pipeline leads yet" : "No leads match these filters"}
-              description={
-                rows.length === 0
-                  ? "Add a campaign or import leads to populate the pipeline workspace."
-                  : hasActiveFilters
-                    ? "Clear or relax the current filters to bring matching leads back into view."
-                    : "The current pipeline view has no records to show."
-              }
-              action={
-                rows.length === 0 ? (
-                  <LinkButton href="/campaigns/new" variant="secondary" className="h-10 px-4">
-                    Create campaign
-                  </LinkButton>
-                ) : (
-                  <LinkButton href="/pipeline" variant="secondary" className="h-10 px-4">
-                    Clear filters
-                  </LinkButton>
-                )
-              }
-            />
-          </div>
-        </section>
-      ) : view === "board" ? (
-        <KanbanBoard columns={boardColumns} leads={filtered} />
-      ) : (
-        <PipelineListView filtered={filtered} profiles={settings.profiles} />
-      )}
+      {pipelineSurface}
     </>
   );
 }
