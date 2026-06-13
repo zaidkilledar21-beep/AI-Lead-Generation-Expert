@@ -4,7 +4,34 @@
 - `codex/fix-review-filters-contract`
 
 ## Current task
-- Fix pipeline approval runtime digest errors by surfacing approval blockers inline.
+- Fix `/review` Manual Review Queue actionability gating for non-outreach-ready manual review items.
+
+## Review queue outreach-readiness gating
+- Added review item contact readiness metadata (`email`, `hasUsableEmail`) from `getReviewItems()` so the `/review` UI can distinguish outreach-approval items from missing-contact/enrichment-failed/manual intervention items.
+- Manual review cards that cannot be approved now show a `Not outreach-ready` badge; the workspace disables `Approve for outreach` and explains the reason for missing prospect email, enrichment failure, terminal lead state, or Band C/D.
+- Added `dir="auto"` plus title text to review card/workspace business names so long mixed English/Arabic names truncate safely without losing the raw value.
+- Added a server-side guard before manual review approval so stale forms still block missing/invalid email, enrichment-failed review reasons/statuses, terminal lead statuses, and Band C/D manual-review approvals before the approval RPC runs.
+- Earlier `/review` fixes remain in place: independent left/right scroll regions and optional reject/archive notes.
+- Files changed: `components/crm/review-board.tsx`, `lib/crm/actions.ts`, `lib/crm/queries.ts`.
+- Validation: `npm run lint`, `npm run typecheck`, `npm test` (15 files / 52 tests), `npm run build`, `git diff --check`, and focused risky-pattern grep passed. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
+- Browser smoke: not completed in an authenticated session locally; prior local `/review` load attempts timed out before the board rendered.
+
+## Review queue split-scroll + optional reject/archive notes
+- Fixed the review board desktop layout so the queue/list side and the review workspace are bounded, independent scroll regions (`min-h-0`, panel-local `overflow-y-auto`, and `overscroll-contain`).
+- Removed the sticky workspace behavior that made the right panel depend on parent/page scroll before its own content could scroll.
+- Made manual review rejection, email draft rejection/archive, and reply "Mark lost" notes optional while preserving null notes and existing fallback machine reason codes for queue/block records.
+- Kept draft regeneration notes required because that is an improvement request workflow, not reject/archive.
+- Files changed: `components/crm/review-board.tsx`, `lib/crm/actions.ts`.
+- Validation: `npm run lint`, `npm run typecheck`, `npm test` (15 files / 52 tests), `npm run build`, `git diff --check`, and focused risky-pattern grep passed. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
+- Browser smoke: local dev server started on port 3001, but `/review` did not finish loading in the Playwright timeout before the board rendered; no authenticated visual scroll test was completed locally.
+
+## Stranded discovery candidate recovery fix
+- Root cause: the recovery/continue worker could finalize a `running` discovery run before the Google Places query loop reached `execute_search_completed`/promotion. The D2C run continued writing candidates after early finalization, leaving fetched candidates at `details_fetched` with no `final_lead_id`.
+- Permanent app fix: the recovery worker now checks search activity/completion before finalization, defers finalization while search is still fresh, promotes stranded fetched candidates when recovery is safe, and refuses to finalize while promotable candidates remain.
+- Added migration `018_recover_stranded_discovery_candidates.sql` with a service-role-only, idempotent SQL recovery RPC for already-stranded candidates.
+- Live recovery via Supabase MCP for run `eb73b595-dbbb-4ed6-b90d-e95745ae5451`: promoted `28` stranded candidates, left `0` stranded fetched candidates, then processed recovered leads through the deployed recovery endpoint.
+- Final live state: `28` recovered leads, `28` scores, `22` Band B, `6` Band C, `0` leads still needing recovery processing; run completed with `28` promoted, `15` rejected, `5` manual-review candidates.
+- Validation: lint, typecheck, focused continue-worker tests, full unit tests, workflow contract validation, production build, and `git diff --check` pass. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
 
 ## Pipeline approval digest fix
 - Root cause: pipeline list approval used raw server-action forms, so expected `dashboard_approve_lead_for_outreach` blockers surfaced as production Server Components digests instead of readable CRM feedback.
@@ -145,6 +172,11 @@
 - WF-04 remains n8n-owned; the recovery endpoint does not route leads or create n8n triggers for enrichment/scoring.
 
 ## Files changed recently
+- `lib/workflows/lead-discovery.ts`
+- `lib/workflows/recovered-discovery.ts`
+- `tests/unit/discovery-continue-worker.test.ts`
+- `supabase/migrations/018_recover_stranded_discovery_candidates.sql`
+- `vitest.config.ts`
 - `app/pipeline/page.tsx`
 - `app/pipeline/[lead_id]/page.tsx`
 - `components/crm/pipeline-list-view.tsx`
@@ -182,14 +214,14 @@
 - Production migration application, n8n import, and authenticated fresh-campaign verification remain manual. WF-06 must remain disabled.
 
 ## Validation status
-- lint: passed (`npm run lint`) after pipeline approval digest fix
+- lint: passed (`npm run lint`) after stranded discovery recovery fix
 - typecheck: passed (`npm run typecheck`)
 - git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
 - build: passed (`npm run build`); Next.js still warns about workspace-root inference and the `middleware` file convention being deprecated in favor of `proxy`
-- tests: passed (`npm test`, 27 files / 91 tests); focused approval/list tests passed (`npm test -- tests/unit/approval-actions.test.ts tests/unit/pipeline-list-view.test.tsx`)
+- tests: passed (`npm test`, 15 files / 52 tests); focused continue-worker test passed (`npx vitest run --dir tests/unit discovery-continue-worker.test.ts`)
 - workflow contracts: passed (`npm run validate:workflows`, 12 importable JSON files)
 - Graphify: refreshed through the required clean temp mirror and exported to Obsidian (`1,122` nodes, `2,707` edges)
-- Supabase SQL execution lint: not run; Supabase CLI is not installed on this workspace PATH
+- Supabase migration: `018_recover_stranded_discovery_candidates` applied to production through Supabase MCP
 
 ## Known risks
 - Recovery processing calls live crawl and DeepSeek dependencies when `dry_run` is false.

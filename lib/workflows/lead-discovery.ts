@@ -626,7 +626,7 @@ async function getCampaign(campaignId?: string) {
   return data as CampaignRow | null;
 }
 
-async function getCampaignById(campaignId: string) {
+export async function getCampaignById(campaignId: string) {
   const supabase = createSupabaseServiceClient();
   const { data, error } = await supabase.from("campaigns").select("*").eq("id", campaignId).maybeSingle();
   if (error) throw new Error(error.message);
@@ -808,6 +808,19 @@ export async function loadPromotableCandidatesFromDb(runId: string, campaignId: 
   }));
 }
 
+export async function countPromotableCandidatesFromDb(runId: string) {
+  const supabase = createSupabaseServiceClient();
+  const { count, error } = await supabase
+    .from("lead_candidates")
+    .select("id", { count: "exact", head: true })
+    .eq("discovery_run_id", runId)
+    .eq("candidate_status", "details_fetched")
+    .is("final_lead_id", null);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 async function promoteAndProcessLeads(
   promotableLeads: RawLeadInput[],
   campaign: CampaignRow,
@@ -920,6 +933,38 @@ async function promoteAndProcessLeads(
   });
 
   return results;
+}
+
+export async function promoteStrandedDiscoveryCandidates(
+  campaign: CampaignRow,
+  runId: string,
+  dryRun: boolean
+) {
+  const promotable = await loadPromotableCandidatesFromDb(runId, campaign.id);
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "stranded_promotion_started",
+    payload: { promotable_count: promotable.length, dry_run: dryRun }
+  });
+
+  const results = await promoteAndProcessLeads(promotable, campaign, runId, dryRun);
+  await logDiscoveryCheckpoint({
+    campaign,
+    runId,
+    eventType: "stranded_promotion_completed",
+    payload: {
+      promotable_count: promotable.length,
+      dry_run: dryRun,
+      created: results.created,
+      duplicates: results.duplicates,
+      enriched: results.enriched,
+      scored: results.scored,
+      errors_count: results.errors.length
+    }
+  });
+
+  return { promotable: promotable.length, ...results };
 }
 
 type CandidateProcessingResult = {

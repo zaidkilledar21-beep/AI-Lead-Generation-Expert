@@ -3,6 +3,7 @@ import { createSupabaseDashboardClient } from "@/lib/supabase/dashboard";
 import { getActiveDashboardUserRole } from "@/lib/app/auth";
 import { getCampaignReadiness } from "@/lib/app/campaigns";
 import { resolveAnalyticsDateRange } from "@/lib/crm/analytics-utils";
+import { isValidBusinessEmail } from "@/lib/workflows/contact-extraction";
 import {
   HUMAN_REVIEW_REPLY_INTENTS,
   POSITIVE_REPLY_INTENTS,
@@ -1274,12 +1275,12 @@ export async function getReviewItems() {
     getPipelineRows(500),
     supabase
       .from("manual_review_queue")
-      .select("*,leads(business_name,niche,country,city,status)")
+      .select("*,leads(business_name,niche,country,city,status,email)")
       .eq("review_status", "pending")
       .order("created_at", { ascending: true }),
     supabase
       .from("email_drafts")
-      .select("*,leads(business_name,niche,country,city,status)")
+      .select("*,leads(business_name,niche,country,city,status,email)")
       .eq("approval_status", "pending")
       .eq("sent", false)
       .order("created_at", { ascending: true })
@@ -1312,6 +1313,8 @@ export async function getReviewItems() {
       country: lead?.country ?? pipeline?.country ?? null,
       city: lead?.city ?? pipeline?.city ?? null,
       leadStatus: lead?.status ?? null,
+      email: lead?.email ?? pipeline?.email ?? null,
+      hasUsableEmail: isValidBusinessEmail(lead?.email ?? pipeline?.email ?? null),
       reason,
       priority: item.priority ?? "normal",
       reviewStatus: item.review_status,
@@ -1337,6 +1340,8 @@ export async function getReviewItems() {
       country: lead?.country ?? pipeline?.country ?? null,
       city: lead?.city ?? pipeline?.city ?? null,
       leadStatus: lead?.status ?? pipeline?.status ?? null,
+      email: lead?.email ?? pipeline?.email ?? null,
+      hasUsableEmail: isValidBusinessEmail(lead?.email ?? pipeline?.email ?? null),
       reason: "Draft approval pending",
       priority: pipeline?.effectiveBand === "A" ? "high" : "normal",
       reviewStatus: item.approval_status ?? "pending",
