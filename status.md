@@ -4,7 +4,14 @@
 - `codex/fix-review-filters-contract`
 
 ## Current task
-- Fix failed SonarCloud quality gate on PR #61.
+- Fix `/review` queue scroll architecture so the left queue cannot trap cursor-based scrolling.
+
+## Review queue UI/UX scroll overhaul
+- Root cause: `/review` had nested scroll owners: the CRM main page, the left review queue, and the right workspace. The left queue also used `overscroll-contain`, so wheel events could be trapped after scrolling to the bottom.
+- Fix: removed the desktop fixed-height review board, made the left queue normal page flow, removed left-side `overflow-y-auto`/`overscroll-contain`, removed priority-card clipping, and made only the right workspace sticky with a viewport-capped scroll body.
+- Files changed: `components/crm/review-board.tsx`.
+- Validation: `npm run lint`, `npm run typecheck`, `npm test` (15 files / 52 tests), `npm run build`, `git diff --check`, and focused review-board scroll-class grep passed. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
+- Browser smoke: local production `/review` returned `200`, but fresh headless Chrome redirected to `/login?next=/review`, so authenticated visual scroll verification was blocked.
 
 ## PR #61 SonarCloud quality gate fix
 - Root cause: SonarCloud failed the PR gate on new-code reliability because test mocks used empty observer methods and a plain Supabase mock object with a static `then` method; the same scan also reported nested ternary smells in the touched pipeline UI.
