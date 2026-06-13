@@ -169,8 +169,8 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
   }
 
   return (
-    <div className="mt-6 grid gap-6 xl:h-[calc(100dvh_-_7rem)] xl:min-h-[680px] xl:grid-cols-[minmax(0,0.98fr)_minmax(360px,1.02fr)] xl:items-stretch">
-      <section className="flex h-full min-h-0 flex-col gap-6 xl:overflow-y-auto xl:overscroll-contain xl:pr-2 xl:[scrollbar-color:rgba(139,92,246,0.55)_rgba(255,255,255,0.06)] xl:[scrollbar-gutter:stable] xl:[scrollbar-width:thin]">
+    <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,0.98fr)_minmax(360px,1.02fr)] xl:items-start">
+      <section className="flex min-w-0 flex-col gap-6 pb-8">
         <section className="grid gap-3 md:grid-cols-3">
           <div className="crm-state-card p-4">
             <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">Urgent</span>
@@ -193,7 +193,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
           const groupItems = items.filter((item) => group.match(item.priority));
 
           return (
-            <section key={group.title} className="crm-state-card overflow-hidden">
+            <section key={group.title} className="crm-state-card">
               <div className="border-b border-white/8 px-5 py-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -285,14 +285,14 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
         })}
       </section>
 
-      <aside className="min-h-0 xl:h-full">
-        <div className="crm-state-card flex h-full min-h-[420px] flex-col overflow-hidden xl:min-h-0">
+      <aside className="min-h-0 xl:sticky xl:top-4 xl:self-start">
+        <div className="crm-state-card flex min-h-[420px] flex-col overflow-hidden xl:max-h-[calc(100dvh_-_8rem)]">
           <div className="border-b border-white/8 bg-white/[0.03] p-5">
             <h2 className="text-lg font-semibold tracking-[-0.02em] text-white">Review workspace</h2>
             <p className="mt-1 text-xs leading-5 text-white/45">Approve, reject, regenerate, or close the selected item.</p>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 [scrollbar-color:rgba(139,92,246,0.55)_rgba(255,255,255,0.06)] [scrollbar-gutter:stable] [scrollbar-width:thin]">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 [scrollbar-color:rgba(139,92,246,0.55)_rgba(255,255,255,0.06)] [scrollbar-gutter:stable] [scrollbar-width:thin]">
             <AnimatePresence mode="wait">
               {selected ? (
                 <motion.div
