@@ -167,7 +167,8 @@ async function hasLeadScore(leadId: string) {
   const { count, error } = await supabase
     .from("lead_scores")
     .select("id", { count: "exact", head: true })
-    .eq("lead_id", leadId);
+    .eq("lead_id", leadId)
+    .limit(1);
 
   if (error) throw new Error(error.message);
   return (count ?? 0) > 0;
@@ -323,7 +324,8 @@ async function countRouteableScored(discoveryRunId: string) {
   const { count, error } = await supabase
     .from("wf04_scored_leads")
     .select("id", { count: "exact", head: true })
-    .eq("discovery_run_id", discoveryRunId);
+    .eq("discovery_run_id", discoveryRunId)
+    .limit(1);
 
   if (error) return 0;
   return count ?? 0;
@@ -343,7 +345,8 @@ async function getDiscoverySearchState(discoveryRunId: string) {
       .from("workflow_events")
       .select("id", { count: "exact", head: true })
       .eq("discovery_run_id", discoveryRunId)
-      .in("event_type", searchCompletionEvents),
+      .in("event_type", searchCompletionEvents)
+      .limit(1),
     supabase
       .from("workflow_events")
       .select("created_at,event_type")

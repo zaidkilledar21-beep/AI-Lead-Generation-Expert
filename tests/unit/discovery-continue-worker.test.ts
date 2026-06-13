@@ -109,13 +109,6 @@ function buildMockQuery(table: string, db: Db) {
     limit(count: number) { limitN = count; return limitResult(); },
     maybeSingle() { return Promise.resolve({ data: computeRows()[0] ?? null, error: null }); },
   };
-  const awaitHook = "then";
-  Object.defineProperty(query, awaitHook, {
-    value: (
-      onfulfilled?: ((value: ReturnType<typeof buildResult>) => unknown) | null,
-      onrejected?: ((reason: unknown) => unknown) | null
-    ) => Promise.resolve(buildResult()).then(onfulfilled, onrejected)
-  });
 
   return query;
 }

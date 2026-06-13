@@ -8,8 +8,8 @@
 
 ## PR #61 SonarCloud quality gate fix
 - Root cause: SonarCloud failed the PR gate on new-code reliability because test mocks used empty observer methods and a plain Supabase mock object with a static `then` method; the same scan also reported nested ternary smells in the touched pipeline UI.
-- Fixed the observer mock with explicit `vi.fn()` methods, changed the Supabase query mock to attach its await hook dynamically while preserving awaitable query-builder behavior, and extracted the pipeline empty-state/action branches into local variables.
-- Files changed: `app/pipeline/page.tsx`, `components/crm/pipeline-list-view.tsx`, `tests/unit/discovery-continue-worker.test.ts`, `tests/unit/pipeline-list-view.test.tsx`.
+- Fixed the observer mock with explicit `vi.fn()` methods, removed the Supabase query mock thenable by making worker existence checks use explicit terminal `.limit(1)` calls, and extracted the pipeline empty-state/action branches into local variables.
+- Files changed: `app/pipeline/page.tsx`, `components/crm/pipeline-list-view.tsx`, `lib/workflows/recovered-discovery.ts`, `tests/unit/discovery-continue-worker.test.ts`, `tests/unit/pipeline-list-view.test.tsx`.
 - Validation: `npm run lint`, `npm run typecheck`, focused pipeline/worker tests, `npm test` (15 files / 52 tests), and `npm run build` pass. Build still reports the existing Next.js workspace-root and middleware/proxy warnings.
 
 ## Review queue outreach-readiness gating
