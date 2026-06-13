@@ -169,7 +169,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
   }
 
   return (
-    <div className="mt-6 grid gap-6 xl:h-[calc(100vh-24rem)] xl:min-h-[560px] xl:grid-cols-[minmax(0,0.98fr)_minmax(360px,1.02fr)] xl:items-stretch xl:overflow-hidden">
+    <div className="mt-6 grid gap-6 xl:h-[calc(100dvh_-_7rem)] xl:min-h-[680px] xl:grid-cols-[minmax(0,0.98fr)_minmax(360px,1.02fr)] xl:items-stretch">
       <section className="flex h-full min-h-0 flex-col gap-6 xl:overflow-y-auto xl:overscroll-contain xl:pr-2 xl:[scrollbar-color:rgba(139,92,246,0.55)_rgba(255,255,255,0.06)] xl:[scrollbar-gutter:stable] xl:[scrollbar-width:thin]">
         <section className="grid gap-3 md:grid-cols-3">
           <div className="crm-state-card p-4">
@@ -285,7 +285,7 @@ export function ReviewBoard({ items }: Readonly<{ items: ReviewItem[] }>) {
         })}
       </section>
 
-      <aside className="min-h-0">
+      <aside className="min-h-0 xl:h-full">
         <div className="crm-state-card flex h-full min-h-[420px] flex-col overflow-hidden xl:min-h-0">
           <div className="border-b border-white/8 bg-white/[0.03] p-5">
             <h2 className="text-lg font-semibold tracking-[-0.02em] text-white">Review workspace</h2>
