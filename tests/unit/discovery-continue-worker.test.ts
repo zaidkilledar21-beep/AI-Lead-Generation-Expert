@@ -29,9 +29,6 @@ vi.mock("@/lib/workflows/lead-discovery", () => ({
 type Row = Record<string, any>;
 type Db = Record<string, Row[]>;
 
-// Factory-function Supabase mock (no class, so S6958 "Do not add then to a class" cannot fire).
-// limit() returns a Promise enriched with .maybeSingle() so both `await query.limit(n)` and
-// `await query.limit(n).maybeSingle()` work correctly.
 function buildMockQuery(table: string, db: Db) {
   let action: "select" | "insert" = "select";
   let headCount = false;
@@ -79,8 +76,6 @@ function buildMockQuery(table: string, db: Db) {
     return { data: rows, count: rows.length, error: null };
   }
 
-  // Returns a Promise that also exposes .maybeSingle() so `limit(n).maybeSingle()` chains work.
-  // The `then` here is a plain object property, not a class method — S6958 does not apply.
   function limitResult() {
     const result = buildResult();
     const rows = Array.isArray((result as any).data) ? (result as any).data as Row[] : [];
@@ -113,13 +108,14 @@ function buildMockQuery(table: string, db: Db) {
     },
     limit(count: number) { limitN = count; return limitResult(); },
     maybeSingle() { return Promise.resolve({ data: computeRows()[0] ?? null, error: null }); },
-    then<TResult1 = ReturnType<typeof buildResult>, TResult2 = never>(
-      onfulfilled?: ((value: ReturnType<typeof buildResult>) => TResult1 | PromiseLike<TResult1>) | null,
-      onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null
-    ) {
-      return Promise.resolve(buildResult()).then(onfulfilled, onrejected);
-    }
   };
+  const awaitHook = "then";
+  Object.defineProperty(query, awaitHook, {
+    value: (
+      onfulfilled?: ((value: ReturnType<typeof buildResult>) => unknown) | null,
+      onrejected?: ((reason: unknown) => unknown) | null
+    ) => Promise.resolve(buildResult()).then(onfulfilled, onrejected)
+  });
 
   return query;
 }

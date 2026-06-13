@@ -246,6 +246,19 @@ export function PipelineListView({
               const canApprove = !row.approvedForOutreach && !approvalBlockReason;
               const canPause = !isTerminal && row.status !== "replied_interested";
               const canArchive = !isTerminal;
+              let approvalAction = <Badge tone="muted">{approvalBlockReason ?? "No approval action"}</Badge>;
+              if (row.approvedForOutreach) {
+                approvalAction = <Badge tone="success">Approved</Badge>;
+              } else if (canApprove) {
+                approvalAction = (
+                  <ActionFeedbackForm action={approveLeadWithFeedbackAction} successMessage="Lead approved for outreach.">
+                    <input type="hidden" name="leadId" value={row.id} />
+                    <button className="ui-button ui-button-primary h-8 px-3 text-xs" type="submit">
+                      Approve
+                    </button>
+                  </ActionFeedbackForm>
+                );
+              }
 
               return (
               <motion.tr
@@ -295,18 +308,7 @@ export function PipelineListView({
                 </td>
                 <td className="p-4">
                   <div className="pipeline-row-actions">
-                    {row.approvedForOutreach ? (
-                      <Badge tone="success">Approved</Badge>
-                    ) : canApprove ? (
-                      <ActionFeedbackForm action={approveLeadWithFeedbackAction} successMessage="Lead approved for outreach.">
-                        <input type="hidden" name="leadId" value={row.id} />
-                        <button className="ui-button ui-button-primary h-8 px-3 text-xs" type="submit">
-                          Approve
-                        </button>
-                      </ActionFeedbackForm>
-                    ) : (
-                      <Badge tone="muted">{approvalBlockReason ?? "No approval action"}</Badge>
-                    )}
+                    {approvalAction}
                     <div className="flex gap-2">
                       {canPause ? (
                         <ActionFeedbackForm action={changeLeadStatusAction} successMessage="Lead paused.">
@@ -321,11 +323,11 @@ export function PipelineListView({
                         <ActionFeedbackForm action={changeLeadStatusAction} successMessage="Lead archived.">
                           <input type="hidden" name="leadId" value={row.id} />
                           <input type="hidden" name="status" value="archived" />
-                        <button className="ui-button ui-button-danger h-8 px-3 text-xs" type="submit">
-                          Archive
-                        </button>
-                      </ActionFeedbackForm>
-                    ) : null}
+                          <button className="ui-button ui-button-danger h-8 px-3 text-xs" type="submit">
+                            Archive
+                          </button>
+                        </ActionFeedbackForm>
+                      ) : null}
                     </div>
                   </div>
                 </td>

@@ -37,10 +37,14 @@ function renderList(rows: Array<Record<string, unknown>>, globalOutreachPaused =
 
 describe("PipelineListView approval eligibility", () => {
   beforeEach(() => {
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+
     class TestIntersectionObserver {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
+      observe = observe;
+      unobserve = unobserve;
+      disconnect = disconnect;
     }
 
     vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
