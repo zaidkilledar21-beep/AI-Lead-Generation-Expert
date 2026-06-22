@@ -1,12 +1,13 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { isValidBusinessEmail, normalizeDomain, normalizePhone } from "@/lib/workflows/contact-extraction";
+import { rejectLeadWithoutUsableEmail } from "@/lib/workflows/email-gate";
 import type { LeadStatus } from "@/lib/types";
 
 type RoutingOutcome =
   | "manual_review_pending"
   | "queued"
   | "drafted"
-  | "blocked_missing_email"
+  | "rejected_missing_email"
   | "blocked_missing_sequence"
   | "blocked_missing_inbox"
   | "paused_campaign"
@@ -152,9 +153,8 @@ export async function routeApprovedLead(leadId: string): Promise<RoutingResult> 
   if (leadError) throw new Error(leadError.message);
   if (!lead) throw new Error("Lead not found");
   if (!isValidBusinessEmail(lead.email)) {
-    await createOrUpdateManualReview(leadId, "blocked_missing_email", "normal");
-    await updateLeadStatus(leadId, "blocked");
-    return { status: "blocked_missing_email", reasons: ["missing_valid_email"] };
+    await rejectLeadWithoutUsableEmail(leadId);
+    return { status: "rejected_missing_email", reasons: ["missing_valid_email"] };
   }
   if (blockedApprovalStatuses.has(lead.status)) {
     return { status: "archived/nurture", reasons: [`lead_status_${lead.status}`] };
@@ -224,14 +224,12 @@ export async function routeApprovedLead(leadId: string): Promise<RoutingResult> 
 function leadNeedsManualReview(input: {
   band: string;
   confidence: string;
-  reachable: boolean;
   weakHypothesis: boolean;
   manualReviewRequired: boolean;
 }) {
   return (
     input.band === "A" ||
     input.confidence === "low" ||
-    !input.reachable ||
     input.weakHypothesis ||
     input.manualReviewRequired
   );
@@ -240,17 +238,12 @@ function leadNeedsManualReview(input: {
 function manualReviewReasons(input: {
   band: string;
   confidence: string;
-  reachable: boolean;
-  email?: string | null;
-  hasValidEmail: boolean;
   weakHypothesis: boolean;
   manualReviewRequired: boolean;
 }) {
   return [
     input.band === "A" ? "band_a_first_email" : null,
     input.confidence === "low" ? "low_confidence" : null,
-    !input.reachable ? "missing_contact" : null,
-    input.email && !input.hasValidEmail ? "invalid_email" : null,
     input.weakHypothesis ? "generic_hypothesis" : null,
     input.manualReviewRequired ? "scoring_flag" : null
   ].filter((reason): reason is string => Boolean(reason));
@@ -292,17 +285,18 @@ async function routeLeadInternal(leadId: string): Promise<RoutingResult> {
       .maybeSingle()
   ]);
 
-  if (!lead || !score) throw new Error("Lead and score are required for routing");
+  if (!lead) throw new Error("Lead is required for routing");
 
   const hasValidEmail = isValidBusinessEmail(lead.email);
-  const reachable = Boolean(hasValidEmail || lead.phone || lead.whatsapp);
+  if (!hasValidEmail) {
+    await rejectLeadWithoutUsableEmail(leadId);
+    return { status: "rejected_missing_email", reasons: ["missing_valid_email"] };
+  }
+  if (!score) throw new Error("Lead and score are required for routing");
   const weakHypothesis = !hypothesis?.outreach_hook;
   const reviewInput = {
     band: score.band,
     confidence: score.confidence,
-    reachable,
-    email: lead.email,
-    hasValidEmail,
     weakHypothesis,
     manualReviewRequired: score.manual_review_required
   };

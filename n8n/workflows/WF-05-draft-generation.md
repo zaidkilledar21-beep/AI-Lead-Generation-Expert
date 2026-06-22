@@ -37,7 +37,7 @@ Node Skeleton:
 
 3. Switch `wf05_action`
    - `generate_draft`: continue to context loading and DeepSeek.
-   - `block_missing_email`: sync queue blocked, lead review pending, and one manual review item.
+   - `archive_unusable_email`: archive the lead, block any active queue row, and reject pending pre-outreach review items.
    - `skip_existing_draft`: sync queue and lead drafted.
    - `skip_existing_manual_review`: sync queue blocked and lead review pending without inserting another review.
    - `block_invalid_lead_status`: block and create or reuse one review item.

@@ -189,7 +189,7 @@
                 "conditions": [
                   {
                     "leftValue": "={{$json.wf05_action}}",
-                    "rightValue": "block_missing_email",
+                    "rightValue": "archive_unusable_email",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -199,7 +199,7 @@
                 "combinator": "and"
               },
               "renameOutput": true,
-              "outputKey": "block_missing_email"
+              "outputKey": "archive_unusable_email"
             },
             {
               "conditions": {

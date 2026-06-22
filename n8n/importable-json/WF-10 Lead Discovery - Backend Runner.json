@@ -46,7 +46,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json || {};\nconst body = input.body || input;\nconst fromWebhook = Boolean(input.body);\n\nreturn [\n  {\n    json: {\n      campaign_id: body.campaign_id || undefined,\n      dry_run: Boolean(body.dry_run ?? false),\n      trigger_type: body.trigger_type || (fromWebhook ? \"manual\" : \"schedule\"),\n      trigger_source: body.source || body.trigger_source || (fromWebhook ? \"crm_manual_run\" : \"schedule\"),\n      requested_by: body.requested_by || null,\n      requested_at: body.requested_at || new Date().toISOString()\n    }\n  }\n];"
+        "jsCode": "const input = $input.first().json || {};\nconst body = input.body || input;\nconst fromWebhook = Boolean(input.body);\n\nreturn [\n  {\n    json: {\n      campaign_id: body.campaign_id || undefined,\n      dry_run: Boolean(body.dry_run ?? false),\n      trigger_type: body.trigger_type || (fromWebhook ? \"manual\" : \"schedule\"),\n      trigger_source: body.source || body.trigger_source || (fromWebhook ? \"crm_manual_run\" : \"schedule\"),\n      requested_by: body.requested_by || null,\n      requested_at: body.requested_at || new Date().toISOString(),\n      batch_dispatch: !fromWebhook && !body.campaign_id\n    }\n  }\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -90,6 +90,79 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bc5f88c1-4691-4b42-bdf5-a5d07bd15d31",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "scheduled_batch",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        624,
+        96
+      ],
+      "id": "a5a05b2d-ec3f-4f30-a06f-1848b2430895",
+      "name": "Scheduled Batch?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const campaigns = Array.isArray($json.campaigns) ? $json.campaigns : [];\n\nreturn campaigns.map((campaign) => ({\n  json: {\n    campaign_id: campaign.campaign_id,\n    dry_run: false,\n    trigger_type: \"schedule\",\n    due_at: campaign.due_at,\n    next_run_at: campaign.next_run_at\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "6b882e9e-3696-4a42-9fe8-5d3528572b70",
+      "name": "Expand Due Campaigns"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.APP_BASE_URL}}/api/workflows/discovery/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-api-key",
+              "value": "={{$env.N8N_API_KEY || $env.N8N_WORKFLOW_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "e8b95af3-086d-47de-a64f-c6f8dd4b1a97",
+      "name": "POST Campaign Discovery"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
             "typeValidation": "loose",
             "version": 3
           },
@@ -113,8 +186,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        624,
-        0
+        1248,
+        96
       ],
       "id": "eae58abf-cbb6-4479-a263-b75f43e0ced4",
       "name": "Run Needs Attention?"
@@ -130,8 +203,8 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        832,
-        -96
+        1456,
+        0
       ],
       "id": "794558c1-84ce-4260-8b3e-a620231afb0e",
       "name": "Send a message",
@@ -180,6 +253,46 @@
       ]
     },
     "POST Discovery Endpoint": {
+      "main": [
+        [
+          {
+            "node": "Scheduled Batch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduled Batch?": {
+      "main": [
+        [
+          {
+            "node": "Expand Due Campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Needs Attention?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Due Campaigns": {
+      "main": [
+        [
+          {
+            "node": "POST Campaign Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Campaign Discovery": {
       "main": [
         [
           {

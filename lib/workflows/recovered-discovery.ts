@@ -8,6 +8,7 @@ import {
   safeFinalizeDiscoveryRun
 } from "@/lib/workflows/lead-discovery";
 import { scoreLead } from "@/lib/workflows/scoring";
+import { rejectLeadWithoutUsableEmail } from "@/lib/workflows/email-gate";
 
 const defaultLimit = 5;
 const maxLimit = 10;
@@ -249,6 +250,17 @@ async function processLead(lead: RecoveredLead, counts: BatchCounts): Promise<Pe
   }
 
   if (enrichmentStatus === "failed") counts.enrichment_failed += 1;
+
+  if (await rejectLeadWithoutUsableEmail(lead.id)) {
+    return {
+      lead_id: lead.id,
+      business_name: lead.business_name,
+      previous_status: lead.status,
+      enrichment_status: enrichmentStatus,
+      scored: false,
+      result: "rejected_missing_email"
+    };
+  }
 
   if (await hasLeadScore(lead.id)) {
     return {
