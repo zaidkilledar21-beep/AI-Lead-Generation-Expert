@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { EnrichLeadOutput } from "@/lib/contracts";
 import { isValidBusinessEmail, normalizePhone, selectBestBusinessEmail } from "@/lib/workflows/contact-extraction";
+import { rejectLeadWithoutUsableEmail } from "@/lib/workflows/email-gate";
 import { crawlBusinessWebsite, extractWebsiteSignals } from "@/lib/workflows/website-crawler";
 
 type CandidateSourceAttribution = {
@@ -210,8 +211,12 @@ async function logEnrichmentFailure(leadId: string, errorMessage: string) {
     raw_scrape_summary: errorMessage
   });
 
-  await supabase.from("leads").update({ status: "review_pending" }).eq("id", leadId);
-  await upsertManualReview(leadId, "enrichment_failed", "normal");
+  if (!isValidBusinessEmail(lead?.email)) {
+    await rejectLeadWithoutUsableEmail(leadId);
+  } else {
+    await supabase.from("leads").update({ status: "review_pending" }).eq("id", leadId);
+    await upsertManualReview(leadId, "enrichment_failed", "normal");
+  }
 
   if (lead) {
     await logEnrichmentEvent(lead, "failed", { error_message: errorMessage }, errorMessage);

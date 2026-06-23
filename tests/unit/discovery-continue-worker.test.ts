@@ -7,7 +7,8 @@ const mockState = vi.hoisted(() => ({
   safeFinalizeDiscoveryRun: null as any,
   countPromotableCandidatesFromDb: null as any,
   getCampaignById: null as any,
-  promoteStrandedDiscoveryCandidates: null as any
+  promoteStrandedDiscoveryCandidates: null as any,
+  rejectLeadWithoutUsableEmail: null as any
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -18,6 +19,9 @@ vi.mock("@/lib/workflows/enrichment", () => ({
 }));
 vi.mock("@/lib/workflows/scoring", () => ({
   scoreLead: (leadId: string) => mockState.scoreLead(leadId)
+}));
+vi.mock("@/lib/workflows/email-gate", () => ({
+  rejectLeadWithoutUsableEmail: (leadId: string) => mockState.rejectLeadWithoutUsableEmail(leadId)
 }));
 vi.mock("@/lib/workflows/lead-discovery", () => ({
   countPromotableCandidatesFromDb: (...args: any[]) => mockState.countPromotableCandidatesFromDb(...args),
@@ -143,6 +147,7 @@ describe("continueDiscoveryProcessing", () => {
     mockState.countPromotableCandidatesFromDb = vi.fn(async () => 0);
     mockState.getCampaignById = vi.fn(async (campaignId: string) => ({ id: campaignId, name: "Campaign" }));
     mockState.promoteStrandedDiscoveryCandidates = vi.fn(async () => ({ created: 0, duplicates: 0, enriched: 0, scored: 0, errors: [] }));
+    mockState.rejectLeadWithoutUsableEmail = vi.fn(async () => false);
   });
 
   it("skips already-scored leads, processes unscored, and finalizes when no work remains", async () => {

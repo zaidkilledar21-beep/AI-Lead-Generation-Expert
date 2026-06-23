@@ -5,6 +5,7 @@ import { buildLeadDedupeKey, importDiscoveredLeads, type RawLeadInput } from "@/
 import { enrichLead } from "@/lib/workflows/enrichment";
 import { scoreLead } from "@/lib/workflows/scoring";
 import { normalizePhone, selectBestBusinessEmail } from "@/lib/workflows/contact-extraction";
+import { rejectLeadWithoutUsableEmail } from "@/lib/workflows/email-gate";
 import { crawlBusinessWebsite, extractWebsiteSignals } from "@/lib/workflows/website-crawler";
 
 type CampaignRow = {
@@ -51,6 +52,12 @@ export type RunLeadDiscoveryInput = {
   campaign_id?: string;
   dry_run?: boolean;
   trigger_type?: "manual" | "schedule" | "webhook";
+};
+
+export type DueDiscoveryCampaign = {
+  campaign_id: string;
+  due_at: string;
+  next_run_at: string;
 };
 
 type DiscoveryRunStatus = "completed" | "failed" | "quota_exhausted";
@@ -615,12 +622,27 @@ export async function reconcileDiscoveryRunStats(runId: string, inMemoryStats: P
   return reconciled;
 }
 
-async function getCampaign(campaignId?: string) {
+export async function claimDueDiscoveryCampaigns(limit = 10): Promise<DueDiscoveryCampaign[]> {
   const supabase = createSupabaseServiceClient();
-  const query = supabase.from("campaigns").select("*").eq("status", "active").limit(1);
-  const { data, error } = campaignId
-    ? await query.eq("id", campaignId).maybeSingle()
-    : await query.order("created_at", { ascending: true }).maybeSingle();
+  const boundedLimit = Math.max(1, Math.min(Math.trunc(limit), 50));
+  const { data, error } = await supabase.rpc("claim_due_discovery_campaigns", {
+    p_limit: boundedLimit,
+    p_now: new Date().toISOString()
+  });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as DueDiscoveryCampaign[];
+}
+
+async function getCampaign(campaignId?: string) {
+  if (!campaignId) return null;
+  const supabase = createSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("*")
+    .eq("status", "active")
+    .eq("id", campaignId)
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
   return data as CampaignRow | null;
@@ -758,6 +780,17 @@ async function processLeadEnrichmentAndScoring(
       payload: { lead_id: leadId }
     });
     return { enriched, scored, error: errorMsg };
+  }
+
+  if (await rejectLeadWithoutUsableEmail(leadId)) {
+    await logWorkflowEvent({
+      campaign_id: campaign.id,
+      discovery_run_id: runId,
+      event_type: "email_gate_rejected",
+      status: "completed",
+      payload: { lead_id: leadId, reason: "missing_valid_email" }
+    });
+    return { enriched, scored };
   }
 
   try {

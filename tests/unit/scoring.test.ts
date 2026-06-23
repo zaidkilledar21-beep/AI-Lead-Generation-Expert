@@ -18,7 +18,7 @@ vi.mock("@/lib/workflows/routing", () => ({ createOrUpdateManualReview: vi.fn() 
 
 function dbWithLeadStatus(status: string): Db {
   return {
-    leads: [{ id: "lead-1", status, campaign_id: "campaign-1" }],
+    leads: [{ id: "lead-1", status, campaign_id: "campaign-1", email: "owner@example-business.com" }],
     lead_enrichment: [],
     lead_scores: [
       {

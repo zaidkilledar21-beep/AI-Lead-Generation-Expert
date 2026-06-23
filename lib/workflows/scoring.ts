@@ -3,6 +3,8 @@ import { callDeepSeekJson } from "@/lib/deepseek";
 import { icpConfig } from "@/lib/config/icp";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { createOrUpdateManualReview } from "@/lib/workflows/routing";
+import { rejectLeadWithoutUsableEmail } from "@/lib/workflows/email-gate";
+import { isValidBusinessEmail } from "@/lib/workflows/contact-extraction";
 import type { ScoringOutput } from "@/lib/types";
 
 const scoringPromptVersion = "icp_scoring_v2";
@@ -96,6 +98,13 @@ export async function scoreLead(leadId: string) {
 
   if (!lead) throw new Error("Lead not found");
   if (existingScoreError) throw new Error(existingScoreError.message);
+  if (!isValidBusinessEmail(lead.email)) {
+    await rejectLeadWithoutUsableEmail(leadId);
+    return {
+      status: "rejected_missing_email",
+      lead_id: leadId
+    };
+  }
   if (existingScore) {
     await markScoredIfPreRouting(supabase, leadId, lead.status);
     return {
@@ -136,7 +145,7 @@ export async function scoreLead(leadId: string) {
       website_present: Boolean(lead.website),
       website_crawl_status: candidate?.website_crawl_status ?? null,
       contact_paths: {
-        email: Boolean(lead.email || enrichment?.email_found),
+        email: isValidBusinessEmail(lead.email) || isValidBusinessEmail(enrichment?.email_found),
         phone: Boolean(lead.phone || enrichment?.phone_found),
         whatsapp: Boolean(lead.whatsapp || enrichment?.whatsapp_found),
         contact_form: Boolean(enrichment?.contact_form_found),

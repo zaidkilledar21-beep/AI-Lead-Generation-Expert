@@ -4,7 +4,15 @@
 - `codex/fix-review-filters-contract`
 
 ## Current task
-- Fix `/review` queue scroll architecture so the left queue cannot trap cursor-based scrolling.
+- Fix scheduled campaign starvation and make usable email the first qualification gate.
+
+## Fair campaign scheduling + email-first qualification
+- Root cause: scheduled discovery selected the oldest active campaign with `order(created_at).limit(1)` and ignored `run_frequency`, `next_run_at`, and `last_run_at`, so newer active campaigns could starve indefinitely.
+- Added an atomic service-role-only `claim_due_discovery_campaigns` RPC using due-time ordering and `FOR UPDATE SKIP LOCKED`; WF-10 now fans out every claimed campaign. The endpoint retains backward compatibility by fairly claiming/running one campaign for older WF-10 callers.
+- Added an email-first gate across enrichment, scoring, recovery, WF-04 routing, and WF-05 draft generation. Leads without a usable business email are archived automatically; pending review items are rejected and queue rows are blocked instead of creating manual-review work.
+- Production migrations `fair_scheduling_and_email_gate` and `harden_email_gate_search_path` were applied through Supabase MCP. Live recovery archived all non-terminal unusable-email leads: zero remain in pending review and 46 recovery events were recorded.
+- Current campaign state: SMB campaign is paused/manual; D2C is active/daily and has a due `next_run_at`. The new app/WF-10 code still requires normal application deployment and n8n import/activation.
+- Validation: lint, typecheck, 56 unit tests, production build, workflow contract validation, `git diff --check`, Supabase privilege checks, security advisor review, and Graphify clean-mirror refresh/export passed. Existing Next.js workspace-root/middleware warnings and pre-existing Supabase advisor findings remain.
 
 ## Review queue UI/UX scroll overhaul
 - Root cause: `/review` had nested scroll owners: the CRM main page, the left review queue, and the right workspace. The left queue also used `overscroll-contain`, so wheel events could be trapped after scrolling to the bottom.
@@ -224,17 +232,17 @@
 - `status.md`
 
 ## Current blocker
-- Production migration application, n8n import, and authenticated fresh-campaign verification remain manual. WF-06 must remain disabled.
+- Updated WF-04, WF-05, and WF-10 exports still need import/activation in n8n; no n8n management connector is available in this session. Application deployment is also still required. WF-06 must remain disabled.
 
 ## Validation status
-- lint: passed (`npm run lint`) after stranded discovery recovery fix
+- lint: passed (`npm run lint`)
 - typecheck: passed (`npm run typecheck`)
 - git diff check: passed (`git diff --check`) with Windows LF-to-CRLF warnings only
 - build: passed (`npm run build`); Next.js still warns about workspace-root inference and the `middleware` file convention being deprecated in favor of `proxy`
-- tests: passed (`npm test`, 15 files / 52 tests); focused continue-worker test passed (`npx vitest run --dir tests/unit discovery-continue-worker.test.ts`)
+- tests: passed (`npm test`, 16 files / 56 tests)
 - workflow contracts: passed (`npm run validate:workflows`, 12 importable JSON files)
-- Graphify: refreshed through the required clean temp mirror and exported to Obsidian (`1,122` nodes, `2,707` edges)
-- Supabase migration: `018_recover_stranded_discovery_candidates` applied to production through Supabase MCP
+- Graphify: refreshed through the required clean temp mirror and exported to Obsidian (`1,211` nodes, `2,922` edges)
+- Supabase migrations: `019_fair_scheduling_and_email_gate` and `020_harden_email_gate_search_path` applied to production through Supabase MCP
 
 ## Known risks
 - Recovery processing calls live crawl and DeepSeek dependencies when `dry_run` is false.
@@ -244,4 +252,4 @@
 - Updated WF-04/WF-05 JSON exports are inactive by default and must be imported deliberately after the migration is applied.
 
 ## Next step
-- Apply migration `014_issue_52_pipeline_hardening.sql`, import inactive WF-04/WF-05 exports, keep WF-06 disabled, and run one fresh small campaign through WF-05 plus idempotent reruns.
+- Deploy the app, import/activate updated WF-04/WF-05/WF-10, keep WF-06 disabled, then verify one scheduled D2C run and confirm no unusable-email lead enters manual review.

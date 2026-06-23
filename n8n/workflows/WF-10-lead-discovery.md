@@ -10,7 +10,7 @@ MVP source rules:
 Trigger:
 
 1. Manual Trigger during setup.
-2. Schedule Trigger once daily after dry-run approval.
+2. Schedule Trigger claims every due active scheduled campaign.
 3. CRM manual-run webhook in n8n: `POST /webhook/wf-10-lead-discovery`.
 4. Internal app callback from WF-10: `POST /api/workflows/discovery/run`.
 
@@ -27,7 +27,9 @@ Input shape:
 Node Skeleton:
 
 1. Trigger
-   - Schedule trigger uses `trigger_type = schedule`.
+   - Schedule trigger first uses `trigger_type = schedule` without a campaign ID.
+   - The app atomically claims due campaigns and advances each `next_run_at`.
+   - Split the returned campaigns and call the app once per explicit campaign ID.
    - CRM webhook uses `trigger_type = manual` and passes `campaign_id` from the CRM payload.
    - Protect the CRM webhook with n8n Header Auth using the `x-n8n-api-key` header.
 
@@ -36,7 +38,7 @@ Node Skeleton:
    - Prefer `$env.N8N_API_KEY`; keep `$env.N8N_WORKFLOW_API_KEY` as a compatibility fallback.
 
 3. Supabase Select `campaigns`
-   - Pull one `status = active` campaign.
+   - Claim every due `status = active` campaign whose cadence is not `manual`.
    - Required campaign fields:
      - `niche`
      - `region`

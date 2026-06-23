@@ -35,9 +35,11 @@ Node Skeleton:
    - Conditions:
      - Band A
      - confidence = low
-     - missing usable contact
      - missing/weak `outreach_hook`
      - `manual_review_required = true`
+
+   Before this branch, `email_usable = false` must bypass manual review and call
+   `route_scored_lead`, which archives the lead through the canonical email gate.
 
 7. Manual Review Branch
    - RPC `queue_manual_review_item`
@@ -65,6 +67,6 @@ Success criteria:
 
 - Reruns do not duplicate pending review rows.
 - Reruns do not duplicate outreach queue rows.
-- Only eligible Band B leads enter `outreach_queue`.
+- Only leads with a usable business email can enter manual review or `outreach_queue`.
 - Band A always goes through founder review first.
 - WF-01/WF-02/WF-03 remain backend-owned. n8n begins at WF-04.

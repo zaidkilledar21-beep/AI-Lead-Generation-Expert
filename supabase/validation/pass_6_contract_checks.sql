@@ -23,6 +23,8 @@ with required_functions(function_name, identity_arguments) as (
     ,('acquire_discovery_recovery_lease', 'p_discovery_run_id uuid, p_lease_token uuid, p_lease_seconds integer')
     ,('release_discovery_recovery_lease', 'p_discovery_run_id uuid, p_lease_token uuid')
     ,('sync_wf05_queue_action', 'p_queue_id uuid, p_action text')
+    ,('claim_due_discovery_campaigns', 'p_limit integer, p_now timestamp with time zone')
+    ,('archive_unusable_email_lead', 'p_lead_id uuid')
 ),
 actual_functions as (
   select
@@ -64,6 +66,8 @@ with sensitive_functions(function_name) as (
     ,('queue_manual_review_item_sync')
     ,('queue_manual_review_item_force')
     ,('sync_run_review_pending')
+    ,('claim_due_discovery_campaigns')
+    ,('archive_unusable_email_lead')
 ),
 actual_functions as (
   select p.oid, p.oid::regprocedure as signature, p.proname as function_name

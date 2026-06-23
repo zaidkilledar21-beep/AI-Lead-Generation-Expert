@@ -160,6 +160,24 @@ assert(
   discoveryNode?.parameters?.jsonBody?.includes("JSON.stringify"),
   "WF-10 discovery must forward prepared request body JSON"
 );
+assert(
+  discoverySetFields.includes("batch_dispatch"),
+  "WF-10 scheduled runs must explicitly request batch campaign dispatch"
+);
+const scheduledBatchNode = discoveryWorkflow.nodes?.find((node) => node.name === "Scheduled Batch?");
+const expandDueCampaignsNode = discoveryWorkflow.nodes?.find((node) => node.name === "Expand Due Campaigns");
+const campaignDiscoveryNode = discoveryWorkflow.nodes?.find((node) => node.name === "POST Campaign Discovery");
+assert(scheduledBatchNode, "WF-10 must branch scheduled campaign claims from explicit campaign runs");
+assert(
+  expandDueCampaignsNode?.parameters?.jsCode?.includes("campaign_id") &&
+    expandDueCampaignsNode?.parameters?.jsCode?.includes('trigger_type: "schedule"'),
+  "WF-10 must expand every claimed campaign into an explicit scheduled discovery request"
+);
+assert(
+  campaignDiscoveryNode?.parameters?.url?.includes("/api/workflows/discovery/run") &&
+    campaignDiscoveryNode?.parameters?.jsonBody?.includes("JSON.stringify"),
+  "WF-10 must call the discovery endpoint once per claimed campaign"
+);
 
 for (const routePath of [
   "app/api/workflows/lead-intake/route.ts",
@@ -205,6 +223,10 @@ assert(
   !leadDiscovery.includes('from "@/lib/workflows/routing"'),
   "backend discovery must stop at WF-03; n8n owns WF-04 routing"
 );
+assert(
+  leadDiscovery.includes('rpc("claim_due_discovery_campaigns"'),
+  "scheduled discovery must atomically claim due campaigns"
+);
 
 const routingSource = routingWorkflow.nodes?.find((node) => node.name === "Select Scored Leads");
 assert(routingWorkflow.active === false, "WF-04 importable workflow must be inactive by default");
@@ -229,10 +251,24 @@ for (const token of [
   "create or replace view public.wf04_scored_leads",
   "create or replace view public.wf05_due_queue_items",
   "create or replace function public.sync_wf05_queue_action",
-  "create or replace function public.acquire_discovery_recovery_lease"
+  "create or replace function public.acquire_discovery_recovery_lease",
+  "create or replace function public.claim_due_discovery_campaigns",
+  "create or replace function public.archive_unusable_email_lead",
+  "create or replace function public.is_usable_lead_email"
 ]) {
   assert(migrationText.toLowerCase().includes(token), `Supabase migrations are missing ${token}`);
 }
+const routingCondition = JSON.stringify(
+  routingWorkflow.nodes?.find((node) => node.name === "Manual Review Required")?.parameters ?? {}
+);
+assert(
+  routingCondition.includes("email_usable"),
+  "WF-04 must apply the canonical email gate before manual-review routing"
+);
+assert(
+  JSON.stringify(draftSwitch?.parameters ?? {}).includes("archive_unusable_email"),
+  "WF-05 must archive unusable-email leads instead of creating manual review"
+);
 
 const workflowDocs = fs
   .readdirSync(path.join(root, "n8n", "workflows"))
